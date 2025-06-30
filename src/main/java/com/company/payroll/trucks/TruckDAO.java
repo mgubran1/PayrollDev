@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.company.payroll.trucks.TruckPerformance;
+
 /**
  * Data Access Object for Truck operations.
  * Handles database interactions for truck management.
@@ -883,7 +885,7 @@ public class TruckDAO {
         }
     }
     
-    public void recordPerformanceData(TrucksTab.TruckPerformance performance) {
+    public void recordPerformanceData(TruckPerformance performance) {
         String sql = """
             INSERT INTO truck_performance (
                 truck_number, driver_name, period_start_date, period_end_date,
@@ -937,7 +939,7 @@ public class TruckDAO {
         }
     }
     
-    public List<TrucksTab.TruckPerformance> getPerformanceData(LocalDate startDate, LocalDate endDate) {
+    public List<TruckPerformance> getPerformanceData(LocalDate startDate, LocalDate endDate) {
         String sql = """
             SELECT 
                 t.truck_number,
@@ -961,9 +963,9 @@ public class TruckDAO {
             pstmt.setDate(2, Date.valueOf(endDate));
             
             try (ResultSet rs = pstmt.executeQuery()) {
-                List<TrucksTab.TruckPerformance> performances = new ArrayList<>();
+                List<TruckPerformance> performances = new ArrayList<>();
                 while (rs.next()) {
-                    TrucksTab.TruckPerformance perf = new TrucksTab.TruckPerformance();
+                    TruckPerformance perf = new TruckPerformance();
                     perf.setTruckNumber(rs.getString("truck_number"));
                     perf.setDriverName(rs.getString("driver"));
                     perf.setMilesDriven(rs.getInt("total_miles_driven"));
@@ -1334,140 +1336,7 @@ public class TruckDAO {
         return truck;
     }
     
-    // Generate sample data for testing
     public void generateSampleData() {
-        if (getTrucksCount() > 0) {
-            logger.info("Sample truck data already exists, skipping generation");
-            return;
-        }
-        
-        logger.info("Generating sample truck data");
-        
-        try {
-            String[] makes = {"Freightliner", "Peterbilt", "Kenworth", "Volvo", "International"};
-            String[] models = {"Cascadia", "579", "T680", "VNL", "LT"};
-            String[] types = {"Freightliner Cascadia", "Peterbilt 579", "Kenworth T680", 
-                           "Volvo VNL", "International LT"};
-            String[] drivers = {"John Smith", "Jane Doe", "Mike Johnson", "Sarah Williams", 
-                              "Robert Brown", "", ""};
-            String[] locations = {"Highway I-95 North", "Warehouse A", "Customer Site - NYC",
-                                "Rest Area Mile 45", "Downtown Terminal", "Main Depot"};
-            String[] statuses = {"Active", "Idle", "In Transit", "Maintenance", "At Rest"};
-            
-            for (int i = 1; i <= 30; i++) {
-                int yearOffset = (int)(Math.random() * 5);
-                int makeIndex = (int)(Math.random() * makes.length);
-                
-                Truck truck = new Truck();
-                truck.setNumber("T" + String.format("%04d", 1000 + i));
-                truck.setVin("1FUJA6CV" + i + "LM" + (10000 + i));
-                truck.setMake(makes[makeIndex]);
-                truck.setModel(models[makeIndex]);
-                truck.setYear(2020 + yearOffset);
-                truck.setType(types[makeIndex]);
-                
-                // Set status - bias toward active status
-                String status = statuses[(int)(Math.random() * (Math.random() < 0.7 ? 1 : statuses.length))];
-                truck.setStatus(status);
-                
-                truck.setLicensePlate("TR" + (1000 + i));
-                
-                // Assign drivers to some trucks
-                if (i % 3 != 0) {
-                    truck.setDriver(drivers[(int)(Math.random() * 5)]);  // Higher chance of having driver
-                    truck.setAssigned(true);
-                }
-                
-                truck.setLocation(locations[(int)(Math.random() * locations.length)]);
-                truck.setMileage(50000 + (int)(Math.random() * 200000));
-                truck.setFuelLevel(20 + Math.random() * 80);
-                
-                // Last service date
-                int serviceOffset = (int)(Math.random() * 120);
-                truck.setLastService(LocalDate.now().minusDays(serviceOffset));
-                
-                // Set next service due based on last service
-                truck.setNextServiceDue(LocalDate.now().minusDays(serviceOffset).plusDays(90));
-                
-                // Current condition
-                truck.setCurrentCondition(Math.random() > 0.8 ? "Needs Attention" : "Good");
-                
-                // More specific truck details
-                truck.setGrossWeight(33000 + Math.random() * 12000);
-                truck.setHorsepower(400 + (int)(Math.random() * 200));
-                truck.setTransmissionType(Math.random() > 0.5 ? "Automatic" : "Manual");
-                truck.setAxleCount(Math.random() > 0.7 ? 3 : 2);
-                truck.setFuelTankCapacity(150 + Math.random() * 100);
-                truck.setEngineType("Diesel");
-                truck.setSleeper(Math.random() > 0.3 ? "Yes" : "No");
-                
-                // Performance metrics
-                truck.setMpg(5.5 + Math.random() * 3);
-                truck.setIdleTime(10 + (int)(Math.random() * 50));
-                truck.setFuelUsedTotal(1000 + Math.random() * 5000);
-                truck.setTotalMilesDriven(truck.getMileage());
-                truck.setAverageSpeed(55 + Math.random() * 10);
-                truck.setPerformanceScore(70 + Math.random() * 30);
-                
-                // Ownership info
-                truck.setOwnershipType(Math.random() > 0.2 ? "Company" : "Leased");
-                truck.setPurchasePrice(120000 + Math.random() * 30000);
-                truck.setPurchaseDate(LocalDate.now().minusYears(1 + (int)(Math.random() * 4)));
-                truck.setCurrentValue(100000 - yearOffset * 10000 - (int)(Math.random() * 15000));
-                
-                if ("Leased".equals(truck.getOwnershipType())) {
-                    truck.setMonthlyLeaseCost(1800 + Math.random() * 800);
-                    truck.setLeaseDetails("36 month lease from TransLease Inc.");
-                }
-                
-                // Insurance and registration
-                truck.setInsurancePolicyNumber("INS-" + (10000 + i));
-                truck.setInsuranceExpiryDate(LocalDate.now().plusMonths(1 + (int)(Math.random() * 11)));
-                truck.setRegistrationExpiryDate(LocalDate.now().plusMonths(2 + (int)(Math.random() * 10)));
-                
-                // Safety and compliance
-                truck.setDotNumber("DOT" + (100000 + i));
-                truck.setLastInspectionDate(LocalDate.now().minusMonths((int)(Math.random() * 11)));
-                truck.setNextInspectionDue(LocalDate.now().plusMonths(1 + (int)(Math.random() * 11)));
-                truck.setIftaCompliant(Math.random() > 0.1);
-                truck.setEldCompliant(Math.random() > 0.05);
-                
-                // Maintenance related
-                truck.setMileageSinceService((int)(Math.random() * 10000));
-                truck.setLastServiceType(Math.random() > 0.5 ? "Full Service" : "Oil Change");
-                
-                if (status.equals("Maintenance")) {
-                    truck.setInMaintenance(true);
-                    truck.setMaintenanceNotes("In shop for " + 
-                        (Math.random() > 0.5 ? "routine maintenance" : "brake service"));
-                }
-                
-                truck.setMaintenanceCount((int)(Math.random() * 10));
-                
-                // Save the truck
-                save(truck);
-                
-                // Create some performance records for each truck
-                for (int j = 0; j < 3; j++) {
-                    TrucksTab.TruckPerformance perf = new TrucksTab.TruckPerformance();
-                    perf.setTruckNumber(truck.getNumber());
-                    perf.setDriverName(truck.getDriver());
-                    perf.setMilesDriven(1000 + (int)(Math.random() * 5000));
-                    perf.setFuelUsed(perf.getMilesDriven() / (5.5 + Math.random() * 3));
-                    perf.setMpg(perf.getMilesDriven() / perf.getFuelUsed());
-                    perf.setIdleTime(10 + (int)(Math.random() * 50));
-                    perf.setRevenue(perf.getMilesDriven() * (1.5 + Math.random()));
-                    perf.setPerformanceScore(60 + Math.random() * 40);
-                    
-                    recordPerformanceData(perf);
-                }
-            }
-            
-            logger.info("Generated sample data for {} trucks", 30);
-            
-        } catch (Exception e) {
-            logger.error("Failed to generate sample truck data: {}", e.getMessage(), e);
-            throw new DataAccessException("Failed to generate sample data", e);
-        }
+        throw new UnsupportedOperationException("Sample data generation disabled");
     }
 }
