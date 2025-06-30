@@ -22,6 +22,9 @@ import java.time.format.DateTimeFormatter;
 import java.text.NumberFormat;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.company.payroll.loads.LoadDAO;
+import com.company.payroll.loads.Load;
+import com.company.payroll.loads.Load.Status;
 import javafx.stage.FileChooser;
 import java.io.File;
 import javafx.concurrent.Task;
@@ -51,6 +54,8 @@ public class RevenueTab extends Tab {
     private ProgressIndicator loadingIndicator;
     private static final NumberFormat CURRENCY_FORMAT = NumberFormat.getCurrencyInstance();
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+
+    private final LoadDAO loadDAO = new LoadDAO();
     
     public RevenueTab() {
         setText("Revenue");
@@ -94,7 +99,7 @@ public class RevenueTab extends Tab {
         scrollPane.setFitToWidth(true);
         setContent(scrollPane);
         
-        // Initialize with sample data
+        // Initialize customer list
         initializeSampleData();
         loadRevenueData();
     }
@@ -671,8 +676,22 @@ public class RevenueTab extends Tab {
         Task<List<RevenueEntry>> task = new Task<List<RevenueEntry>>() {
             @Override
             protected List<RevenueEntry> call() throws Exception {
-                Thread.sleep(1000); // Simulate loading
-                return generateSampleData();
+                List<Load> loads = loadDAO.getByDateRange(startDatePicker.getValue(), endDatePicker.getValue());
+                return loads.stream().map(load -> {
+                    RevenueEntry entry = new RevenueEntry();
+                    entry.setInvoiceNumber(load.getLoadNumber());
+                    entry.setDate(load.getDeliveryDate());
+                    entry.setCustomer(load.getCustomer());
+                    entry.setLoadId(load.getLoadNumber());
+                    entry.setAmount(load.getGrossAmount());
+                    String status = load.getStatus() == Status.PAID ? "Paid" :
+                                    load.getStatus() == Status.DELIVERED ? "Pending" : load.getStatus().name();
+                    entry.setStatus(status);
+                    if (load.getDeliveryDate() != null) {
+                        entry.setDueDate(load.getDeliveryDate().plusDays(30));
+                    }
+                    return entry;
+                }).collect(Collectors.toList());
             }
         };
         
@@ -986,38 +1005,19 @@ public class RevenueTab extends Tab {
     }
     
     private void initializeSampleData() {
-        // Initialize customer list
-        ObservableList<String> customers = FXCollections.observableArrayList(
-            "ABC Transport Inc.", "XYZ Logistics", "Global Shipping Co.", 
-            "Express Delivery LLC", "Fast Freight Services", "Prime Movers Inc.",
-            "Continental Transport", "Pacific Logistics", "Atlantic Shipping",
-            "Mountain Express"
-        );
-        customerComboBox.setItems(customers);
-        customerComboBox.getItems().add(0, "All Customers");
+        try {
+            List<Load> loads = loadDAO.getByDateRange(LocalDate.now().minusMonths(6), LocalDate.now());
+            Set<String> customers = loads.stream()
+                .map(Load::getCustomer)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(TreeSet::new));
+            customerComboBox.setItems(FXCollections.observableArrayList(customers));
+            customerComboBox.getItems().add(0, "All Customers");
+        } catch (Exception e) {
+            customerComboBox.setItems(FXCollections.observableArrayList("All Customers"));
+        }
     }
     
-    private List<RevenueEntry> generateSampleData() {
-        List<RevenueEntry> data = new ArrayList<>();
-        Random random = new Random();
-        String[] customers = {"ABC Transport Inc.", "XYZ Logistics", "Global Shipping Co.", 
-                            "Express Delivery LLC", "Fast Freight Services"};
-        String[] statuses = {"Paid", "Pending", "Overdue"};
-        
-        for (int i = 0; i < 50; i++) {
-            RevenueEntry entry = new RevenueEntry();
-            entry.setInvoiceNumber("INV-" + String.format("%06d", 1000 + i));
-            entry.setDate(LocalDate.now().minusDays(random.nextInt(90)));
-            entry.setCustomer(customers[random.nextInt(customers.length)]);
-            entry.setLoadId("LD" + String.format("%04d", random.nextInt(10000)));
-            entry.setAmount(1000 + random.nextDouble() * 9000);
-            entry.setStatus(statuses[random.nextInt(statuses.length)]);
-            entry.setDueDate(entry.getDate().plusDays(30));
-            data.add(entry);
-        }
-        
-        return data;
-    }
     
     // Inner class for Revenue Entry
     public static class RevenueEntry {
