@@ -56,8 +56,14 @@ public class DriverIncomeTab extends Tab {
         setText("Driver Income");
         setClosable(false);
         
-        // Set tab icon
-        ImageView tabIcon = new ImageView(new Image(getClass().getResourceAsStream("/icons/driver-income.png")));
+        // Set tab icon, handle missing resource gracefully
+        ImageView tabIcon;
+        var iconStream = getClass().getResourceAsStream("/icons/driver-income.png");
+        if (iconStream != null) {
+            tabIcon = new ImageView(new Image(iconStream));
+        } else {
+            tabIcon = new ImageView();
+        }
         tabIcon.setFitHeight(16);
         tabIcon.setFitWidth(16);
         setGraphic(tabIcon);
