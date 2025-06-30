@@ -1,95 +1,102 @@
 package com.company.payroll.maintenance;
 
-import javafx.scene.control.*;
-import javafx.scene.layout.*;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
+import com.company.payroll.trucks.Truck;
+import com.company.payroll.trucks.TruckDAO;
+import com.company.payroll.trailers.Trailer;
+import com.company.payroll.trailers.TrailerDAO;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.chart.*;
+import javafx.scene.control.*;
+import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.scene.effect.DropShadow;
-import javafx.beans.property.*;
-import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.stage.FileChooser;
+import javafx.util.Callback;
 import javafx.util.StringConverter;
-import javafx.animation.*;
-import javafx.util.Duration;
-import javafx.geometry.Orientation;
-import javafx.geometry.Side;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
-import java.text.NumberFormat;
 import java.util.*;
 import java.util.stream.Collectors;
-import com.company.payroll.maintenance.MaintenanceDAO;
-import javafx.stage.FileChooser;
-import java.io.File;
-import javafx.concurrent.Task;
-import javafx.scene.control.Alert.AlertType;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
-import javafx.scene.Node;
-import javafx.scene.shape.Circle;
 
+/**
+ * Simplified MaintenanceTab for tracking fleet maintenance expenses
+ */
 public class MaintenanceTab extends Tab {
-    private TableView<MaintenanceRecord> maintenanceTable;
-    private TableView<MaintenanceSchedule> scheduleTable;
-    private ComboBox<String> vehicleComboBox;
-    private ComboBox<String> serviceTypeComboBox;
-    private ComboBox<String> statusComboBox;
-    private DatePicker startDatePicker;
-    private DatePicker endDatePicker;
-    private TextField searchField;
-    
-    private Label totalMaintenanceLabel;
-    private Label scheduledLabel;
-    private Label overdueLabel;
-    private Label avgCostLabel;
-    
-    private PieChart serviceTypeChart;
-    private LineChart<String, Number> costTrendChart;
-    private BarChart<String, Number> vehicleChart;
-    private Timeline timeline;
-    
-    private ProgressIndicator loadingIndicator;
+    private static final Logger logger = LoggerFactory.getLogger(MaintenanceTab.class);
     private static final NumberFormat CURRENCY_FORMAT = NumberFormat.getCurrencyInstance();
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy");
     
-    private ObservableList<String> serviceTypes = FXCollections.observableArrayList(
-        "Oil Change", "Tire Rotation", "Brake Service", "Engine Service",
-        "Transmission Service", "Coolant Flush", "Air Filter", "Fuel Filter",
-        "Battery Service", "Alignment", "Inspection", "Other"
-    );
-
+    // Data access objects
     private final MaintenanceDAO maintenanceDAO = new MaintenanceDAO();
+    private final TruckDAO truckDAO = new TruckDAO();
+    private final TrailerDAO trailerDAO = new TrailerDAO();
+    
+    // UI Components
+    private TableView<MaintenanceRecord> maintenanceTable;
+    private TextField searchField;
+    private ComboBox<String> unitTypeFilter;
+    private ComboBox<String> unitNumberFilter;
+    private DatePicker startDatePicker;
+    private DatePicker endDatePicker;
+    
+    // Summary labels
+    private Label totalCostLabel;
+    private Label totalRecordsLabel;
+    private Label avgCostLabel;
+    private Label truckCostLabel;
+    private Label trailerCostLabel;
+    
+    // Charts
+    private PieChart costByTypeChart;
+    private BarChart<String, Number> monthlyExpenseChart;
+    private PieChart truckVsTrailerChart;
+    
+    // Data
+    private ObservableList<MaintenanceRecord> allRecords = FXCollections.observableArrayList();
+    private FilteredList<MaintenanceRecord> filteredRecords;
+    
+    // Document storage path
+    private final String docStoragePath = "maintenance_documents";
     
     public MaintenanceTab() {
         setText("Maintenance");
         setClosable(false);
         
-        // Set tab icon
+        logger.info("Initializing MaintenanceTab");
+        
+        // Create document directory if it doesn't exist
         try {
-            ImageView tabIcon = new ImageView(new Image(getClass().getResourceAsStream("/icons/maintenance.png")));
-            tabIcon.setFitHeight(16);
-            tabIcon.setFitWidth(16);
-            setGraphic(tabIcon);
+            Files.createDirectories(Paths.get(docStoragePath));
         } catch (Exception e) {
-            // Icon not found
+            logger.error("Failed to create document directory", e);
         }
         
-        VBox mainContent = new VBox(15);
-        mainContent.setPadding(new Insets(20));
-        mainContent.setStyle("-fx-background-color: #ecf0f1;");
+        VBox mainContent = new VBox(10);
+        mainContent.setPadding(new Insets(15));
+        mainContent.setStyle("-fx-background-color: #f5f5f5;");
         
         // Header
-        VBox header = createHeader();
-        
-        // Alert Bar for Overdue Maintenance
-        HBox alertBar = createAlertBar();
+        HBox header = createHeader();
         
         // Control Panel
         VBox controlPanel = createControlPanel();
@@ -97,147 +104,130 @@ public class MaintenanceTab extends Tab {
         // Summary Cards
         HBox summaryCards = createSummaryCards();
         
-        // Main Content Tabs
-        TabPane contentTabs = createContentTabs();
+        // Content TabPane
+        TabPane contentTabPane = createContentTabPane();
         
-        // Loading Indicator
-        loadingIndicator = new ProgressIndicator();
-        loadingIndicator.setVisible(false);
-        
-        mainContent.getChildren().addAll(header, alertBar, controlPanel, summaryCards, contentTabs, loadingIndicator);
+        mainContent.getChildren().addAll(header, controlPanel, summaryCards, contentTabPane);
         
         ScrollPane scrollPane = new ScrollPane(mainContent);
         scrollPane.setFitToWidth(true);
         setContent(scrollPane);
         
         // Initialize data
-        initializeData();
-        loadMaintenanceData();
-        startAlertTimer();
+        loadData();
     }
     
-    private VBox createHeader() {
-        VBox header = new VBox(10);
-        header.setPadding(new Insets(25));
-        header.setAlignment(Pos.CENTER);
-        header.setStyle("-fx-background-color: linear-gradient(to right, #34495e, #2c3e50); " +
-                       "-fx-background-radius: 10;");
+    private HBox createHeader() {
+        HBox header = new HBox(20);
+        header.setPadding(new Insets(15));
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setStyle("-fx-background-color: #2c3e50; -fx-background-radius: 5;");
         
-        Label titleLabel = new Label("Vehicle Maintenance Management");
-        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+        Label titleLabel = new Label("Maintenance Expense Tracking");
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
         titleLabel.setTextFill(Color.WHITE);
         
-        Label subtitleLabel = new Label("Track and schedule vehicle maintenance");
-        subtitleLabel.setFont(Font.font("Arial", 16));
+        Label subtitleLabel = new Label("Track maintenance costs for your trucking fleet");
+        subtitleLabel.setFont(Font.font("Arial", 14));
         subtitleLabel.setTextFill(Color.LIGHTGRAY);
         
-        header.getChildren().addAll(titleLabel, subtitleLabel);
-        
-        DropShadow shadow = new DropShadow();
-        shadow.setOffsetY(5);
-        shadow.setColor(Color.color(0, 0, 0, 0.3));
-        header.setEffect(shadow);
-        
-        return header;
-    }
-    
-    private HBox createAlertBar() {
-        HBox alertBar = new HBox(15);
-        alertBar.setPadding(new Insets(10, 15, 10, 15));
-        alertBar.setAlignment(Pos.CENTER_LEFT);
-        alertBar.setStyle("-fx-background-color: #e74c3c; -fx-background-radius: 5;");
-        alertBar.setVisible(false); // Initially hidden
-        
-        Label alertIcon = new Label("⚠");
-        alertIcon.setFont(Font.font("Arial", FontWeight.BOLD, 20));
-        alertIcon.setTextFill(Color.WHITE);
-        
-        Label alertText = new Label("You have 3 overdue maintenance items!");
-        alertText.setFont(Font.font("Arial", FontWeight.BOLD, 14));
-        alertText.setTextFill(Color.WHITE);
-        
-        Button viewButton = new Button("View Details");
-        viewButton.setStyle("-fx-background-color: white; -fx-text-fill: #e74c3c; " +
-                          "-fx-font-weight: bold;");
-        viewButton.setOnAction(e -> showOverdueItems());
+        VBox titleBox = new VBox(5, titleLabel, subtitleLabel);
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Button closeButton = new Button("✕");
-        closeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: white; " +
-                           "-fx-font-size: 16px;");
-        closeButton.setOnAction(e -> alertBar.setVisible(false));
+        // Total cost display
+        Label totalLabel = new Label("Total Fleet Maintenance Cost:");
+        totalLabel.setFont(Font.font("Arial", 14));
+        totalLabel.setTextFill(Color.WHITE);
         
-        alertBar.getChildren().addAll(alertIcon, alertText, viewButton, spacer, closeButton);
+        totalCostLabel = new Label("$0.00");
+        totalCostLabel.setFont(Font.font("Arial", FontWeight.BOLD, 28));
+        totalCostLabel.setTextFill(Color.LIGHTGREEN);
         
-        return alertBar;
+        VBox totalBox = new VBox(5, totalLabel, totalCostLabel);
+        totalBox.setAlignment(Pos.CENTER_RIGHT);
+        
+        header.getChildren().addAll(titleBox, spacer, totalBox);
+        
+        return header;
     }
     
     private VBox createControlPanel() {
-        VBox controlPanel = new VBox(15);
-        controlPanel.setPadding(new Insets(20));
-        controlPanel.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
+        VBox controlPanel = new VBox(10);
+        controlPanel.setPadding(new Insets(15));
+        controlPanel.setStyle("-fx-background-color: white; -fx-background-radius: 5;");
         
         // Search and Filter Row
         HBox searchRow = new HBox(15);
         searchRow.setAlignment(Pos.CENTER_LEFT);
         
         searchField = new TextField();
-        searchField.setPromptText("Search by vehicle, service, or technician...");
-        searchField.setPrefWidth(300);
-        searchField.setStyle("-fx-background-radius: 20;");
+        searchField.setPromptText("Search by unit, service type, vendor...");
+        searchField.setPrefWidth(250);
         
-        vehicleComboBox = new ComboBox<>();
-        vehicleComboBox.setPromptText("All Vehicles");
-        vehicleComboBox.setPrefWidth(150);
+        unitTypeFilter = new ComboBox<>();
+        unitTypeFilter.getItems().addAll("All Units", "Trucks Only", "Trailers Only");
+        unitTypeFilter.setValue("All Units");
+        unitTypeFilter.setPrefWidth(120);
         
-        serviceTypeComboBox = new ComboBox<>();
-        serviceTypeComboBox.getItems().add("All Services");
-        serviceTypeComboBox.getItems().addAll(serviceTypes);
-        serviceTypeComboBox.setValue("All Services");
-        serviceTypeComboBox.setPrefWidth(150);
+        unitNumberFilter = new ComboBox<>();
+        unitNumberFilter.setPromptText("Select Unit");
+        unitNumberFilter.setPrefWidth(150);
+        updateUnitNumberFilter();
         
-        statusComboBox = new ComboBox<>();
-        statusComboBox.getItems().addAll("All Status", "Completed", "Scheduled", "In Progress", "Overdue");
-        statusComboBox.setValue("All Status");
-        statusComboBox.setPrefWidth(120);
-        
-        searchRow.getChildren().addAll(searchField, new Separator(Orientation.VERTICAL),
-                                      vehicleComboBox, serviceTypeComboBox, statusComboBox);
+        searchRow.getChildren().addAll(
+            new Label("Search:"), searchField,
+            new Separator(Orientation.VERTICAL),
+            new Label("Type:"), unitTypeFilter,
+            new Label("Unit:"), unitNumberFilter
+        );
         
         // Date Range and Actions Row
         HBox actionRow = new HBox(15);
         actionRow.setAlignment(Pos.CENTER_LEFT);
         
-        Label dateLabel = new Label("Date Range:");
-        dateLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        
         startDatePicker = new DatePicker(LocalDate.now().minusMonths(6));
         endDatePicker = new DatePicker(LocalDate.now());
         
-        Button refreshButton = createStyledButton("Refresh", "#3498db", "refresh-icon.png");
-        refreshButton.setOnAction(e -> loadMaintenanceData());
+        Button refreshButton = new Button("Refresh");
+        refreshButton.setStyle("-fx-base: #3498db;");
+        refreshButton.setOnAction(e -> loadData());
         
-        Button scheduleButton = createStyledButton("Schedule Service", "#27ae60", "schedule-icon.png");
-        scheduleButton.setOnAction(e -> showScheduleServiceDialog());
+        Button addExpenseButton = new Button("Add Expense");
+        addExpenseButton.setStyle("-fx-base: #27ae60;");
+        addExpenseButton.setOnAction(e -> showAddExpenseDialog());
         
-        Button reportButton = createStyledButton("Generate Report", "#9b59b6", "report-icon.png");
-        reportButton.setOnAction(e -> generateMaintenanceReport());
+        Button documentManagerButton = new Button("Document Manager");
+        documentManagerButton.setStyle("-fx-base: #9b59b6;");
+        documentManagerButton.setOnAction(e -> showDocumentManager());
         
-        Button exportButton = createStyledButton("Export", "#f39c12", "export-icon.png");
+        Button generateReportButton = new Button("Generate Report");
+        generateReportButton.setStyle("-fx-base: #e74c3c;");
+        generateReportButton.setOnAction(e -> generateReport());
+        
+        Button exportButton = new Button("Export");
+        exportButton.setStyle("-fx-base: #f39c12;");
         exportButton.setOnAction(e -> showExportMenu(exportButton));
         
-        actionRow.getChildren().addAll(dateLabel, startDatePicker, new Label("to"), endDatePicker,
-                                      new Separator(Orientation.VERTICAL),
-                                      refreshButton, scheduleButton, reportButton, exportButton);
+        actionRow.getChildren().addAll(
+            new Label("Date Range:"), startDatePicker, new Label("to"), endDatePicker,
+            new Separator(Orientation.VERTICAL),
+            refreshButton, addExpenseButton, documentManagerButton,
+            generateReportButton, exportButton
+        );
         
-        controlPanel.getChildren().addAll(searchRow, actionRow);
+        controlPanel.getChildren().addAll(searchRow, new Separator(), actionRow);
         
-        DropShadow shadow = new DropShadow();
-        shadow.setOffsetY(3);
-        shadow.setColor(Color.color(0, 0, 0, 0.1));
-        controlPanel.setEffect(shadow);
+        // Add listeners for filtering
+        searchField.textProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        unitTypeFilter.valueProperty().addListener((obs, oldVal, newVal) -> {
+            updateUnitNumberFilter();
+            applyFilters();
+        });
+        unitNumberFilter.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        endDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
         
         return controlPanel;
     }
@@ -247,128 +237,92 @@ public class MaintenanceTab extends Tab {
         summaryCards.setPadding(new Insets(10));
         summaryCards.setAlignment(Pos.CENTER);
         
-        VBox totalCard = createSummaryCard("Total Services", "0", "#3498db", "total-icon.png", false);
-        totalMaintenanceLabel = (Label) totalCard.lookup(".value-label");
+        VBox totalRecordsCard = createSummaryCard("Total Records", "0", "#3498db");
+        totalRecordsLabel = (Label) totalRecordsCard.lookup(".value-label");
         
-        VBox scheduledCard = createSummaryCard("Scheduled", "0", "#27ae60", "scheduled-icon.png", true);
-        scheduledLabel = (Label) scheduledCard.lookup(".value-label");
-        
-        VBox overdueCard = createSummaryCard("Overdue", "0", "#e74c3c", "overdue-icon.png", true);
-        overdueLabel = (Label) overdueCard.lookup(".value-label");
-        
-        VBox avgCostCard = createSummaryCard("Avg Cost", "$0.00", "#f39c12", "cost-icon.png", false);
+        VBox avgCostCard = createSummaryCard("Average Cost", "$0.00", "#27ae60");
         avgCostLabel = (Label) avgCostCard.lookup(".value-label");
         
-        summaryCards.getChildren().addAll(totalCard, scheduledCard, overdueCard, avgCostCard);
+        VBox truckCostCard = createSummaryCard("Truck Expenses", "$0.00", "#e74c3c");
+        truckCostLabel = (Label) truckCostCard.lookup(".value-label");
+        
+        VBox trailerCostCard = createSummaryCard("Trailer Expenses", "$0.00", "#f39c12");
+        trailerCostLabel = (Label) trailerCostCard.lookup(".value-label");
+        
+        summaryCards.getChildren().addAll(totalRecordsCard, avgCostCard, truckCostCard, trailerCostCard);
         
         return summaryCards;
     }
     
-    private VBox createSummaryCard(String title, String value, String color, String iconPath, boolean showIndicator) {
+    private VBox createSummaryCard(String title, String value, String color) {
         VBox card = new VBox(10);
-        card.getStyleClass().add("summary-card");
-        card.setPadding(new Insets(20));
+        card.setPadding(new Insets(15));
         card.setAlignment(Pos.CENTER);
-        card.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
-        card.setPrefWidth(250);
-        card.setPrefHeight(130);
-        
-        HBox header = new HBox(10);
-        header.setAlignment(Pos.CENTER);
-        
-        try {
-            ImageView icon = new ImageView(new Image(getClass().getResourceAsStream("/icons/" + iconPath)));
-            icon.setFitHeight(30);
-            icon.setFitWidth(30);
-            header.getChildren().add(icon);
-        } catch (Exception e) {
-            // Icon not found
-        }
+        card.setStyle("-fx-background-color: white; -fx-background-radius: 5;");
+        card.setPrefWidth(200);
+        card.setPrefHeight(100);
         
         Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("Arial", 14));
+        titleLabel.setFont(Font.font("Arial", 12));
         titleLabel.setTextFill(Color.GRAY);
-        header.getChildren().add(titleLabel);
         
         Label valueLabel = new Label(value);
         valueLabel.getStyleClass().add("value-label");
-        valueLabel.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+        valueLabel.setFont(Font.font("Arial", FontWeight.BOLD, 20));
         valueLabel.setTextFill(Color.web(color));
         
-        card.getChildren().addAll(header, valueLabel);
-        
-        if (showIndicator) {
-            Circle indicator = new Circle(5);
-            indicator.setFill(Color.web(color));
-            
-            // Animate indicator
-            FadeTransition ft = new FadeTransition(Duration.millis(1000), indicator);
-            ft.setFromValue(1.0);
-            ft.setToValue(0.3);
-            ft.setCycleCount(Timeline.INDEFINITE);
-            ft.setAutoReverse(true);
-            ft.play();
-            
-            card.getChildren().add(indicator);
-        }
-        
-        // Add hover effect
-        addCardHoverEffect(card);
-        
-        DropShadow shadow = new DropShadow();
-        shadow.setOffsetY(3);
-        shadow.setColor(Color.color(0, 0, 0, 0.1));
-        card.setEffect(shadow);
+        card.getChildren().addAll(titleLabel, valueLabel);
         
         return card;
     }
     
-    private TabPane createContentTabs() {
+    private TabPane createContentTabPane() {
         TabPane tabPane = new TabPane();
-        tabPane.setStyle("-fx-background-color: white;");
+        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         
+        // Maintenance History Tab
         Tab historyTab = new Tab("Maintenance History");
-        historyTab.setClosable(false);
         historyTab.setContent(createHistorySection());
         
-        Tab scheduleTab = new Tab("Schedule");
-        scheduleTab.setClosable(false);
-        scheduleTab.setContent(createScheduleSection());
-        
+        // Analytics Tab
         Tab analyticsTab = new Tab("Analytics");
-        analyticsTab.setClosable(false);
         analyticsTab.setContent(createAnalyticsSection());
         
-        Tab vehiclesTab = new Tab("Vehicle Status");
-        vehiclesTab.setClosable(false);
-        vehiclesTab.setContent(createVehicleStatusSection());
-        
-        tabPane.getTabs().addAll(historyTab, scheduleTab, analyticsTab, vehiclesTab);
+        tabPane.getTabs().addAll(historyTab, analyticsTab);
         
         return tabPane;
     }
     
     private VBox createHistorySection() {
-        VBox historySection = new VBox(15);
-        historySection.setPadding(new Insets(15));
+        VBox historySection = new VBox(10);
+        historySection.setPadding(new Insets(10));
         
         // Table controls
         HBox tableControls = new HBox(10);
         tableControls.setAlignment(Pos.CENTER_RIGHT);
         
-        Button addRecordButton = new Button("Add Record");
-        addRecordButton.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white;");
-        addRecordButton.setOnAction(e -> showAddMaintenanceDialog());
+        Button uploadDocButton = new Button("Upload Document");
+        uploadDocButton.setStyle("-fx-base: #3498db;");
+        uploadDocButton.setOnAction(e -> uploadDocument());
         
-        Button printButton = new Button("Print");
-        printButton.setStyle("-fx-background-color: #3498db; -fx-text-fill: white;");
+        Button printDocButton = new Button("Print Document");
+        printDocButton.setStyle("-fx-base: #27ae60;");
+        printDocButton.setOnAction(e -> printSelectedDocument());
         
-        tableControls.getChildren().addAll(addRecordButton, printButton);
+        Button editButton = new Button("Edit");
+        editButton.setStyle("-fx-base: #f39c12;");
+        editButton.setOnAction(e -> editSelectedRecord());
         
-        // Maintenance History Table
+        Button deleteButton = new Button("Delete");
+        deleteButton.setStyle("-fx-base: #e74c3c;");
+        deleteButton.setOnAction(e -> deleteSelectedRecord());
+        
+        tableControls.getChildren().addAll(uploadDocButton, printDocButton, editButton, deleteButton);
+        
+        // Maintenance Table
         maintenanceTable = new TableView<>();
         maintenanceTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        maintenanceTable.setPrefHeight(500);
+        maintenanceTable.setPrefHeight(400);
         
         TableColumn<MaintenanceRecord, LocalDate> dateCol = new TableColumn<>("Date");
         dateCol.setCellValueFactory(new PropertyValueFactory<>("date"));
@@ -383,28 +337,23 @@ public class MaintenanceTab extends Tab {
                 }
             }
         });
+        dateCol.setPrefWidth(100);
         
-        TableColumn<MaintenanceRecord, String> vehicleCol = new TableColumn<>("Vehicle");
-        vehicleCol.setCellValueFactory(new PropertyValueFactory<>("vehicle"));
-        vehicleCol.setMinWidth(120);
-        
-        TableColumn<MaintenanceRecord, String> serviceCol = new TableColumn<>("Service Type");
-        serviceCol.setCellValueFactory(new PropertyValueFactory<>("serviceType"));
-        serviceCol.setCellFactory(column -> new TableCell<MaintenanceRecord, String>() {
-            @Override
-            protected void updateItem(String service, boolean empty) {
-                super.updateItem(service, empty);
-                if (empty || service == null) {
-                    setText(null);
-                    setGraphic(null);
-                } else {
-                    Label label = new Label(service);
-                    label.setPadding(new Insets(5, 10, 5, 10));
-                    label.setStyle(getServiceStyle(service));
-                    setGraphic(label);
-                }
-            }
+        TableColumn<MaintenanceRecord, String> unitTypeCol = new TableColumn<>("Unit Type");
+        unitTypeCol.setCellValueFactory(c -> {
+            String type = c.getValue().getVehicleType() != null ? 
+                         c.getValue().getVehicleType().toString() : "";
+            return new SimpleStringProperty(type);
         });
+        unitTypeCol.setPrefWidth(80);
+        
+        TableColumn<MaintenanceRecord, String> unitNumberCol = new TableColumn<>("Unit Number");
+        unitNumberCol.setCellValueFactory(new PropertyValueFactory<>("vehicle"));
+        unitNumberCol.setPrefWidth(120);
+        
+        TableColumn<MaintenanceRecord, String> serviceTypeCol = new TableColumn<>("Service Type");
+        serviceTypeCol.setCellValueFactory(new PropertyValueFactory<>("serviceType"));
+        serviceTypeCol.setPrefWidth(150);
         
         TableColumn<MaintenanceRecord, Integer> mileageCol = new TableColumn<>("Mileage");
         mileageCol.setCellValueFactory(new PropertyValueFactory<>("mileage"));
@@ -419,6 +368,7 @@ public class MaintenanceTab extends Tab {
                 }
             }
         });
+        mileageCol.setPrefWidth(80);
         
         TableColumn<MaintenanceRecord, Double> costCol = new TableColumn<>("Cost");
         costCol.setCellValueFactory(new PropertyValueFactory<>("cost"));
@@ -430,169 +380,41 @@ public class MaintenanceTab extends Tab {
                     setText(null);
                 } else {
                     setText(CURRENCY_FORMAT.format(cost));
-                    setStyle("-fx-font-weight: bold; -fx-alignment: CENTER-RIGHT;");
+                    setStyle("-fx-font-weight: bold;");
                 }
             }
         });
+        costCol.setPrefWidth(100);
         
-        TableColumn<MaintenanceRecord, String> technicianCol = new TableColumn<>("Technician");
-        technicianCol.setCellValueFactory(new PropertyValueFactory<>("technician"));
+        TableColumn<MaintenanceRecord, String> vendorCol = new TableColumn<>("Vendor");
+        vendorCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getServiceProvider()));
+        vendorCol.setPrefWidth(150);
         
-        TableColumn<MaintenanceRecord, String> statusCol = new TableColumn<>("Status");
-        statusCol.setCellValueFactory(new PropertyValueFactory<>("status"));
-        statusCol.setCellFactory(column -> new TableCell<MaintenanceRecord, String>() {
-            @Override
-            protected void updateItem(String status, boolean empty) {
-                super.updateItem(status, empty);
-                if (empty || status == null) {
-                    setText(null);
-                    setGraphic(null);
-                } else {
-                    Label statusLabel = new Label(status);
-                    statusLabel.setPadding(new Insets(5, 10, 5, 10));
-                    statusLabel.setStyle(getStatusStyle(status));
-                    setGraphic(statusLabel);
-                }
-            }
-        });
+        TableColumn<MaintenanceRecord, String> invoiceCol = new TableColumn<>("Invoice #");
+        invoiceCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getReceiptNumber()));
+        invoiceCol.setPrefWidth(100);
         
         TableColumn<MaintenanceRecord, String> notesCol = new TableColumn<>("Notes");
         notesCol.setCellValueFactory(new PropertyValueFactory<>("notes"));
-        notesCol.setMinWidth(200);
+        notesCol.setPrefWidth(200);
         
-        maintenanceTable.getColumns().addAll(dateCol, vehicleCol, serviceCol, mileageCol,
-                                            costCol, technicianCol, statusCol, notesCol);
+        maintenanceTable.getColumns().addAll(dateCol, unitTypeCol, unitNumberCol, serviceTypeCol,
+                                            mileageCol, costCol, vendorCol, invoiceCol, notesCol);
         
-        // Context menu
-        ContextMenu contextMenu = new ContextMenu();
-        MenuItem viewItem = new MenuItem("View Details");
-        MenuItem editItem = new MenuItem("Edit");
-        MenuItem deleteItem = new MenuItem("Delete");
-        MenuItem duplicateItem = new MenuItem("Duplicate");
-        contextMenu.getItems().addAll(viewItem, editItem, deleteItem, 
-                                    new SeparatorMenuItem(), duplicateItem);
-        maintenanceTable.setContextMenu(contextMenu);
+        // Double-click to edit
+        maintenanceTable.setRowFactory(tv -> {
+            TableRow<MaintenanceRecord> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && !row.isEmpty()) {
+                    showEditExpenseDialog(row.getItem());
+                }
+            });
+            return row;
+        });
         
         historySection.getChildren().addAll(tableControls, maintenanceTable);
         
         return historySection;
-    }
-    
-    private VBox createScheduleSection() {
-        VBox scheduleSection = new VBox(15);
-        scheduleSection.setPadding(new Insets(15));
-        
-        Label title = new Label("Upcoming Maintenance Schedule");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 20));
-        
-        // Schedule Table
-        scheduleTable = new TableView<>();
-        scheduleTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        scheduleTable.setPrefHeight(400);
-        
-        TableColumn<MaintenanceSchedule, String> vehicleCol = new TableColumn<>("Vehicle");
-        vehicleCol.setCellValueFactory(new PropertyValueFactory<>("vehicle"));
-        
-        TableColumn<MaintenanceSchedule, String> serviceCol = new TableColumn<>("Service");
-        serviceCol.setCellValueFactory(new PropertyValueFactory<>("service"));
-        
-        TableColumn<MaintenanceSchedule, LocalDate> dueDateCol = new TableColumn<>("Due Date");
-        dueDateCol.setCellValueFactory(new PropertyValueFactory<>("dueDate"));
-        dueDateCol.setCellFactory(column -> new TableCell<MaintenanceSchedule, LocalDate>() {
-            @Override
-            protected void updateItem(LocalDate date, boolean empty) {
-                super.updateItem(date, empty);
-                if (empty || date == null) {
-                    setText(null);
-                    setStyle("");
-                } else {
-                    setText(date.format(DATE_FORMAT));
-                    long daysUntil = ChronoUnit.DAYS.between(LocalDate.now(), date);
-                    if (daysUntil < 0) {
-                        setTextFill(Color.RED);
-                        setStyle("-fx-font-weight: bold;");
-                    } else if (daysUntil <= 7) {
-                        setTextFill(Color.ORANGE);
-                        setStyle("-fx-font-weight: bold;");
-                    } else {
-                        setTextFill(Color.BLACK);
-                        setStyle("");
-                    }
-                }
-            }
-        });
-        
-        TableColumn<MaintenanceSchedule, Integer> dueMileageCol = new TableColumn<>("Due Mileage");
-        dueMileageCol.setCellValueFactory(new PropertyValueFactory<>("dueMileage"));
-        dueMileageCol.setCellFactory(column -> new TableCell<MaintenanceSchedule, Integer>() {
-            @Override
-            protected void updateItem(Integer mileage, boolean empty) {
-                super.updateItem(mileage, empty);
-                if (empty || mileage == null) {
-                    setText(null);
-                } else {
-                    setText(String.format("%,d", mileage));
-                }
-            }
-        });
-        
-        TableColumn<MaintenanceSchedule, String> priorityCol = new TableColumn<>("Priority");
-        priorityCol.setCellValueFactory(new PropertyValueFactory<>("priority"));
-        priorityCol.setCellFactory(column -> new TableCell<MaintenanceSchedule, String>() {
-            @Override
-            protected void updateItem(String priority, boolean empty) {
-                super.updateItem(priority, empty);
-                if (empty || priority == null) {
-                    setGraphic(null);
-                } else {
-                    Label label = new Label(priority);
-                    label.setPadding(new Insets(5, 10, 5, 10));
-                    label.setStyle(getPriorityStyle(priority));
-                    setGraphic(label);
-                }
-            }
-        });
-        
-        TableColumn<MaintenanceSchedule, Void> actionCol = new TableColumn<>("Action");
-        actionCol.setCellFactory(column -> new TableCell<MaintenanceSchedule, Void>() {
-            private final Button scheduleBtn = new Button("Schedule Now");
-            
-            {
-                scheduleBtn.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; " +
-                                   "-fx-font-size: 11px;");
-                scheduleBtn.setOnAction(e -> scheduleMaintenanceNow(getTableRow().getItem()));
-            }
-            
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    setGraphic(scheduleBtn);
-                }
-            }
-        });
-        
-        scheduleTable.getColumns().addAll(vehicleCol, serviceCol, dueDateCol, 
-                                         dueMileageCol, priorityCol, actionCol);
-        
-        // Calendar View Toggle
-        ToggleGroup viewGroup = new ToggleGroup();
-        RadioButton tableViewBtn = new RadioButton("Table View");
-        tableViewBtn.setToggleGroup(viewGroup);
-        tableViewBtn.setSelected(true);
-        
-        RadioButton calendarViewBtn = new RadioButton("Calendar View");
-        calendarViewBtn.setToggleGroup(viewGroup);
-        
-        HBox viewToggle = new HBox(10);
-        viewToggle.setAlignment(Pos.CENTER_RIGHT);
-        viewToggle.getChildren().addAll(tableViewBtn, calendarViewBtn);
-        
-        scheduleSection.getChildren().addAll(title, viewToggle, scheduleTable);
-        
-        return scheduleSection;
     }
     
     private VBox createAnalyticsSection() {
@@ -603,57 +425,54 @@ public class MaintenanceTab extends Tab {
         chartsGrid.setHgap(20);
         chartsGrid.setVgap(20);
         
-        // Service Type Distribution
-        VBox serviceChartBox = new VBox(10);
-        Label serviceLabel = new Label("Service Type Distribution");
-        serviceLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        // Cost by Service Type Chart
+        VBox serviceTypeChartBox = new VBox(10);
+        Label serviceTypeLabel = new Label("Expenses by Service Type");
+        serviceTypeLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         
-        serviceTypeChart = new PieChart();
-        serviceTypeChart.setTitle("Services by Type");
-        serviceTypeChart.setPrefHeight(350);
-        serviceTypeChart.setAnimated(true);
+        costByTypeChart = new PieChart();
+        costByTypeChart.setTitle("Service Type Distribution");
+        costByTypeChart.setPrefHeight(300);
+        costByTypeChart.setAnimated(true);
         
-        serviceChartBox.getChildren().addAll(serviceLabel, serviceTypeChart);
+        serviceTypeChartBox.getChildren().addAll(serviceTypeLabel, costByTypeChart);
         
-        // Cost Trend Chart
-        VBox costChartBox = new VBox(10);
-        Label costLabel = new Label("Maintenance Cost Trend");
-        costLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        // Monthly Expense Chart
+        VBox monthlyChartBox = new VBox(10);
+        Label monthlyLabel = new Label("Monthly Maintenance Expenses");
+        monthlyLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
         yAxis.setLabel("Cost ($)");
         
-        costTrendChart = new LineChart<>(xAxis, yAxis);
-        costTrendChart.setTitle("Monthly Maintenance Costs");
-        costTrendChart.setPrefHeight(350);
-        costTrendChart.setCreateSymbols(true);
-        costTrendChart.setAnimated(true);
+        monthlyExpenseChart = new BarChart<>(xAxis, yAxis);
+        monthlyExpenseChart.setTitle("Monthly Expense Trend");
+        monthlyExpenseChart.setPrefHeight(300);
+        monthlyExpenseChart.setAnimated(true);
+        monthlyExpenseChart.setLegendVisible(false);
         
-        costChartBox.getChildren().addAll(costLabel, costTrendChart);
+        monthlyChartBox.getChildren().addAll(monthlyLabel, monthlyExpenseChart);
         
-        // Vehicle Maintenance Chart
-        VBox vehicleChartBox = new VBox(10);
-        Label vehicleLabel = new Label("Maintenance by Vehicle");
-        vehicleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        // Truck vs Trailer Chart
+        VBox truckTrailerChartBox = new VBox(10);
+        Label truckTrailerLabel = new Label("Truck vs Trailer Expenses");
+        truckTrailerLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         
-        CategoryAxis vehicleXAxis = new CategoryAxis();
-        NumberAxis vehicleYAxis = new NumberAxis();
-        vehicleChart = new BarChart<>(vehicleXAxis, vehicleYAxis);
-        vehicleChart.setTitle("Service Count by Vehicle");
-        vehicleChart.setPrefHeight(350);
-        vehicleChart.setAnimated(true);
-        vehicleChart.setLegendVisible(false);
+        truckVsTrailerChart = new PieChart();
+        truckVsTrailerChart.setTitle("Cost Distribution");
+        truckVsTrailerChart.setPrefHeight(300);
+        truckVsTrailerChart.setAnimated(true);
         
-        vehicleChartBox.getChildren().addAll(vehicleLabel, vehicleChart);
+        truckTrailerChartBox.getChildren().addAll(truckTrailerLabel, truckVsTrailerChart);
         
-        // Key Metrics
-        VBox metricsBox = createMetricsBox();
+        // Top Maintenance Items
+        VBox topItemsBox = createTopMaintenanceItemsBox();
         
-        chartsGrid.add(serviceChartBox, 0, 0);
-        chartsGrid.add(costChartBox, 1, 0);
-        chartsGrid.add(vehicleChartBox, 0, 1);
-        chartsGrid.add(metricsBox, 1, 1);
+        chartsGrid.add(serviceTypeChartBox, 0, 0);
+        chartsGrid.add(monthlyChartBox, 1, 0);
+        chartsGrid.add(truckTrailerChartBox, 0, 1);
+        chartsGrid.add(topItemsBox, 1, 1);
         
         ColumnConstraints col = new ColumnConstraints();
         col.setPercentWidth(50);
@@ -664,562 +483,333 @@ public class MaintenanceTab extends Tab {
         return analyticsSection;
     }
     
-    private VBox createVehicleStatusSection() {
-        VBox vehicleSection = new VBox(20);
-        vehicleSection.setPadding(new Insets(20));
+    private VBox createTopMaintenanceItemsBox() {
+        VBox topItemsBox = new VBox(10);
+        topItemsBox.setPadding(new Insets(15));
+        topItemsBox.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 5;");
         
-        Label title = new Label("Vehicle Fleet Status");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 24));
+        Label title = new Label("Top Maintenance Units");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         
-        // Vehicle cards grid
-        GridPane vehicleGrid = new GridPane();
-        vehicleGrid.setHgap(20);
-        vehicleGrid.setVgap(20);
-        vehicleGrid.setPadding(new Insets(20, 0, 0, 0));
+        ListView<String> topItemsList = new ListView<>();
+        topItemsList.setPrefHeight(250);
         
-        // Sample vehicles
-        String[] vehicles = {"Truck #101", "Truck #102", "Truck #103", "Truck #104", 
-                           "Truck #105", "Truck #106"};
+        // This will be populated with data
+        topItemsList.setPlaceholder(new Label("No data available"));
         
-        int col = 0;
-        int row = 0;
-        for (String vehicle : vehicles) {
-            VBox vehicleCard = createVehicleCard(vehicle);
-            vehicleGrid.add(vehicleCard, col, row);
-            col++;
-            if (col > 2) {
-                col = 0;
-                row++;
-            }
-        }
+        topItemsBox.getChildren().addAll(title, topItemsList);
         
-        vehicleSection.getChildren().addAll(title, vehicleGrid);
-        
-        return vehicleSection;
+        return topItemsBox;
     }
     
-    private VBox createVehicleCard(String vehicleName) {
-        VBox card = new VBox(15);
-        card.setPadding(new Insets(20));
-        card.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
-        card.setPrefSize(300, 200);
-        
-        // Header
-        HBox header = new HBox(10);
-        header.setAlignment(Pos.CENTER_LEFT);
-        
-        Circle statusIndicator = new Circle(8);
-        statusIndicator.setFill(Math.random() > 0.7 ? Color.RED : Color.GREEN);
-        
-        Label nameLabel = new Label(vehicleName);
-        nameLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
-        
-        header.getChildren().addAll(statusIndicator, nameLabel);
-        
-        // Mileage
-        Label mileageLabel = new Label("Current Mileage: " + 
-            String.format("%,d", 50000 + (int)(Math.random() * 100000)));
-        mileageLabel.setFont(Font.font("Arial", 14));
-        
-        // Next Service
-        Label nextServiceLabel = new Label("Next Service: Oil Change");
-        nextServiceLabel.setFont(Font.font("Arial", 12));
-        nextServiceLabel.setTextFill(Color.GRAY);
-        
-        Label dueDateLabel = new Label("Due: " + 
-            LocalDate.now().plusDays((int)(Math.random() * 30)).format(DATE_FORMAT));
-        dueDateLabel.setFont(Font.font("Arial", 12));
-        dueDateLabel.setTextFill(Color.ORANGE);
-        
-        // Progress bar
-        ProgressBar serviceProgress = new ProgressBar(Math.random());
-        serviceProgress.setPrefWidth(250);
-        Label progressLabel = new Label("Service interval progress");
-        progressLabel.setFont(Font.font("Arial", 11));
-        progressLabel.setTextFill(Color.GRAY);
-        
-        // View Details button
-        Button detailsButton = new Button("View Details");
-        detailsButton.setStyle("-fx-background-color: #3498db; -fx-text-fill: white;");
-        detailsButton.setOnAction(e -> showVehicleDetails(vehicleName));
-        
-        card.getChildren().addAll(header, mileageLabel, nextServiceLabel, dueDateLabel,
-                                 serviceProgress, progressLabel, detailsButton);
-        
-        // Add hover effect
-        addCardHoverEffect(card);
-        
-        DropShadow shadow = new DropShadow();
-        shadow.setOffsetY(3);
-        shadow.setColor(Color.color(0, 0, 0, 0.1));
-        card.setEffect(shadow);
-        
-        return card;
-    }
-    
-    private VBox createMetricsBox() {
-        VBox metricsBox = new VBox(15);
-        metricsBox.setPadding(new Insets(20));
-        metricsBox.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 10;");
-        
-        Label title = new Label("Key Metrics");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 18));
-        
-        GridPane metricsGrid = new GridPane();
-        metricsGrid.setHgap(30);
-        metricsGrid.setVgap(15);
-        metricsGrid.setPadding(new Insets(15, 0, 0, 0));
-        
-        addMetric(metricsGrid, 0, "Avg Time Between Services", "45 days");
-        addMetric(metricsGrid, 1, "Most Common Service", "Oil Change");
-        addMetric(metricsGrid, 2, "Avg Service Cost", "$285.50");
-        addMetric(metricsGrid, 3, "Total YTD Cost", "$15,420.00");
-        addMetric(metricsGrid, 4, "Compliance Rate", "94%");
-        addMetric(metricsGrid, 5, "Cost per Mile", "$0.12");
-        
-        metricsBox.getChildren().addAll(title, metricsGrid);
-        
-        return metricsBox;
-    }
-    
-    private void addMetric(GridPane grid, int row, String label, String value) {
-        Label labelText = new Label(label + ":");
-        labelText.setFont(Font.font("Arial", 12));
-        labelText.setTextFill(Color.GRAY);
-        
-        Label valueText = new Label(value);
-        valueText.setFont(Font.font("Arial", FontWeight.BOLD, 14));
-        
-        grid.add(labelText, 0, row);
-        grid.add(valueText, 1, row);
-    }
-    
-    private Button createStyledButton(String text, String color, String iconPath) {
-        Button button = new Button(text);
-        button.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: white; " +
-                                    "-fx-font-weight: bold; -fx-background-radius: 5;", color));
-        button.setPrefHeight(35);
+    private void loadData() {
+        logger.info("Loading maintenance data");
         
         try {
-            ImageView icon = new ImageView(new Image(getClass().getResourceAsStream("/icons/" + iconPath)));
-            icon.setFitHeight(16);
-            icon.setFitWidth(16);
-            button.setGraphic(icon);
+            List<MaintenanceRecord> records = maintenanceDAO.findByDateRange(
+                startDatePicker.getValue(), 
+                endDatePicker.getValue()
+            );
+            
+            allRecords.clear();
+            allRecords.addAll(records);
+            
+            filteredRecords = new FilteredList<>(allRecords, p -> true);
+            SortedList<MaintenanceRecord> sortedRecords = new SortedList<>(filteredRecords);
+            sortedRecords.comparatorProperty().bind(maintenanceTable.comparatorProperty());
+            maintenanceTable.setItems(sortedRecords);
+            
+            applyFilters();
+            updateSummaryCards();
+            updateCharts();
+            
+            logger.info("Loaded {} maintenance records", records.size());
+            
         } catch (Exception e) {
-            // Icon not found
+            logger.error("Failed to load maintenance data", e);
+            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load maintenance data: " + e.getMessage());
         }
-        
-        button.setOnMouseEntered(e -> button.setOpacity(0.8));
-        button.setOnMouseExited(e -> button.setOpacity(1.0));
-        
-        return button;
-    }
-    
-    private void addCardHoverEffect(Node card) {
-        card.setOnMouseEntered(e -> {
-            ScaleTransition st = new ScaleTransition(Duration.millis(200), card);
-            st.setToX(1.03);
-            st.setToY(1.03);
-            st.play();
-        });
-        
-        card.setOnMouseExited(e -> {
-            ScaleTransition st = new ScaleTransition(Duration.millis(200), card);
-            st.setToX(1);
-            st.setToY(1);
-            st.play();
-        });
-    }
-    
-    private String getServiceStyle(String service) {
-        Map<String, String> serviceColors = new HashMap<>();
-        serviceColors.put("Oil Change", "#3498db");
-        serviceColors.put("Tire Rotation", "#2ecc71");
-        serviceColors.put("Brake Service", "#e74c3c");
-        serviceColors.put("Engine Service", "#f39c12");
-        serviceColors.put("Transmission Service", "#9b59b6");
-        
-        String color = serviceColors.getOrDefault(service, "#95a5a6");
-        return String.format("-fx-background-color: %s; -fx-text-fill: white; " +
-                           "-fx-background-radius: 15; -fx-font-size: 11px;", color);
-    }
-    
-    private String getStatusStyle(String status) {
-        switch (status) {
-            case "Completed":
-                return "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-background-radius: 15;";
-            case "Scheduled":
-                return "-fx-background-color: #3498db; -fx-text-fill: white; -fx-background-radius: 15;";
-            case "In Progress":
-                return "-fx-background-color: #f39c12; -fx-text-fill: white; -fx-background-radius: 15;";
-            case "Overdue":
-                return "-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-background-radius: 15;";
-            default:
-                return "-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-background-radius: 15;";
-        }
-    }
-    
-    private String getPriorityStyle(String priority) {
-        switch (priority) {
-            case "High":
-                return "-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-background-radius: 15;";
-            case "Medium":
-                return "-fx-background-color: #f39c12; -fx-text-fill: white; -fx-background-radius: 15;";
-            case "Low":
-                return "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-background-radius: 15;";
-            default:
-                return "-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-background-radius: 15;";
-        }
-    }
-    
-    private void loadMaintenanceData() {
-        loadingIndicator.setVisible(true);
-        
-        Task<MaintenanceData> task = new Task<MaintenanceData>() {
-            @Override
-            protected MaintenanceData call() throws Exception {
-                return maintenanceDAO.getMaintenanceData(
-                    startDatePicker.getValue(), endDatePicker.getValue());
-            }
-        };
-        
-        task.setOnSucceeded(e -> {
-            MaintenanceData data = task.getValue();
-            updateTables(data);
-            updateSummaryCards(data);
-            updateCharts(data);
-            checkForOverdueItems(data);
-            loadingIndicator.setVisible(false);
-        });
-        
-        task.setOnFailed(e -> {
-            loadingIndicator.setVisible(false);
-            showAlert(AlertType.ERROR, "Error", "Failed to load maintenance data.");
-        });
-        
-        new Thread(task).start();
-    }
-    
-    private void updateTables(MaintenanceData data) {
-        ObservableList<MaintenanceRecord> records = FXCollections.observableArrayList(data.getRecords());
-        maintenanceTable.setItems(records);
-        
-        ObservableList<MaintenanceSchedule> schedules = FXCollections.observableArrayList(data.getSchedules());
-        scheduleTable.setItems(schedules);
-        
-        // Apply filters
-        searchField.textProperty().addListener((obs, oldText, newText) -> applyFilters());
-        vehicleComboBox.setOnAction(e -> applyFilters());
-        serviceTypeComboBox.setOnAction(e -> applyFilters());
-        statusComboBox.setOnAction(e -> applyFilters());
     }
     
     private void applyFilters() {
-        String searchText = searchField.getText().toLowerCase();
-        String selectedVehicle = vehicleComboBox.getValue();
-        String selectedService = serviceTypeComboBox.getValue();
-        String selectedStatus = statusComboBox.getValue();
+        if (filteredRecords == null) return;
         
-        ObservableList<MaintenanceRecord> filtered = maintenanceTable.getItems().filtered(record -> {
-            boolean matchesSearch = searchText.isEmpty() ||
-                record.getVehicle().toLowerCase().contains(searchText) ||
-                record.getServiceType().toLowerCase().contains(searchText) ||
-                record.getTechnician().toLowerCase().contains(searchText);
+        filteredRecords.setPredicate(record -> {
+            // Search text filter
+            String searchText = searchField.getText().toLowerCase();
+            if (!searchText.isEmpty()) {
+                boolean matchesSearch = 
+                    (record.getVehicle() != null && record.getVehicle().toLowerCase().contains(searchText)) ||
+                    (record.getServiceType() != null && record.getServiceType().toLowerCase().contains(searchText)) ||
+                    (record.getServiceProvider() != null && record.getServiceProvider().toLowerCase().contains(searchText)) ||
+                    (record.getNotes() != null && record.getNotes().toLowerCase().contains(searchText));
+                
+                if (!matchesSearch) return false;
+            }
             
-            boolean matchesVehicle = selectedVehicle == null || 
-                "All Vehicles".equals(selectedVehicle) ||
-                record.getVehicle().equals(selectedVehicle);
+            // Unit type filter
+            String unitType = unitTypeFilter.getValue();
+            if (!"All Units".equals(unitType)) {
+                if ("Trucks Only".equals(unitType) && record.getVehicleType() != MaintenanceRecord.VehicleType.TRUCK) {
+                    return false;
+                }
+                if ("Trailers Only".equals(unitType) && record.getVehicleType() != MaintenanceRecord.VehicleType.TRAILER) {
+                    return false;
+                }
+            }
             
-            boolean matchesService = "All Services".equals(selectedService) ||
-                record.getServiceType().equals(selectedService);
+            // Unit number filter
+            String selectedUnit = unitNumberFilter.getValue();
+            if (selectedUnit != null && !selectedUnit.isEmpty() && !"All".equals(selectedUnit)) {
+                if (!selectedUnit.equals(record.getVehicle())) {
+                    return false;
+                }
+            }
             
-            boolean matchesStatus = "All Status".equals(selectedStatus) ||
-                record.getStatus().equals(selectedStatus);
+            // Date range filter
+            LocalDate startDate = startDatePicker.getValue();
+            LocalDate endDate = endDatePicker.getValue();
+            if (startDate != null && record.getDate().isBefore(startDate)) {
+                return false;
+            }
+            if (endDate != null && record.getDate().isAfter(endDate)) {
+                return false;
+            }
             
-            return matchesSearch && matchesVehicle && matchesService && matchesStatus;
+            return true;
         });
         
-        maintenanceTable.setItems(filtered);
-    }
-    		
-	private void updateSummaryCards(MaintenanceData data) {
-        int totalServices = data.getRecords().size();
-        long scheduled = data.getSchedules().stream()
-            .filter(s -> s.getDueDate().isAfter(LocalDate.now()))
-            .count();
-        long overdue = data.getSchedules().stream()
-            .filter(s -> s.getDueDate().isBefore(LocalDate.now()))
-            .count();
-        double avgCost = data.getRecords().stream()
-            .mapToDouble(MaintenanceRecord::getCost)
-            .average()
-            .orElse(0.0);
-        
-        animateValue(totalMaintenanceLabel, String.valueOf(totalServices));
-        animateValue(scheduledLabel, String.valueOf(scheduled));
-        animateValue(overdueLabel, String.valueOf(overdue));
-        animateValue(avgCostLabel, CURRENCY_FORMAT.format(avgCost));
+        updateSummaryCards();
+        updateCharts();
     }
     
-    private void updateCharts(MaintenanceData data) {
-        // Update service type chart
-        Map<String, Long> serviceTypeCounts = data.getRecords().stream()
-            .collect(Collectors.groupingBy(MaintenanceRecord::getServiceType, Collectors.counting()));
+    private void updateUnitNumberFilter() {
+        String previousSelection = unitNumberFilter.getValue();
+        unitNumberFilter.getItems().clear();
+        unitNumberFilter.getItems().add("All");
+        
+        String unitType = unitTypeFilter.getValue();
+        
+        try {
+            if ("All Units".equals(unitType) || "Trucks Only".equals(unitType)) {
+                List<Truck> trucks = truckDAO.findAll();
+                for (Truck truck : trucks) {
+                    unitNumberFilter.getItems().add(truck.getNumber());
+                }
+            }
+            
+            if ("All Units".equals(unitType) || "Trailers Only".equals(unitType)) {
+                List<Trailer> trailers = trailerDAO.findAll();
+                for (Trailer trailer : trailers) {
+                    unitNumberFilter.getItems().add(trailer.getTrailerNumber());
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Failed to update unit number filter", e);
+        }
+        
+        if (unitNumberFilter.getItems().contains(previousSelection)) {
+            unitNumberFilter.setValue(previousSelection);
+        } else {
+            unitNumberFilter.setValue("All");
+        }
+    }
+    
+    private void updateSummaryCards() {
+        List<MaintenanceRecord> visibleRecords = filteredRecords != null ? 
+            new ArrayList<>(filteredRecords) : new ArrayList<>();
+        
+        // Total cost
+        double totalCost = visibleRecords.stream()
+            .mapToDouble(MaintenanceRecord::getCost)
+            .sum();
+        totalCostLabel.setText(CURRENCY_FORMAT.format(totalCost));
+        
+        // Total records
+        totalRecordsLabel.setText(String.valueOf(visibleRecords.size()));
+        
+        // Average cost
+        double avgCost = visibleRecords.isEmpty() ? 0 : totalCost / visibleRecords.size();
+        avgCostLabel.setText(CURRENCY_FORMAT.format(avgCost));
+        
+        // Truck costs
+        double truckCost = visibleRecords.stream()
+            .filter(r -> r.getVehicleType() == MaintenanceRecord.VehicleType.TRUCK)
+            .mapToDouble(MaintenanceRecord::getCost)
+            .sum();
+        truckCostLabel.setText(CURRENCY_FORMAT.format(truckCost));
+        
+        // Trailer costs
+        double trailerCost = visibleRecords.stream()
+            .filter(r -> r.getVehicleType() == MaintenanceRecord.VehicleType.TRAILER)
+            .mapToDouble(MaintenanceRecord::getCost)
+            .sum();
+        trailerCostLabel.setText(CURRENCY_FORMAT.format(trailerCost));
+    }
+    
+    private void updateCharts() {
+        List<MaintenanceRecord> visibleRecords = filteredRecords != null ? 
+            new ArrayList<>(filteredRecords) : new ArrayList<>();
+        
+        // Update cost by service type chart
+        Map<String, Double> costByType = visibleRecords.stream()
+            .collect(Collectors.groupingBy(
+                MaintenanceRecord::getServiceType,
+                Collectors.summingDouble(MaintenanceRecord::getCost)
+            ));
         
         ObservableList<PieChart.Data> pieData = FXCollections.observableArrayList();
-        serviceTypeCounts.forEach((service, count) -> {
-            pieData.add(new PieChart.Data(service + " (" + count + ")", count));
+        costByType.forEach((type, cost) -> {
+            pieData.add(new PieChart.Data(type + " (" + CURRENCY_FORMAT.format(cost) + ")", cost));
         });
-        serviceTypeChart.setData(pieData);
+        costByTypeChart.setData(pieData);
         
-        // Add tooltips
-        pieData.forEach(data1 -> {
-            Tooltip tooltip = new Tooltip(String.format("%s: %.1f%%", 
-                data1.getName(), (data1.getPieValue() / data.getRecords().size()) * 100));
-            Tooltip.install(data1.getNode(), tooltip);
-        });
-        
-        // Update cost trend chart
-        XYChart.Series<String, Number> costSeries = new XYChart.Series<>();
-        costSeries.setName("Monthly Cost");
-        
-        Map<String, Double> monthlyCosts = data.getRecords().stream()
+        // Update monthly expense chart
+        Map<String, Double> monthlyExpenses = visibleRecords.stream()
             .collect(Collectors.groupingBy(
                 record -> record.getDate().format(DateTimeFormatter.ofPattern("MMM yyyy")),
                 Collectors.summingDouble(MaintenanceRecord::getCost)
             ));
         
-        monthlyCosts.forEach((month, cost) -> {
-            costSeries.getData().add(new XYChart.Data<>(month, cost));
-        });
+        XYChart.Series<String, Number> monthlySeries = new XYChart.Series<>();
+        monthlyExpenses.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(entry -> {
+                monthlySeries.getData().add(new XYChart.Data<>(entry.getKey(), entry.getValue()));
+            });
         
-        costTrendChart.getData().clear();
-        costTrendChart.getData().add(costSeries);
+        monthlyExpenseChart.getData().clear();
+        monthlyExpenseChart.getData().add(monthlySeries);
         
-        // Update vehicle chart
-        XYChart.Series<String, Number> vehicleSeries = new XYChart.Series<>();
-        Map<String, Long> vehicleCounts = data.getRecords().stream()
-            .collect(Collectors.groupingBy(MaintenanceRecord::getVehicle, Collectors.counting()));
+        // Update truck vs trailer chart
+        double truckTotal = visibleRecords.stream()
+            .filter(r -> r.getVehicleType() == MaintenanceRecord.VehicleType.TRUCK)
+            .mapToDouble(MaintenanceRecord::getCost)
+            .sum();
+            
+        double trailerTotal = visibleRecords.stream()
+            .filter(r -> r.getVehicleType() == MaintenanceRecord.VehicleType.TRAILER)
+            .mapToDouble(MaintenanceRecord::getCost)
+            .sum();
         
-        vehicleCounts.forEach((vehicle, count) -> {
-            vehicleSeries.getData().add(new XYChart.Data<>(vehicle, count));
-        });
-        
-        vehicleChart.getData().clear();
-        vehicleChart.getData().add(vehicleSeries);
-    }
-    
-    private void checkForOverdueItems(MaintenanceData data) {
-        long overdueCount = data.getSchedules().stream()
-            .filter(s -> s.getDueDate().isBefore(LocalDate.now()))
-            .count();
-        
-        if (overdueCount > 0) {
-            HBox alertBar = (HBox) getContent().lookup(".alert-bar");
-            if (alertBar != null) {
-                Label alertText = (Label) alertBar.getChildren().get(1);
-                alertText.setText("You have " + overdueCount + " overdue maintenance item" + 
-                                (overdueCount > 1 ? "s!" : "!"));
-                
-                FadeTransition ft = new FadeTransition(Duration.millis(500), alertBar);
-                ft.setFromValue(0.0);
-                ft.setToValue(1.0);
-                ft.play();
-                
-                alertBar.setVisible(true);
-            }
+        ObservableList<PieChart.Data> truckTrailerData = FXCollections.observableArrayList();
+        if (truckTotal > 0) {
+            truckTrailerData.add(new PieChart.Data("Trucks (" + CURRENCY_FORMAT.format(truckTotal) + ")", truckTotal));
         }
+        if (trailerTotal > 0) {
+            truckTrailerData.add(new PieChart.Data("Trailers (" + CURRENCY_FORMAT.format(trailerTotal) + ")", trailerTotal));
+        }
+        truckVsTrailerChart.setData(truckTrailerData);
     }
     
-    private void animateValue(Label label, String newValue) {
-        FadeTransition ft = new FadeTransition(Duration.millis(300), label);
-        ft.setFromValue(1.0);
-        ft.setToValue(0.0);
-        ft.setOnFinished(e -> {
-            label.setText(newValue);
-            FadeTransition ft2 = new FadeTransition(Duration.millis(300), label);
-            ft2.setFromValue(0.0);
-            ft2.setToValue(1.0);
-            ft2.play();
-        });
-        ft.play();
+    private void showAddExpenseDialog() {
+        showMaintenanceDialog(null, true);
     }
     
-    private void startAlertTimer() {
-        timeline = new Timeline(new KeyFrame(Duration.minutes(5), e -> {
-            // Check for overdue items every 5 minutes
-            loadMaintenanceData();
-        }));
-        timeline.setCycleCount(Timeline.INDEFINITE);
-        timeline.play();
+    private void showEditExpenseDialog(MaintenanceRecord record) {
+        showMaintenanceDialog(record, false);
     }
     
-    private void showOverdueItems() {
-        // Filter table to show only overdue items
-        statusComboBox.setValue("Overdue");
-        applyFilters();
-        
-        // Switch to schedule tab
-        TabPane tabPane = (TabPane) maintenanceTable.getParent().getParent().getParent();
-        tabPane.getSelectionModel().select(1); // Select schedule tab
-    }
-    
-    private void showScheduleServiceDialog() {
-        Dialog<MaintenanceSchedule> dialog = new Dialog<>();
-        dialog.setTitle("Schedule Maintenance Service");
-        dialog.setHeaderText("Enter service details");
-        
-        ButtonType scheduleButtonType = new ButtonType("Schedule", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(scheduleButtonType, ButtonType.CANCEL);
+    private void showMaintenanceDialog(MaintenanceRecord record, boolean isAdd) {
+        Dialog<MaintenanceRecord> dialog = new Dialog<>();
+        dialog.setTitle(isAdd ? "Add Maintenance Expense" : "Edit Maintenance Expense");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
-        grid.setPadding(new Insets(20, 150, 10, 10));
+        grid.setPadding(new Insets(20));
         
-        ComboBox<String> vehicleField = new ComboBox<>(vehicleComboBox.getItems().filtered(
-            item -> !"All Vehicles".equals(item)));
-        vehicleField.setPromptText("Select Vehicle");
-        vehicleField.setPrefWidth(200);
+        // Date
+        DatePicker datePicker = new DatePicker(record != null ? record.getDate() : LocalDate.now());
         
-        ComboBox<String> serviceField = new ComboBox<>(serviceTypes);
-        serviceField.setPromptText("Select Service");
-        serviceField.setPrefWidth(200);
+        // Unit Type
+        ComboBox<String> unitTypeCombo = new ComboBox<>();
+        unitTypeCombo.getItems().addAll("Truck", "Trailer");
+        unitTypeCombo.setValue(record != null && record.getVehicleType() == MaintenanceRecord.VehicleType.TRAILER ? 
+                              "Trailer" : "Truck");
         
-        DatePicker dueDateField = new DatePicker();
-        dueDateField.setValue(LocalDate.now().plusDays(7));
+        // Unit Number
+        ComboBox<String> unitNumberCombo = new ComboBox<>();
+        updateUnitComboBox(unitNumberCombo, unitTypeCombo.getValue());
         
+        unitTypeCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
+            updateUnitComboBox(unitNumberCombo, newVal);
+        });
+        
+        if (record != null) {
+            unitNumberCombo.setValue(record.getVehicle());
+        }
+        
+        // Service Type
+        ComboBox<String> serviceTypeCombo = new ComboBox<>();
+        serviceTypeCombo.getItems().addAll(
+            "Oil Change", "Tire Replacement", "Tire Rotation", "Brake Service",
+            "Engine Repair", "Transmission Service", "Coolant Service", 
+            "Battery Replacement", "Inspection", "Registration", "Permits",
+            "Body Work", "Electrical", "HVAC", "Other"
+        );
+        serviceTypeCombo.setEditable(true);
+        if (record != null) serviceTypeCombo.setValue(record.getServiceType());
+        
+        // Mileage
         TextField mileageField = new TextField();
-        mileageField.setPromptText("Expected mileage");
+        mileageField.setPromptText("Current mileage");
+        if (record != null) mileageField.setText(String.valueOf(record.getMileage()));
         
-        ComboBox<String> priorityField = new ComboBox<>();
-        priorityField.getItems().addAll("High", "Medium", "Low");
-        priorityField.setValue("Medium");
+        // Cost
+        TextField costField = new TextField();
+        costField.setPromptText("0.00");
+        if (record != null) costField.setText(String.valueOf(record.getCost()));
         
+        // Vendor
+        TextField vendorField = new TextField();
+        vendorField.setPromptText("Service provider name");
+        if (record != null) vendorField.setText(record.getServiceProvider());
+        
+        // Invoice Number
+        TextField invoiceField = new TextField();
+        invoiceField.setPromptText("Invoice/Receipt number");
+        if (record != null) invoiceField.setText(record.getReceiptNumber());
+        
+        // Notes
         TextArea notesArea = new TextArea();
         notesArea.setPromptText("Additional notes...");
         notesArea.setPrefRowCount(3);
+        if (record != null) notesArea.setText(record.getNotes());
         
-        grid.add(new Label("Vehicle:"), 0, 0);
-        grid.add(vehicleField, 1, 0);
-        grid.add(new Label("Service Type:"), 0, 1);
-        grid.add(serviceField, 1, 1);
-        grid.add(new Label("Due Date:"), 0, 2);
-        grid.add(dueDateField, 1, 2);
-        grid.add(new Label("Due Mileage:"), 0, 3);
-        grid.add(mileageField, 1, 3);
-        grid.add(new Label("Priority:"), 0, 4);
-        grid.add(priorityField, 1, 4);
-        grid.add(new Label("Notes:"), 0, 5);
-        grid.add(notesArea, 1, 5);
+        // Layout
+        int row = 0;
+        grid.add(new Label("Date:"), 0, row);
+        grid.add(datePicker, 1, row++);
         
-        dialog.getDialogPane().setContent(grid);
+        grid.add(new Label("Unit Type:"), 0, row);
+        grid.add(unitTypeCombo, 1, row++);
         
-        // Validate mileage field
-        mileageField.textProperty().addListener((obs, oldText, newText) -> {
-            if (!newText.matches("\\d*")) {
-                mileageField.setText(oldText);
-            }
-        });
+        grid.add(new Label("Unit Number:"), 0, row);
+        grid.add(unitNumberCombo, 1, row++);
         
-        // Enable/Disable schedule button
-        Node scheduleButton = dialog.getDialogPane().lookupButton(scheduleButtonType);
-        scheduleButton.setDisable(true);
+        grid.add(new Label("Service Type:"), 0, row);
+        grid.add(serviceTypeCombo, 1, row++);
         
-        vehicleField.valueProperty().addListener((obs, oldVal, newVal) -> 
-            validateScheduleForm(scheduleButton, vehicleField, serviceField));
-        serviceField.valueProperty().addListener((obs, oldVal, newVal) -> 
-            validateScheduleForm(scheduleButton, vehicleField, serviceField));
+        grid.add(new Label("Mileage:"), 0, row);
+        grid.add(mileageField, 1, row++);
         
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == scheduleButtonType) {
-                MaintenanceSchedule schedule = new MaintenanceSchedule();
-                schedule.setVehicle(vehicleField.getValue());
-                schedule.setService(serviceField.getValue());
-                schedule.setDueDate(dueDateField.getValue());
-                schedule.setDueMileage(mileageField.getText().isEmpty() ? 0 : 
-                                      Integer.parseInt(mileageField.getText()));
-                schedule.setPriority(priorityField.getValue());
-                return schedule;
-            }
-            return null;
-        });
+        grid.add(new Label("Cost:"), 0, row);
+        grid.add(costField, 1, row++);
         
-        Optional<MaintenanceSchedule> result = dialog.showAndWait();
-        result.ifPresent(schedule -> {
-            scheduleTable.getItems().add(schedule);
-            showAlert(AlertType.INFORMATION, "Service Scheduled", 
-                     "Maintenance service scheduled for " + schedule.getVehicle());
-            loadMaintenanceData();
-        });
-    }
-    
-    private void validateScheduleForm(Node button, ComboBox<String> vehicle, ComboBox<String> service) {
-        boolean isValid = vehicle.getValue() != null && service.getValue() != null;
-        button.setDisable(!isValid);
-    }
-    
-    private void showAddMaintenanceDialog() {
-        Dialog<MaintenanceRecord> dialog = new Dialog<>();
-        dialog.setTitle("Add Maintenance Record");
-        dialog.setHeaderText("Enter maintenance details");
+        grid.add(new Label("Vendor:"), 0, row);
+        grid.add(vendorField, 1, row++);
         
-        ButtonType addButtonType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(addButtonType, ButtonType.CANCEL);
+        grid.add(new Label("Invoice #:"), 0, row);
+        grid.add(invoiceField, 1, row++);
         
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20, 150, 10, 10));
-        
-        DatePicker datePicker = new DatePicker(LocalDate.now());
-        
-        ComboBox<String> vehicleField = new ComboBox<>(vehicleComboBox.getItems().filtered(
-            item -> !"All Vehicles".equals(item)));
-        vehicleField.setPromptText("Select Vehicle");
-        vehicleField.setPrefWidth(200);
-        
-        ComboBox<String> serviceField = new ComboBox<>(serviceTypes);
-        serviceField.setPromptText("Select Service");
-        serviceField.setPrefWidth(200);
-        
-        TextField mileageField = new TextField();
-        mileageField.setPromptText("Current mileage");
-        
-        TextField costField = new TextField();
-        costField.setPromptText("0.00");
-        
-        TextField technicianField = new TextField();
-        technicianField.setPromptText("Technician name");
-        
-        ComboBox<String> statusField = new ComboBox<>();
-        statusField.getItems().addAll("Completed", "In Progress");
-        statusField.setValue("Completed");
-        
-        TextArea notesArea = new TextArea();
-        notesArea.setPromptText("Service notes...");
-        notesArea.setPrefRowCount(3);
-        
-        grid.add(new Label("Date:"), 0, 0);
-        grid.add(datePicker, 1, 0);
-        grid.add(new Label("Vehicle:"), 0, 1);
-        grid.add(vehicleField, 1, 1);
-        grid.add(new Label("Service Type:"), 0, 2);
-        grid.add(serviceField, 1, 2);
-        grid.add(new Label("Mileage:"), 0, 3);
-        grid.add(mileageField, 1, 3);
-        grid.add(new Label("Cost:"), 0, 4);
-        grid.add(costField, 1, 4);
-        grid.add(new Label("Technician:"), 0, 5);
-        grid.add(technicianField, 1, 5);
-        grid.add(new Label("Status:"), 0, 6);
-        grid.add(statusField, 1, 6);
-        grid.add(new Label("Notes:"), 0, 7);
-        grid.add(notesArea, 1, 7);
+        grid.add(new Label("Notes:"), 0, row);
+        grid.add(notesArea, 1, row++);
         
         dialog.getDialogPane().setContent(grid);
         
-        // Validate numeric fields
+        // Validation
         mileageField.textProperty().addListener((obs, oldText, newText) -> {
             if (!newText.matches("\\d*")) {
                 mileageField.setText(oldText);
@@ -1233,221 +823,519 @@ public class MaintenanceTab extends Tab {
         });
         
         dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == addButtonType) {
-                MaintenanceRecord record = new MaintenanceRecord();
-                record.setDate(datePicker.getValue());
-                record.setVehicle(vehicleField.getValue());
-                record.setServiceType(serviceField.getValue());
-                record.setMileage(Integer.parseInt(mileageField.getText()));
-                record.setCost(Double.parseDouble(costField.getText()));
-                record.setTechnician(technicianField.getText());
-                record.setStatus(statusField.getValue());
-                record.setNotes(notesArea.getText());
-                return record;
+            if (dialogButton == ButtonType.OK) {
+                try {
+                    MaintenanceRecord result = record != null ? record : new MaintenanceRecord();
+                    
+                    result.setDate(datePicker.getValue());
+                    result.setVehicleType("Truck".equals(unitTypeCombo.getValue()) ? 
+                                         MaintenanceRecord.VehicleType.TRUCK : 
+                                         MaintenanceRecord.VehicleType.TRAILER);
+                    result.setVehicle(unitNumberCombo.getValue());
+                    result.setServiceType(serviceTypeCombo.getValue());
+                    result.setMileage(mileageField.getText().isEmpty() ? 0 : 
+                                     Integer.parseInt(mileageField.getText()));
+                    result.setCost(costField.getText().isEmpty() ? 0 : 
+                                  Double.parseDouble(costField.getText()));
+                    result.setServiceProvider(vendorField.getText());
+                    result.setReceiptNumber(invoiceField.getText());
+                    result.setNotes(notesArea.getText());
+                    result.setStatus("Completed");
+                    
+                    return result;
+                } catch (Exception e) {
+                    logger.error("Error creating maintenance record", e);
+                    return null;
+                }
             }
             return null;
         });
         
-        Optional<MaintenanceRecord> result = dialog.showAndWait();
-        result.ifPresent(record -> {
-            maintenanceTable.getItems().add(record);
-            showAlert(AlertType.INFORMATION, "Record Added", 
-                     "Maintenance record added successfully!");
-            loadMaintenanceData();
+        dialog.showAndWait().ifPresent(result -> {
+            try {
+                maintenanceDAO.save(result);
+                loadData();
+                showAlert(Alert.AlertType.INFORMATION, "Success", 
+                         isAdd ? "Maintenance expense added successfully" : 
+                                "Maintenance expense updated successfully");
+            } catch (Exception e) {
+                logger.error("Failed to save maintenance record", e);
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                         "Failed to save maintenance record: " + e.getMessage());
+            }
         });
     }
     
-    private void scheduleMaintenanceNow(MaintenanceSchedule schedule) {
-        if (schedule != null) {
-            showAddMaintenanceDialog();
+    private void updateUnitComboBox(ComboBox<String> combo, String unitType) {
+        combo.getItems().clear();
+        
+        try {
+            if ("Truck".equals(unitType)) {
+                List<Truck> trucks = truckDAO.findAll();
+                for (Truck truck : trucks) {
+                    combo.getItems().add(truck.getNumber());
+                }
+            } else {
+                List<Trailer> trailers = trailerDAO.findAll();
+                for (Trailer trailer : trailers) {
+                    combo.getItems().add(trailer.getTrailerNumber());
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Failed to load units", e);
         }
     }
     
-    private void generateMaintenanceReport() {
-        // Generate report dialog
-        Alert alert = new Alert(AlertType.INFORMATION);
-        alert.setTitle("Generate Report");
-        alert.setHeaderText("Maintenance Report Generated");
-        alert.setContentText("Report has been generated for the selected date range.");
-        alert.showAndWait();
+    private void editSelectedRecord() {
+        MaintenanceRecord selected = maintenanceTable.getSelectionModel().getSelectedItem();
+        if (selected != null) {
+            showEditExpenseDialog(selected);
+        } else {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select a record to edit");
+        }
+    }
+    
+    private void deleteSelectedRecord() {
+        MaintenanceRecord selected = maintenanceTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select a record to delete");
+            return;
+        }
+        
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Are you sure you want to delete this maintenance record?",
+                ButtonType.YES, ButtonType.NO);
+        confirm.setHeaderText("Confirm Deletion");
+        
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.YES) {
+                try {
+                    maintenanceDAO.delete(selected.getId());
+                    loadData();
+                    showAlert(Alert.AlertType.INFORMATION, "Success", 
+                             "Maintenance record deleted successfully");
+                } catch (Exception e) {
+                    logger.error("Failed to delete maintenance record", e);
+                    showAlert(Alert.AlertType.ERROR, "Error", 
+                             "Failed to delete record: " + e.getMessage());
+                }
+            }
+        });
+    }
+    
+    private void showDocumentManager() {
+        MaintenanceRecord selected = maintenanceTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select a maintenance record to manage documents");
+            return;
+        }
+        
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Document Manager - " + selected.getVehicle() + " - " + 
+                       selected.getDate().format(DATE_FORMAT));
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        
+        ListView<String> docListView = new ListView<>();
+        updateDocumentList(docListView, selected.getId());
+        
+        Button uploadBtn = new Button("Upload");
+        Button viewBtn = new Button("View");
+        Button printBtn = new Button("Print");
+        Button deleteBtn = new Button("Delete");
+        
+        uploadBtn.setOnAction(e -> {
+            uploadDocumentForRecord(selected.getId());
+            updateDocumentList(docListView, selected.getId());
+        });
+        
+        viewBtn.setOnAction(e -> {
+            String selectedDoc = docListView.getSelectionModel().getSelectedItem();
+            if (selectedDoc != null) {
+                viewDocument(selected.getId(), selectedDoc);
+            }
+        });
+        
+        printBtn.setOnAction(e -> {
+            String selectedDoc = docListView.getSelectionModel().getSelectedItem();
+            if (selectedDoc != null) {
+                printDocument(selected.getId(), selectedDoc);
+            }
+        });
+        
+        deleteBtn.setOnAction(e -> {
+            String selectedDoc = docListView.getSelectionModel().getSelectedItem();
+            if (selectedDoc != null) {
+                deleteDocument(selected.getId(), selectedDoc);
+                updateDocumentList(docListView, selected.getId());
+            }
+        });
+        
+        HBox buttonBox = new HBox(10, uploadBtn, viewBtn, printBtn, deleteBtn);
+        buttonBox.setAlignment(Pos.CENTER);
+        buttonBox.setPadding(new Insets(10, 0, 0, 0));
+        
+        VBox content = new VBox(10, 
+                               new Label("Documents for this maintenance record"), 
+                               docListView, 
+                               buttonBox);
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(500);
+        content.setPrefHeight(400);
+        
+        dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
+    }
+    
+    private void uploadDocument() {
+        MaintenanceRecord selected = maintenanceTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select a maintenance record to upload document");
+            return;
+        }
+        
+        uploadDocumentForRecord(selected.getId());
+    }
+    
+    private void uploadDocumentForRecord(int recordId) {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select Document to Upload");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("PDF Files", "*.pdf"),
+                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg"),
+                new FileChooser.ExtensionFilter("All Files", "*.*"));
+        
+        File selectedFile = fileChooser.showOpenDialog(getTabPane().getScene().getWindow());
+        if (selectedFile != null) {
+            try {
+                Path recordDir = Paths.get(docStoragePath, String.valueOf(recordId));
+                Files.createDirectories(recordDir);
+                
+                String timestamp = String.valueOf(System.currentTimeMillis());
+                String extension = selectedFile.getName().substring(
+                        selectedFile.getName().lastIndexOf('.'));
+                String newFileName = "maintenance_" + timestamp + extension;
+                
+                Path destPath = recordDir.resolve(newFileName);
+                Files.copy(selectedFile.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
+                
+                logger.info("Uploaded document for record {}: {}", recordId, newFileName);
+                showAlert(Alert.AlertType.INFORMATION, "Success", 
+                         "Document uploaded successfully");
+                
+            } catch (Exception e) {
+                logger.error("Failed to upload document", e);
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                         "Failed to upload document: " + e.getMessage());
+            }
+        }
+    }
+    
+    private void updateDocumentList(ListView<String> listView, int recordId) {
+        try {
+            Path recordDir = Paths.get(docStoragePath, String.valueOf(recordId));
+            if (Files.exists(recordDir)) {
+                List<String> files = Files.list(recordDir)
+                    .map(p -> p.getFileName().toString())
+                    .sorted()
+                    .collect(Collectors.toList());
+                listView.setItems(FXCollections.observableArrayList(files));
+            } else {
+                listView.setItems(FXCollections.observableArrayList());
+            }
+        } catch (Exception e) {
+            logger.error("Failed to list documents", e);
+            listView.setItems(FXCollections.observableArrayList());
+        }
+    }
+    
+    private void viewDocument(int recordId, String document) {
+        try {
+            Path docPath = Paths.get(docStoragePath, String.valueOf(recordId), document);
+            File file = docPath.toFile();
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop.getDesktop().open(file);
+            } else {
+                showAlert(Alert.AlertType.INFORMATION, "Cannot Open", 
+                         "Cannot open file. File is saved at: " + docPath);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to open document", e);
+            showAlert(Alert.AlertType.ERROR, "Error", 
+                     "Failed to open document: " + e.getMessage());
+        }
+    }
+    
+    private void printDocument(int recordId, String document) {
+        try {
+            Path docPath = Paths.get(docStoragePath, String.valueOf(recordId), document);
+            File file = docPath.toFile();
+            if (java.awt.Desktop.isDesktopSupported() && 
+                java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.PRINT)) {
+                java.awt.Desktop.getDesktop().print(file);
+                logger.info("Printing document: {}", docPath);
+            } else {
+                showAlert(Alert.AlertType.INFORMATION, "Print Not Supported", 
+                         "Printing is not supported. Please open the file first.");
+                viewDocument(recordId, document);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to print document", e);
+            showAlert(Alert.AlertType.ERROR, "Error", 
+                     "Failed to print document: " + e.getMessage());
+        }
+    }
+    
+    private void deleteDocument(int recordId, String document) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Are you sure you want to delete this document?",
+                ButtonType.YES, ButtonType.NO);
+        confirm.setHeaderText("Confirm Deletion");
+        
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.YES) {
+                try {
+                    Path docPath = Paths.get(docStoragePath, String.valueOf(recordId), document);
+                    Files.delete(docPath);
+                    logger.info("Deleted document: {}", docPath);
+                } catch (Exception e) {
+                    logger.error("Failed to delete document", e);
+                    showAlert(Alert.AlertType.ERROR, "Error", 
+                             "Failed to delete document: " + e.getMessage());
+                }
+            }
+        });
+    }
+    
+    private void printSelectedDocument() {
+        MaintenanceRecord selected = maintenanceTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select a maintenance record to print documents");
+            return;
+        }
+        
+        try {
+            Path recordDir = Paths.get(docStoragePath, String.valueOf(selected.getId()));
+            if (!Files.exists(recordDir) || !Files.isDirectory(recordDir)) {
+                showAlert(Alert.AlertType.INFORMATION, "No Documents", 
+                         "No documents found for this maintenance record");
+                return;
+            }
+            
+            List<String> documents = Files.list(recordDir)
+                .map(p -> p.getFileName().toString())
+                .sorted()
+                .collect(Collectors.toList());
+            
+            if (documents.isEmpty()) {
+                showAlert(Alert.AlertType.INFORMATION, "No Documents", 
+                         "No documents found for this maintenance record");
+                return;
+            }
+            
+            if (documents.size() == 1) {
+                printDocument(selected.getId(), documents.get(0));
+            } else {
+                // Show selection dialog
+                Dialog<String> dialog = new Dialog<>();
+                dialog.setTitle("Select Document to Print");
+                dialog.setHeaderText("Choose a document to print");
+                
+                ListView<String> docList = new ListView<>(FXCollections.observableArrayList(documents));
+                docList.setPrefHeight(300);
+                
+                dialog.getDialogPane().setContent(docList);
+                dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+                
+                dialog.setResultConverter(dialogButton -> {
+                    if (dialogButton == ButtonType.OK) {
+                        return docList.getSelectionModel().getSelectedItem();
+                    }
+                    return null;
+                });
+                
+                dialog.showAndWait().ifPresent(doc -> 
+                    printDocument(selected.getId(), doc)
+                );
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error accessing documents", e);
+            showAlert(Alert.AlertType.ERROR, "Error", 
+                     "Error accessing documents: " + e.getMessage());
+        }
+    }
+    
+    private void generateReport() {
+        logger.info("Generating maintenance report");
+        
+        List<MaintenanceRecord> records = filteredRecords != null ? 
+            new ArrayList<>(filteredRecords) : new ArrayList<>();
+        
+        if (records.isEmpty()) {
+            showAlert(Alert.AlertType.INFORMATION, "No Data", 
+                     "No maintenance records to report");
+            return;
+        }
+        
+        StringBuilder report = new StringBuilder();
+        report.append("FLEET MAINTENANCE EXPENSE REPORT\n");
+        report.append("================================\n\n");
+        report.append("Report Date: ").append(LocalDate.now().format(DATE_FORMAT)).append("\n");
+        report.append("Date Range: ").append(startDatePicker.getValue().format(DATE_FORMAT))
+              .append(" to ").append(endDatePicker.getValue().format(DATE_FORMAT)).append("\n\n");
+        
+        // Summary
+        double totalCost = records.stream().mapToDouble(MaintenanceRecord::getCost).sum();
+        double avgCost = totalCost / records.size();
+        
+        report.append("SUMMARY\n");
+        report.append("-------\n");
+        report.append("Total Records: ").append(records.size()).append("\n");
+        report.append("Total Cost: ").append(CURRENCY_FORMAT.format(totalCost)).append("\n");
+        report.append("Average Cost: ").append(CURRENCY_FORMAT.format(avgCost)).append("\n\n");
+        
+        // By Unit Type
+        Map<MaintenanceRecord.VehicleType, Double> costByType = records.stream()
+            .collect(Collectors.groupingBy(
+                MaintenanceRecord::getVehicleType,
+                Collectors.summingDouble(MaintenanceRecord::getCost)
+            ));
+        
+        report.append("BY UNIT TYPE\n");
+        report.append("------------\n");
+        costByType.forEach((type, cost) -> {
+            report.append(type).append(": ").append(CURRENCY_FORMAT.format(cost)).append("\n");
+        });
+        report.append("\n");
+        
+        // By Service Type
+        Map<String, Double> costByService = records.stream()
+            .collect(Collectors.groupingBy(
+                MaintenanceRecord::getServiceType,
+                Collectors.summingDouble(MaintenanceRecord::getCost)
+            ));
+        
+        report.append("BY SERVICE TYPE\n");
+        report.append("---------------\n");
+        costByService.entrySet().stream()
+            .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+            .forEach(entry -> {
+                report.append(entry.getKey()).append(": ")
+                      .append(CURRENCY_FORMAT.format(entry.getValue())).append("\n");
+            });
+        report.append("\n");
+        
+        // Top Units by Cost
+        Map<String, Double> costByUnit = records.stream()
+            .collect(Collectors.groupingBy(
+                MaintenanceRecord::getVehicle,
+                Collectors.summingDouble(MaintenanceRecord::getCost)
+            ));
+        
+        report.append("TOP 10 UNITS BY MAINTENANCE COST\n");
+        report.append("---------------------------------\n");
+        costByUnit.entrySet().stream()
+            .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+            .limit(10)
+            .forEach(entry -> {
+                report.append(entry.getKey()).append(": ")
+                      .append(CURRENCY_FORMAT.format(entry.getValue())).append("\n");
+            });
+        
+        // Show report in dialog
+        TextArea reportArea = new TextArea(report.toString());
+        reportArea.setEditable(false);
+        reportArea.setFont(Font.font("Courier New", 12));
+        
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Maintenance Report");
+        dialog.getDialogPane().setContent(reportArea);
+        dialog.getDialogPane().setPrefSize(600, 500);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK);
+        dialog.showAndWait();
     }
     
     private void showExportMenu(Button exportButton) {
         ContextMenu exportMenu = new ContextMenu();
         
+        MenuItem csvItem = new MenuItem("Export to CSV");
+        csvItem.setOnAction(e -> exportToCSV());
+        
         MenuItem excelItem = new MenuItem("Export to Excel");
         excelItem.setOnAction(e -> exportToExcel());
         
         MenuItem pdfItem = new MenuItem("Export to PDF");
-        pdfItem.setOnAction(e -> exportToPdf());
+        pdfItem.setOnAction(e -> exportToPDF());
         
-        MenuItem csvItem = new MenuItem("Export to CSV");
-        csvItem.setOnAction(e -> exportToCsv());
-        
-        exportMenu.getItems().addAll(excelItem, pdfItem, csvItem);
-        exportMenu.show(exportButton, Side.BOTTOM, 0, 0);
+        exportMenu.getItems().addAll(csvItem, excelItem, pdfItem);
+        exportMenu.show(exportButton, javafx.geometry.Side.BOTTOM, 0, 0);
     }
     
-    private void exportToExcel() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Save Excel File");
-        fileChooser.getExtensionFilters().add(
-            new FileChooser.ExtensionFilter("Excel Files", "*.xlsx")
-        );
-        fileChooser.setInitialFileName("maintenance_report_" + LocalDate.now() + ".xlsx");
-        
-        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
-        if (file != null) {
-            showAlert(AlertType.INFORMATION, "Export Successful", 
-                     "Maintenance data exported to Excel successfully!");
-        }
-    }
-    
-    private void exportToPdf() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Save PDF File");
-        fileChooser.getExtensionFilters().add(
-            new FileChooser.ExtensionFilter("PDF Files", "*.pdf")
-        );
-        fileChooser.setInitialFileName("maintenance_report_" + LocalDate.now() + ".pdf");
-        
-        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
-        if (file != null) {
-            showAlert(AlertType.INFORMATION, "Export Successful", 
-                     "Maintenance report exported to PDF successfully!");
-        }
-    }
-    
-    private void exportToCsv() {
+    private void exportToCSV() {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Save CSV File");
         fileChooser.getExtensionFilters().add(
             new FileChooser.ExtensionFilter("CSV Files", "*.csv")
         );
-        fileChooser.setInitialFileName("maintenance_data_" + LocalDate.now() + ".csv");
+        fileChooser.setInitialFileName("maintenance_report_" + LocalDate.now() + ".csv");
         
         File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
         if (file != null) {
-            showAlert(AlertType.INFORMATION, "Export Successful", 
-                     "Maintenance data exported to CSV successfully!");
+            try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+                // Write headers
+                writer.println("Date,Unit Type,Unit Number,Service Type,Mileage,Cost,Vendor,Invoice #,Notes");
+                
+                // Write data
+                List<MaintenanceRecord> records = filteredRecords != null ? 
+                    new ArrayList<>(filteredRecords) : new ArrayList<>();
+                    
+                for (MaintenanceRecord record : records) {
+                    writer.printf("%s,%s,%s,%s,%d,%.2f,%s,%s,%s%n",
+                        record.getDate().format(DATE_FORMAT),
+                        record.getVehicleType(),
+                        record.getVehicle(),
+                        record.getServiceType(),
+                        record.getMileage(),
+                        record.getCost(),
+                        record.getServiceProvider() != null ? record.getServiceProvider() : "",
+                        record.getReceiptNumber() != null ? record.getReceiptNumber() : "",
+                        record.getNotes() != null ? record.getNotes().replace(",", ";") : ""
+                    );
+                }
+                
+                showAlert(Alert.AlertType.INFORMATION, "Export Successful", 
+                         "Maintenance data exported to CSV successfully!");
+                         
+            } catch (Exception e) {
+                logger.error("Failed to export to CSV", e);
+                showAlert(Alert.AlertType.ERROR, "Export Failed", 
+                         "Failed to export data: " + e.getMessage());
+            }
         }
     }
     
-    private void showVehicleDetails(String vehicleName) {
-        Alert alert = new Alert(AlertType.INFORMATION);
-        alert.setTitle("Vehicle Details");
-        alert.setHeaderText(vehicleName);
-        alert.setContentText("Detailed maintenance history and upcoming services for " + vehicleName);
-        alert.showAndWait();
+    private void exportToExcel() {
+        // This would require Apache POI library
+        showAlert(Alert.AlertType.INFORMATION, "Export to Excel", 
+                 "Excel export requires additional libraries. Use CSV export instead.");
     }
     
-    private void showAlert(AlertType type, String title, String content) {
+    private void exportToPDF() {
+        // This would require a PDF library like iText
+        showAlert(Alert.AlertType.INFORMATION, "Export to PDF", 
+                 "PDF export requires additional libraries. Use CSV export instead.");
+    }
+    
+    private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(content);
         alert.showAndWait();
     }
-    
-    private void initializeData() {
-        // Load vehicles from database
-        try {
-            List<com.company.payroll.maintenance.MaintenanceRecord> records = maintenanceDAO.findAll();
-            Set<String> vehicles = records.stream()
-                .map(com.company.payroll.maintenance.MaintenanceRecord::getVehicle)
-                .collect(Collectors.toCollection(TreeSet::new));
-            vehicleComboBox.getItems().add("All Vehicles");
-            vehicleComboBox.getItems().addAll(vehicles);
-        } catch (Exception e) {
-            // Fallback to empty list if database is not available
-            vehicleComboBox.getItems().add("All Vehicles");
-        }
-    }
-    
-    
-    // Inner classes
-    public static class MaintenanceRecord {
-        private final ObjectProperty<LocalDate> date = new SimpleObjectProperty<>();
-        private final StringProperty vehicle = new SimpleStringProperty();
-        private final StringProperty serviceType = new SimpleStringProperty();
-        private final IntegerProperty mileage = new SimpleIntegerProperty();
-        private final DoubleProperty cost = new SimpleDoubleProperty();
-        private final StringProperty technician = new SimpleStringProperty();
-        private final StringProperty status = new SimpleStringProperty();
-        private final StringProperty notes = new SimpleStringProperty();
-        
-        // Getters and setters
-        public LocalDate getDate() { return date.get(); }
-        public void setDate(LocalDate value) { date.set(value); }
-        public ObjectProperty<LocalDate> dateProperty() { return date; }
-        
-        public String getVehicle() { return vehicle.get(); }
-        public void setVehicle(String value) { vehicle.set(value); }
-        public StringProperty vehicleProperty() { return vehicle; }
-        
-        public String getServiceType() { return serviceType.get(); }
-        public void setServiceType(String value) { serviceType.set(value); }
-        public StringProperty serviceTypeProperty() { return serviceType; }
-        
-        public int getMileage() { return mileage.get(); }
-        public void setMileage(int value) { mileage.set(value); }
-        public IntegerProperty mileageProperty() { return mileage; }
-        
-        public double getCost() { return cost.get(); }
-        public void setCost(double value) { cost.set(value); }
-        public DoubleProperty costProperty() { return cost; }
-        
-        public String getTechnician() { return technician.get(); }
-        public void setTechnician(String value) { technician.set(value); }
-        public StringProperty technicianProperty() { return technician; }
-        
-        public String getStatus() { return status.get(); }
-        public void setStatus(String value) { status.set(value); }
-        public StringProperty statusProperty() { return status; }
-        
-        public String getNotes() { return notes.get(); }
-        public void setNotes(String value) { notes.set(value); }
-        public StringProperty notesProperty() { return notes; }
-    }
-    
-    public static class MaintenanceSchedule {
-        private final StringProperty vehicle = new SimpleStringProperty();
-        private final StringProperty service = new SimpleStringProperty();
-        private final ObjectProperty<LocalDate> dueDate = new SimpleObjectProperty<>();
-        private final IntegerProperty dueMileage = new SimpleIntegerProperty();
-        private final StringProperty priority = new SimpleStringProperty();
-        
-        // Getters and setters
-        public String getVehicle() { return vehicle.get(); }
-        public void setVehicle(String value) { vehicle.set(value); }
-        public StringProperty vehicleProperty() { return vehicle; }
-        
-        public String getService() { return service.get(); }
-        public void setService(String value) { service.set(value); }
-        public StringProperty serviceProperty() { return service; }
-        
-        public LocalDate getDueDate() { return dueDate.get(); }
-        public void setDueDate(LocalDate value) { dueDate.set(value); }
-        public ObjectProperty<LocalDate> dueDateProperty() { return dueDate; }
-        
-        public int getDueMileage() { return dueMileage.get(); }
-        public void setDueMileage(int value) { dueMileage.set(value); }
-        public IntegerProperty dueMileageProperty() { return dueMileage; }
-        
-        public String getPriority() { return priority.get(); }
-        public void setPriority(String value) { priority.set(value); }
-        public StringProperty priorityProperty() { return priority; }
-    }
-    
-    public static class MaintenanceData {
-        private List<MaintenanceRecord> records = new ArrayList<>();
-        private List<MaintenanceSchedule> schedules = new ArrayList<>();
-        
-        public List<MaintenanceRecord> getRecords() { return records; }
-        public void setRecords(List<MaintenanceRecord> records) { this.records = records; }
-        
-        public List<MaintenanceSchedule> getSchedules() { return schedules; }
-        public void setSchedules(List<MaintenanceSchedule> schedules) { this.schedules = schedules; }
-    }
 }
-            
