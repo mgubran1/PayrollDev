@@ -1,15 +1,18 @@
-package com.company.payroll.exception;
+package com.company.exception;
 
 /**
- * Custom unchecked exception for data access layer.
+ * Exception thrown when there's an error accessing or manipulating data
  */
 public class DataAccessException extends RuntimeException {
-    public DataAccessException(String message, Throwable cause) {
-        super(message, cause);
-    }
+    
     public DataAccessException(String message) {
         super(message);
     }
+    
+    public DataAccessException(String message, Throwable cause) {
+        super(message, cause);
+    }
+    
     public DataAccessException(Throwable cause) {
         super(cause);
     }
