@@ -91,39 +91,39 @@ public class MainController extends BorderPane {
 
             // Trucks tab
             logger.debug("Creating Trucks tab");
-            TrucksTab trucksTabContent = new TrucksTab();
-            Tab trucksTab = new Tab("Trucks", trucksTabContent);
+            TrucksTab trucksTab = new TrucksTab();
+            trucksTab.setText("Trucks");
             trucksTab.setClosable(false);
             trucksTab.setGraphic(createEnhancedTabIcon("🚚", "#2c3e50"));
             logger.info("Trucks tab created successfully");
 
             // Trailers tab
             logger.debug("Creating Trailers tab");
-            TrailersTab trailersTabContent = new TrailersTab();
-            Tab trailersTab = new Tab("Trailers", trailersTabContent);
+            TrailersTab trailersTab = new TrailersTab();
+            trailersTab.setText("Trailers");
             trailersTab.setClosable(false);
             trailersTab.setGraphic(createEnhancedTabIcon("🚛", "#1e3c72"));
             logger.info("Trailers tab created successfully");
 
             // Maintenance tab
             logger.debug("Creating Maintenance tab");
-            MaintenanceTab maintenanceTabContent = new MaintenanceTab(trucksTabContent, trailersTabContent);
-            Tab maintenanceTab = new Tab("Maintenance", maintenanceTabContent);
+            MaintenanceTab maintenanceTab = new MaintenanceTab();
+            maintenanceTab.setText("Maintenance");
             maintenanceTab.setClosable(false);
             maintenanceTab.setGraphic(createEnhancedTabIcon("🔧", "#34495e"));
             logger.info("Maintenance tab created successfully");
 
             // Company Expenses tab
             logger.debug("Creating Company Expenses tab");
-            CompanyExpensesTab companyExpensesTabContent = new CompanyExpensesTab();
-            Tab companyExpensesTab = new Tab("Company Expenses", companyExpensesTabContent);
+            CompanyExpensesTab companyExpensesTab = new CompanyExpensesTab();
+            companyExpensesTab.setText("Company Expenses");
             companyExpensesTab.setClosable(false);
             companyExpensesTab.setGraphic(createEnhancedTabIcon("💳", "#e74c3c"));
             logger.info("Company Expenses tab created successfully");
 
             // Loads tab (receives employee data AND trailer data)
             logger.debug("Creating Loads tab with employees and trailers integration");
-            LoadsTab loadsTab = new LoadsTab(employeesTabContent, trailersTabContent);
+            LoadsTab loadsTab = new LoadsTab(employeesTabContent, trailersTab);
             // LoadsTab already extends Tab, so we add it directly
             loadsTab.setClosable(false);
             loadsTab.setGraphic(createEnhancedTabIcon("📦", "#f39c12"));
@@ -165,16 +165,16 @@ public class MainController extends BorderPane {
 
             // Revenue tab
             logger.debug("Creating Revenue tab");
-            RevenueTab revenueTabContent = new RevenueTab(payrollTabContent, maintenanceTabContent, companyExpensesTabContent);
-            Tab revenueTab = new Tab("Revenue", revenueTabContent);
+            RevenueTab revenueTab = new RevenueTab();
+            revenueTab.setText("Revenue");
             revenueTab.setClosable(false);
             revenueTab.setGraphic(createEnhancedTabIcon("📈", "#3498db"));
             logger.info("Revenue tab created successfully");
 
             // Driver Income tab
             logger.debug("Creating Driver Income tab");
-            DriverIncomeTab driverIncomeTabContent = new DriverIncomeTab(payrollTabContent);
-            Tab driverIncomeTab = new Tab("Driver Income", driverIncomeTabContent);
+            DriverIncomeTab driverIncomeTab = new DriverIncomeTab();
+            driverIncomeTab.setText("Driver Income");
             driverIncomeTab.setClosable(false);
             driverIncomeTab.setGraphic(createEnhancedTabIcon("🚗", "#16a085"));
             logger.info("Driver Income tab created successfully");

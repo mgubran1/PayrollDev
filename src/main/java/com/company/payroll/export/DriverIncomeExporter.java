@@ -23,22 +23,19 @@ public class DriverIncomeExporter {
             writer.write('\ufeff');
             
             // Write headers
-            writer.write("Date,Load ID,Miles,Gross Pay,Net Pay");
+            writer.write("Driver,Truck Unit,Gross Pay,Net Pay");
             writer.newLine();
             
             // Write data
             for (PayrollCalculator.PayrollRow row : rows) {
-                if (row.date != null) {
-                    String line = String.format("%s,%s,%d,%.2f,%.2f",
-                        row.date.format(dateFormatter),
-                        row.loadId != null ? escapeCSV(row.loadId) : "",
-                        row.miles,
+                String line = String.format("%s,%s,%.2f,%.2f",
+                        escapeCSV(row.driverName),
+                        escapeCSV(row.truckUnit),
                         row.gross,
                         row.netPay
-                    );
-                    writer.write(line);
-                    writer.newLine();
-                }
+                );
+                writer.write(line);
+                writer.newLine();
             }
         }
     }

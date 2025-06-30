@@ -15,6 +15,8 @@ import javafx.beans.property.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.animation.*;
 import javafx.util.Duration;
+import javafx.geometry.Orientation;
+import javafx.geometry.Side;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.text.NumberFormat;
