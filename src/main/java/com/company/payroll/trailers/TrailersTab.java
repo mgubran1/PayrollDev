@@ -326,8 +326,8 @@ public class TrailersTab extends BorderPane {
             insExpiryPicker.setValue(trailer.getInsuranceExpiryDate());
             inspExpiryPicker.setValue(trailer.getNextInspectionDueDate());
             plateField.setText(trailer.getLicensePlate());
-            lengthField.setText(trailer.getLength() > 0 ? Integer.toString(trailer.getLength()) : "");
-            capacityField.setText(trailer.getCapacity() > 0 ? Integer.toString(trailer.getCapacity()) : "");
+            lengthField.setText(trailer.getLength() > 0 ? String.valueOf(trailer.getLength()) : "");
+            capacityField.setText(trailer.getCapacity() > 0 ? String.valueOf(trailer.getCapacity()) : "");
         }
         
         // Layout

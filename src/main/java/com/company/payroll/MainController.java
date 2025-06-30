@@ -99,8 +99,8 @@ public class MainController extends BorderPane {
 
             // Trailers tab
             logger.debug("Creating Trailers tab");
-            TrailersTab trailersTab = new TrailersTab();
-            trailersTab.setText("Trailers");
+            TrailersTab trailersTabContent = new TrailersTab();
+            Tab trailersTab = new Tab("Trailers", trailersTabContent);
             trailersTab.setClosable(false);
             trailersTab.setGraphic(createEnhancedTabIcon("🚛", "#1e3c72"));
             logger.info("Trailers tab created successfully");
@@ -123,7 +123,7 @@ public class MainController extends BorderPane {
 
             // Loads tab (receives employee data AND trailer data)
             logger.debug("Creating Loads tab with employees and trailers integration");
-            LoadsTab loadsTab = new LoadsTab(employeesTabContent, trailersTab);
+            LoadsTab loadsTab = new LoadsTab(employeesTabContent, trailersTabContent);
             // LoadsTab already extends Tab, so we add it directly
             loadsTab.setClosable(false);
             loadsTab.setGraphic(createEnhancedTabIcon("📦", "#f39c12"));
