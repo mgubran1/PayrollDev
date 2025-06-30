@@ -23,6 +23,9 @@ import com.company.payroll.employees.EmployeeDAO;
 import com.company.payroll.loads.LoadDAO;
 import com.company.payroll.fuel.FuelTransactionDAO;
 import com.company.payroll.triumph.MyTriumphTab;
+import com.company.payroll.trucks.TrucksTab;
+import com.company.payroll.trailers.TrailersTab;
+import com.company.payroll.maintenance.MaintenanceTab;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,6 +61,27 @@ public class MainController extends BorderPane {
             employeesTab.setClosable(false);
             employeesTab.setGraphic(createTabIcon("👥"));
             logger.info("Employees tab created successfully");
+
+            // Trucks tab
+            logger.debug("Creating Trucks tab");
+            TrucksTab trucksTab = new TrucksTab();
+            trucksTab.setClosable(false);
+            trucksTab.setGraphic(createTabIcon("🚚"));
+            logger.info("Trucks tab created successfully");
+
+            // Trailers tab
+            logger.debug("Creating Trailers tab");
+            TrailersTab trailersTab = new TrailersTab();
+            trailersTab.setClosable(false);
+            trailersTab.setGraphic(createTabIcon("🚛"));
+            logger.info("Trailers tab created successfully");
+
+            // Maintenance tab
+            logger.debug("Creating Maintenance tab");
+            MaintenanceTab maintenanceTab = new MaintenanceTab();
+            maintenanceTab.setClosable(false);
+            maintenanceTab.setGraphic(createTabIcon("🛠"));
+            logger.info("Maintenance tab created successfully");
 
             // Loads tab (receives employee data for driver selection)
             logger.debug("Creating Loads tab");
@@ -117,6 +141,9 @@ public class MainController extends BorderPane {
             logger.debug("Adding all tabs to TabPane");
             tabPane.getTabs().addAll(
                 employeesTab,
+                trucksTab,
+                trailersTab,
+                maintenanceTab,
                 loadsTab,        // Add LoadsTab directly (it is a Tab)
                 fuelImportTab,
                 payrollTab,
