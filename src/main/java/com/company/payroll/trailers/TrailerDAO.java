@@ -4,6 +4,8 @@ import com.company.exception.DataAccessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.company.payroll.trailers.TrailerStatus;
+
 import java.sql.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -44,6 +46,7 @@ public class TrailerDAO {
                     length REAL,
                     width REAL,
                     height REAL,
+                    capacity REAL,
                     max_weight REAL,
                     empty_weight REAL,
                     axle_count INTEGER,
@@ -105,7 +108,7 @@ public class TrailerDAO {
             INSERT INTO trailers (
                 trailer_number, vin, make, model, year, type, status,
                 license_plate, registration_expiry_date, current_location,
-                length, width, height, max_weight, empty_weight, axle_count,
+                length, width, height, capacity, max_weight, empty_weight, axle_count,
                 suspension_type, has_thermal_unit, thermal_unit_details,
                 ownership_type, purchase_price, purchase_date, current_value,
                 monthly_lease_cost, lease_details, insurance_policy_number,
@@ -114,8 +117,8 @@ public class TrailerDAO {
                 current_condition, maintenance_notes, assigned_driver,
                 assigned_truck, is_assigned, current_job_id, last_updated,
                 updated_by, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -149,7 +152,7 @@ public class TrailerDAO {
             UPDATE trailers SET
                 trailer_number = ?, vin = ?, make = ?, model = ?, year = ?,
                 type = ?, status = ?, license_plate = ?, registration_expiry_date = ?,
-                current_location = ?, length = ?, width = ?, height = ?,
+                current_location = ?, length = ?, width = ?, height = ?, capacity = ?,
                 max_weight = ?, empty_weight = ?, axle_count = ?, suspension_type = ?,
                 has_thermal_unit = ?, thermal_unit_details = ?, ownership_type = ?,
                 purchase_price = ?, purchase_date = ?, current_value = ?,
@@ -166,7 +169,7 @@ public class TrailerDAO {
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             setTrailerParameters(pstmt, trailer);
-            pstmt.setInt(42, trailer.getId());
+            pstmt.setInt(43, trailer.getId());
             
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows == 0) {
@@ -267,7 +270,7 @@ public class TrailerDAO {
         }
     }
     
-    public List<Trailer> findByStatus(Trailer.Status status) {
+    public List<Trailer> findByStatus(TrailerStatus status) {
         String sql = "SELECT * FROM trailers WHERE status = ? ORDER BY trailer_number";
         
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -336,7 +339,7 @@ public class TrailerDAO {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
-            pstmt.setString(1, Trailer.Status.ACTIVE.name());
+            pstmt.setString(1, TrailerStatus.ACTIVE.name());
             try (ResultSet rs = pstmt.executeQuery()) {
                 List<Trailer> trailers = new ArrayList<>();
                 while (rs.next()) {
@@ -490,7 +493,7 @@ public class TrailerDAO {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
-            pstmt.setString(1, Trailer.Status.ACTIVE.name());
+            pstmt.setString(1, TrailerStatus.ACTIVE.name());
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
                     return rs.getInt(1);
@@ -523,52 +526,53 @@ public class TrailerDAO {
         pstmt.setDouble(11, trailer.getLength());
         pstmt.setDouble(12, trailer.getWidth());
         pstmt.setDouble(13, trailer.getHeight());
-        pstmt.setDouble(14, trailer.getMaxWeight());
-        pstmt.setDouble(15, trailer.getEmptyWeight());
-        pstmt.setInt(16, trailer.getAxleCount());
-        pstmt.setString(17, trailer.getSuspensionType());
-        pstmt.setBoolean(18, trailer.isHasThermalUnit());
-        pstmt.setString(19, trailer.getThermalUnitDetails());
-        pstmt.setString(20, trailer.getOwnershipType());
-        pstmt.setDouble(21, trailer.getPurchasePrice());
+        pstmt.setDouble(14, trailer.getCapacity());
+        pstmt.setDouble(15, trailer.getMaxWeight());
+        pstmt.setDouble(16, trailer.getEmptyWeight());
+        pstmt.setInt(17, trailer.getAxleCount());
+        pstmt.setString(18, trailer.getSuspensionType());
+        pstmt.setBoolean(19, trailer.isHasThermalUnit());
+        pstmt.setString(20, trailer.getThermalUnitDetails());
+        pstmt.setString(21, trailer.getOwnershipType());
+        pstmt.setDouble(22, trailer.getPurchasePrice());
         
         LocalDate purchaseDate = trailer.getPurchaseDate();
-        pstmt.setDate(22, purchaseDate != null ? Date.valueOf(purchaseDate) : null);
-        
-        pstmt.setDouble(23, trailer.getCurrentValue());
-        pstmt.setDouble(24, trailer.getMonthlyLeaseCost());
-        pstmt.setString(25, trailer.getLeaseDetails());
-        pstmt.setString(26, trailer.getInsurancePolicyNumber());
+        pstmt.setDate(23, purchaseDate != null ? Date.valueOf(purchaseDate) : null);
+
+        pstmt.setDouble(24, trailer.getCurrentValue());
+        pstmt.setDouble(25, trailer.getMonthlyLeaseCost());
+        pstmt.setString(26, trailer.getLeaseDetails());
+        pstmt.setString(27, trailer.getInsurancePolicyNumber());
         
         LocalDate insuranceExpiry = trailer.getInsuranceExpiryDate();
-        pstmt.setDate(27, insuranceExpiry != null ? Date.valueOf(insuranceExpiry) : null);
-        
-        pstmt.setInt(28, trailer.getOdometerReading());
+        pstmt.setDate(28, insuranceExpiry != null ? Date.valueOf(insuranceExpiry) : null);
+
+        pstmt.setInt(29, trailer.getOdometerReading());
         
         LocalDate lastInspection = trailer.getLastInspectionDate();
-        pstmt.setDate(29, lastInspection != null ? Date.valueOf(lastInspection) : null);
-        
+        pstmt.setDate(30, lastInspection != null ? Date.valueOf(lastInspection) : null);
+
         LocalDate nextInspection = trailer.getNextInspectionDueDate();
-        pstmt.setDate(30, nextInspection != null ? Date.valueOf(nextInspection) : null);
+        pstmt.setDate(31, nextInspection != null ? Date.valueOf(nextInspection) : null);
         
         LocalDate lastService = trailer.getLastServiceDate();
-        pstmt.setDate(31, lastService != null ? Date.valueOf(lastService) : null);
-        
+        pstmt.setDate(32, lastService != null ? Date.valueOf(lastService) : null);
+
         LocalDate nextService = trailer.getNextServiceDueDate();
-        pstmt.setDate(32, nextService != null ? Date.valueOf(nextService) : null);
+        pstmt.setDate(33, nextService != null ? Date.valueOf(nextService) : null);
         
-        pstmt.setString(33, trailer.getCurrentCondition());
-        pstmt.setString(34, trailer.getMaintenanceNotes());
-        pstmt.setString(35, trailer.getAssignedDriver());
-        pstmt.setString(36, trailer.getAssignedTruck());
-        pstmt.setBoolean(37, trailer.isAssigned());
-        pstmt.setString(38, trailer.getCurrentJobId());
+        pstmt.setString(34, trailer.getCurrentCondition());
+        pstmt.setString(35, trailer.getMaintenanceNotes());
+        pstmt.setString(36, trailer.getAssignedDriver());
+        pstmt.setString(37, trailer.getAssignedTruck());
+        pstmt.setBoolean(38, trailer.isAssigned());
+        pstmt.setString(39, trailer.getCurrentJobId());
         
         LocalDateTime lastUpdated = trailer.getLastUpdated();
-        pstmt.setTimestamp(39, lastUpdated != null ? Timestamp.valueOf(lastUpdated) : Timestamp.valueOf(LocalDateTime.now()));
-        
-        pstmt.setString(40, trailer.getUpdatedBy());
-        pstmt.setString(41, trailer.getNotes());
+        pstmt.setTimestamp(40, lastUpdated != null ? Timestamp.valueOf(lastUpdated) : Timestamp.valueOf(LocalDateTime.now()));
+
+        pstmt.setString(41, trailer.getUpdatedBy());
+        pstmt.setString(42, trailer.getNotes());
     }
     
     private Trailer mapResultSetToTrailer(ResultSet rs) throws SQLException {
@@ -585,9 +589,9 @@ public class TrailerDAO {
         String statusStr = rs.getString("status");
         if (statusStr != null) {
             try {
-                trailer.setStatus(Trailer.Status.valueOf(statusStr));
+                trailer.setStatus(TrailerStatus.valueOf(statusStr));
             } catch (IllegalArgumentException e) {
-                trailer.setStatus(Trailer.Status.ACTIVE);
+                trailer.setStatus(TrailerStatus.ACTIVE);
                 logger.warn("Invalid status value in database: {}", statusStr);
             }
         }
@@ -603,6 +607,7 @@ public class TrailerDAO {
         trailer.setLength(rs.getDouble("length"));
         trailer.setWidth(rs.getDouble("width"));
         trailer.setHeight(rs.getDouble("height"));
+        trailer.setCapacity(rs.getDouble("capacity"));
         trailer.setMaxWeight(rs.getDouble("max_weight"));
         trailer.setEmptyWeight(rs.getDouble("empty_weight"));
         trailer.setAxleCount(rs.getInt("axle_count"));
@@ -686,12 +691,13 @@ public class TrailerDAO {
                 trailer.setModel("Champion");
                 trailer.setYear(2020 + (i % 3));
                 trailer.setType("Dry Van");
-                trailer.setStatus(Trailer.Status.ACTIVE);
+                trailer.setStatus(TrailerStatus.ACTIVE);
                 trailer.setLicensePlate("TR" + (7000 + i));
                 trailer.setRegistrationExpiryDate(LocalDate.now().plusMonths(6 + i));
                 trailer.setLength(53.0);
                 trailer.setWidth(8.5);
                 trailer.setHeight(13.5);
+                trailer.setCapacity(4000 + (i * 50));
                 trailer.setMaxWeight(45000 + (i * 500));
                 trailer.setEmptyWeight(14000 + (i * 100));
                 trailer.setAxleCount(2);
@@ -734,12 +740,13 @@ public class TrailerDAO {
                 trailer.setModel("3000R");
                 trailer.setYear(2021 + (i % 2));
                 trailer.setType("Refrigerated");
-                trailer.setStatus(Trailer.Status.ACTIVE);
+                trailer.setStatus(TrailerStatus.ACTIVE);
                 trailer.setLicensePlate("TR" + (8000 + i));
                 trailer.setRegistrationExpiryDate(LocalDate.now().plusMonths(8 + i));
                 trailer.setLength(53.0);
                 trailer.setWidth(8.5);
                 trailer.setHeight(13.6);
+                trailer.setCapacity(4200 + (i * 50));
                 trailer.setMaxWeight(44000 + (i * 400));
                 trailer.setEmptyWeight(16000 + (i * 200));
                 trailer.setAxleCount(2);
@@ -778,12 +785,13 @@ public class TrailerDAO {
             flatbed.setModel("Revolution");
             flatbed.setYear(2022);
             flatbed.setType("Flatbed");
-            flatbed.setStatus(Trailer.Status.ACTIVE);
+            flatbed.setStatus(TrailerStatus.ACTIVE);
             flatbed.setLicensePlate("TR9001");
             flatbed.setRegistrationExpiryDate(LocalDate.now().plusMonths(7));
             flatbed.setLength(48.0);
             flatbed.setWidth(8.5);
             flatbed.setHeight(5.0);
+            flatbed.setCapacity(3000);
             flatbed.setMaxWeight(48000);
             flatbed.setEmptyWeight(12000);
             flatbed.setAxleCount(2);
@@ -810,12 +818,13 @@ public class TrailerDAO {
             maintenance.setModel("Champion");
             maintenance.setYear(2019);
             maintenance.setType("Dry Van");
-            maintenance.setStatus(Trailer.Status.IN_MAINTENANCE);
+            maintenance.setStatus(TrailerStatus.MAINTENANCE);
             maintenance.setLicensePlate("TR7006");
             maintenance.setRegistrationExpiryDate(LocalDate.now().plusMonths(4));
             maintenance.setLength(53.0);
             maintenance.setWidth(8.5);
             maintenance.setHeight(13.5);
+            maintenance.setCapacity(4000);
             maintenance.setMaxWeight(45000);
             maintenance.setEmptyWeight(14000);
             maintenance.setAxleCount(2);

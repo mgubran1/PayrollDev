@@ -6,6 +6,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import javafx.beans.property.*;
 
+// Enum representing trailer statuses
+import com.company.payroll.trailers.TrailerStatus;
+
 /**
  * Model class representing a trailer in the fleet management system.
  */
@@ -18,7 +21,7 @@ public class Trailer {
     private final StringProperty model = new SimpleStringProperty();
     private final IntegerProperty year = new SimpleIntegerProperty();
     private final StringProperty type = new SimpleStringProperty();
-    private final ObjectProperty<Status> status = new SimpleObjectProperty<>(Status.ACTIVE);
+    private final ObjectProperty<TrailerStatus> status = new SimpleObjectProperty<>(TrailerStatus.ACTIVE);
     private final StringProperty licensePlate = new SimpleStringProperty();
     private final ObjectProperty<LocalDate> registrationExpiryDate = new SimpleObjectProperty<>();
     private final StringProperty currentLocation = new SimpleStringProperty();
@@ -27,6 +30,7 @@ public class Trailer {
     private final DoubleProperty length = new SimpleDoubleProperty();
     private final DoubleProperty width = new SimpleDoubleProperty();
     private final DoubleProperty height = new SimpleDoubleProperty();
+    private final DoubleProperty capacity = new SimpleDoubleProperty();
     private final DoubleProperty maxWeight = new SimpleDoubleProperty();
     private final DoubleProperty emptyWeight = new SimpleDoubleProperty();
     private final IntegerProperty axleCount = new SimpleIntegerProperty(2);
@@ -64,16 +68,7 @@ public class Trailer {
     private final StringProperty updatedBy = new SimpleStringProperty("mgubran1");
     private final StringProperty notes = new SimpleStringProperty();
     
-    // Enums
-    public enum Status {
-        ACTIVE, 
-        IN_MAINTENANCE, 
-        OUT_OF_SERVICE, 
-        IN_TRANSIT, 
-        AVAILABLE, 
-        RESERVED,
-        DECOMMISSIONED
-    }
+
     
     // Constructors
     public Trailer() {
@@ -180,7 +175,7 @@ public class Trailer {
         return type;
     }
     
-    public ObjectProperty<Status> statusProperty() {
+    public ObjectProperty<TrailerStatus> statusProperty() {
         return status;
     }
     
@@ -207,7 +202,11 @@ public class Trailer {
     public DoubleProperty heightProperty() {
         return height;
     }
-    
+
+    public DoubleProperty capacityProperty() {
+        return capacity;
+    }
+
     public DoubleProperty maxWeightProperty() {
         return maxWeight;
     }
@@ -385,11 +384,11 @@ public class Trailer {
         updateLastModified();
     }
     
-    public Status getStatus() {
+    public TrailerStatus getStatus() {
         return status.get();
     }
-    
-    public void setStatus(Status status) {
+
+    public void setStatus(TrailerStatus status) {
         this.status.set(status);
         updateLastModified();
     }
@@ -442,12 +441,21 @@ public class Trailer {
     public double getHeight() {
         return height.get();
     }
-    
+
     public void setHeight(double height) {
         this.height.set(height);
         updateLastModified();
     }
-    
+
+    public double getCapacity() {
+        return capacity.get();
+    }
+
+    public void setCapacity(double capacity) {
+        this.capacity.set(capacity);
+        updateLastModified();
+    }
+
     public double getMaxWeight() {
         return maxWeight.get();
     }
