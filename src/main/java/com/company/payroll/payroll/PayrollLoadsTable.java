@@ -27,6 +27,12 @@ public class PayrollLoadsTable extends TableView<Load> {
         TableColumn<Load, String> driverCol = new TableColumn<>("Driver");
         driverCol.setCellValueFactory(cell -> new SimpleStringProperty(
                 cell.getValue().getDriver() != null ? cell.getValue().getDriver().getName() : ""));
+        
+        // Add trailer column
+        TableColumn<Load, String> trailerCol = new TableColumn<>("Trailer");
+        trailerCol.setCellValueFactory(cell -> new SimpleStringProperty(
+                cell.getValue().getTrailerNumber() != null ? cell.getValue().getTrailerNumber() : ""));
+        
         TableColumn<Load, String> statusCol = new TableColumn<>("Status");
         statusCol.setCellValueFactory(cell -> new SimpleStringProperty(
                 cell.getValue().getStatus() != null ? cell.getValue().getStatus().name() : ""));
@@ -37,6 +43,6 @@ public class PayrollLoadsTable extends TableView<Load> {
         TableColumn<Load, String> deliveryDateCol = new TableColumn<>("Delivery Date");
         deliveryDateCol.setCellValueFactory(cell -> new SimpleStringProperty(
                 cell.getValue().getDeliveryDate() != null ? cell.getValue().getDeliveryDate().format(dtf) : ""));
-        getColumns().addAll(loadNumCol, customerCol, pickUpCol, dropCol, driverCol, statusCol, grossCol, notesCol, deliveryDateCol);
+        getColumns().addAll(loadNumCol, customerCol, pickUpCol, dropCol, driverCol, trailerCol, statusCol, grossCol, notesCol, deliveryDateCol);
     }
 }
