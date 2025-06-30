@@ -25,7 +25,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import com.company.payroll.payroll.PayrollCalculator;
 import com.company.payroll.payroll.PayrollCalculator.PayrollRow;
-import com.company.payroll.export.ExcelExporter;
+import com.company.payroll.payroll.ExcelExporter;
 import com.company.payroll.export.PDFExporter;
 import javafx.stage.FileChooser;
 import java.io.File;
@@ -500,14 +500,12 @@ public class DriverIncomeTab extends Tab {
     }
     
     private void updateSummaryCards(List<PayrollRow> data) {
-        double totalIncome = data.stream().mapToDouble(PayrollRow::getNetPay).sum();
-        int totalMiles = data.stream().mapToInt(PayrollRow::getMiles).sum();
-        double avgPerMile = totalMiles > 0 ? totalIncome / totalMiles : 0;
-        int totalLoads = data.size();
-        
+        double totalIncome = data.stream().mapToDouble(r -> r.netPay).sum();
+        int totalLoads = data.stream().mapToInt(r -> r.loadCount).sum();
+
         animateLabel(totalIncomeLabel, CURRENCY_FORMAT.format(totalIncome));
-        animateLabel(totalMilesLabel, String.format("%,d", totalMiles));
-        animateLabel(averagePerMileLabel, CURRENCY_FORMAT.format(avgPerMile));
+        animateLabel(totalMilesLabel, "N/A");
+        animateLabel(averagePerMileLabel, "N/A");
         animateLabel(totalLoadsLabel, String.valueOf(totalLoads));
     }
     
@@ -526,37 +524,8 @@ public class DriverIncomeTab extends Tab {
     }
     
     private void updateCharts(List<PayrollRow> data) {
-        // Update line chart
-        XYChart.Series<String, Number> series = new XYChart.Series<>();
-        series.setName("Income");
-        
-        Map<String, Double> monthlyIncome = data.stream()
-            .collect(Collectors.groupingBy(
-                row -> row.getDate().format(DateTimeFormatter.ofPattern("MMM yyyy")),
-                Collectors.summingDouble(PayrollRow::getNetPay)
-            ));
-        
-        monthlyIncome.forEach((month, income) -> {
-            series.getData().add(new XYChart.Data<>(month, income));
-        });
-        
         incomeChart.getData().clear();
-        incomeChart.getData().add(series);
-        
-        // Update pie chart
-        ObservableList<PieChart.Data> pieData = FXCollections.observableArrayList(
-            new PieChart.Data("Fuel", 2500),
-            new PieChart.Data("Insurance", 1200),
-            new PieChart.Data("Maintenance", 800),
-            new PieChart.Data("Other", 500)
-        );
-        expenseBreakdownChart.setData(pieData);
-        
-        // Add tooltips to pie chart
-        pieData.forEach(data1 -> {
-            Tooltip tooltip = new Tooltip(data1.getName() + ": " + CURRENCY_FORMAT.format(data1.getPieValue()));
-            Tooltip.install(data1.getNode(), tooltip);
-        });
+        expenseBreakdownChart.setData(FXCollections.observableArrayList());
     }
     
     private void exportToExcel() {
@@ -592,15 +561,10 @@ public class DriverIncomeTab extends Tab {
     private void viewLoadDetails() {
         PayrollRow selected = incomeTable.getSelectionModel().getSelectedItem();
         if (selected != null) {
-            // Show detailed dialog
             Alert alert = new Alert(AlertType.INFORMATION);
             alert.setTitle("Load Details");
-            alert.setHeaderText("Load ID: " + selected.getLoadId());
-            alert.setContentText("Date: " + selected.getDate().format(DATE_FORMAT) + "\n" +
-                               "Miles: " + selected.getMiles() + "\n" +
-                               "Gross Pay: " + CURRENCY_FORMAT.format(selected.getGrossPay()) + "\n" +
-                               "Deductions: " + CURRENCY_FORMAT.format(selected.getTotalDeductions()) + "\n" +
-                               "Net Pay: " + CURRENCY_FORMAT.format(selected.getNetPay()));
+            alert.setHeaderText(selected.driverName);
+            alert.setContentText("Net Pay: " + CURRENCY_FORMAT.format(selected.netPay));
             alert.showAndWait();
         }
     }
@@ -632,19 +596,42 @@ public class DriverIncomeTab extends Tab {
     private List<PayrollRow> generateSampleData() {
         List<PayrollRow> data = new ArrayList<>();
         Random random = new Random();
-        
+
         for (int i = 0; i < 20; i++) {
-            PayrollRow row = new PayrollRow();
-            row.setDate(LocalDate.now().minusDays(random.nextInt(30)));
-            row.setLoadId("LD" + String.format("%04d", random.nextInt(10000)));
-            row.setMiles(200 + random.nextInt(800));
-            row.setRatePerMile(1.5 + random.nextDouble());
-            row.setGrossPay(row.getMiles() * row.getRatePerMile());
-            row.setTotalDeductions(row.getGrossPay() * 0.15);
-            row.setNetPay(row.getGrossPay() - row.getTotalDeductions());
+            double gross = 1000 + random.nextDouble() * 500;
+            double serviceFee = -100;
+            double grossAfterSF = gross + serviceFee;
+            double companyPay = grossAfterSF * 0.5;
+            double driverPay = grossAfterSF - companyPay;
+            double fuel = -150;
+            double grossAfterFuel = grossAfterSF + fuel;
+            double recurringFees = -50;
+            double netPay = grossAfterFuel + recurringFees;
+
+            PayrollRow row = new PayrollRow(
+                "Driver " + (i + 1),
+                "Unit" + (i + 1),
+                random.nextInt(5) + 1,
+                gross,
+                serviceFee,
+                grossAfterSF,
+                companyPay,
+                driverPay,
+                fuel,
+                grossAfterFuel,
+                recurringFees,
+                0,
+                0,
+                0,
+                0,
+                0,
+                netPay,
+                Collections.emptyList(),
+                Collections.emptyList()
+            );
             data.add(row);
         }
-        
+
         return data;
     }
 }

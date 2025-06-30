@@ -15,8 +15,7 @@ import java.util.function.Consumer;
  * LoadsTab is a wrapper Tab for displaying the LoadsPanel inside a TabPane.
  * It can be further extended to listen for employee changes and propagate them to the LoadsPanel if needed.
  */
-public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeListener, 
-                                            TrailersTab.TrailerDataChangeListener, 
+public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeListener,
                                             LoadsPanel.LoadDataChangeListener {
     private static final Logger logger = LoggerFactory.getLogger(LoadsTab.class);
     private final LoadsPanel loadsPanel;
@@ -35,9 +34,8 @@ public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeList
         this.loadsPanel = new LoadsPanel();
         setContent(loadsPanel);
         
-        // Register for employee and trailer updates
+        // Register for employee updates
         employeesTab.addEmployeeDataChangeListener(this);
-        trailersTab.addTrailerDataChangeListener(this);
         
         // Register this tab as a listener for load data changes
         loadsPanel.addLoadDataChangeListener(this);
@@ -70,11 +68,6 @@ public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeList
         loadsPanel.onEmployeeDataChanged(currentList);
     }
     
-    @Override
-    public void onTrailerDataChanged(java.util.List<com.company.payroll.trailers.Trailer> currentList) {
-        logger.debug("Trailer data changed, updating LoadsPanel with {} trailers", currentList.size());
-        loadsPanel.onTrailerDataChanged(currentList);
-    }
     
     @Override
     public void onLoadDataChanged() {

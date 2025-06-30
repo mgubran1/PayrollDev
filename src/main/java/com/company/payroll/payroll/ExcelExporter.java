@@ -107,7 +107,7 @@ public class ExcelExporter {
         headerFont.setFontHeightInPoints((short) 12);
         headerFont.setColor(IndexedColors.WHITE.getIndex());
         headerStyle.setFont(headerFont);
-        headerStyle.setFillForegroundColor(new XSSFColor(new byte[]{33, 115, 189}, null));
+        headerStyle.setFillForegroundColor(new XSSFColor(new byte[]{(byte)33, (byte)115, (byte)189}, null));
         headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         headerStyle.setBorderBottom(BorderStyle.THIN);
         headerStyle.setBorderTop(BorderStyle.THIN);
@@ -121,7 +121,7 @@ public class ExcelExporter {
         XSSFFont titleFont = workbook.createFont();
         titleFont.setBold(true);
         titleFont.setFontHeightInPoints((short) 18);
-        titleFont.setColor(new XSSFColor(new byte[]{33, 115, 189}, null));
+        titleFont.setColor(new XSSFColor(new byte[]{(byte)33, (byte)115, (byte)189}, null));
         titleStyle.setFont(titleFont);
         titleStyle.setAlignment(HorizontalAlignment.CENTER);
         
@@ -697,3 +697,4 @@ public class ExcelExporter {
 			   Math.abs(totals.getOrDefault("escrowDeposits", 0.0)) +
 			   Math.abs(totals.getOrDefault("otherDeductions", 0.0));
 	}
+}

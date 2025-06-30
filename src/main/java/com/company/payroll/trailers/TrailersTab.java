@@ -19,6 +19,8 @@ import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.util.StringConverter;
 import javafx.animation.*;
 import javafx.util.Duration;
+import javafx.geometry.Orientation;
+import javafx.geometry.Side;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.text.NumberFormat;
