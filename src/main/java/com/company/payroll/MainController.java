@@ -64,21 +64,24 @@ public class MainController extends BorderPane {
 
             // Trucks tab
             logger.debug("Creating Trucks tab");
-            TrucksTab trucksTab = new TrucksTab();
+            TrucksTab trucksTabContent = new TrucksTab();
+            Tab trucksTab = new Tab("Trucks", trucksTabContent);
             trucksTab.setClosable(false);
             trucksTab.setGraphic(createTabIcon("🚚"));
             logger.info("Trucks tab created successfully");
 
             // Trailers tab
             logger.debug("Creating Trailers tab");
-            TrailersTab trailersTab = new TrailersTab();
+            TrailersTab trailersTabContent = new TrailersTab();
+            Tab trailersTab = new Tab("Trailers", trailersTabContent);
             trailersTab.setClosable(false);
             trailersTab.setGraphic(createTabIcon("🚛"));
             logger.info("Trailers tab created successfully");
 
             // Maintenance tab
             logger.debug("Creating Maintenance tab");
-            MaintenanceTab maintenanceTab = new MaintenanceTab();
+            MaintenanceTab maintenanceTabContent = new MaintenanceTab();
+            Tab maintenanceTab = new Tab("Maintenance", maintenanceTabContent);
             maintenanceTab.setClosable(false);
             maintenanceTab.setGraphic(createTabIcon("🛠"));
             logger.info("Maintenance tab created successfully");
