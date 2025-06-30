@@ -26,6 +26,9 @@ import com.company.payroll.triumph.MyTriumphTab;
 import com.company.payroll.trucks.TrucksTab;
 import com.company.payroll.trailers.TrailersTab;
 import com.company.payroll.maintenance.MaintenanceTab;
+import com.company.payroll.expenses.CompanyExpensesTab;
+import com.company.payroll.revenue.RevenueTab;
+import com.company.payroll.driver.DriverIncomeTab;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,11 +83,18 @@ public class MainController extends BorderPane {
 
             // Maintenance tab
             logger.debug("Creating Maintenance tab");
-            MaintenanceTab maintenanceTabContent = new MaintenanceTab();
+            MaintenanceTab maintenanceTabContent = new MaintenanceTab(trucksTabContent, trailersTabContent);
             Tab maintenanceTab = new Tab("Maintenance", maintenanceTabContent);
             maintenanceTab.setClosable(false);
             maintenanceTab.setGraphic(createTabIcon("🛠"));
             logger.info("Maintenance tab created successfully");
+
+            // Company Expenses tab
+            CompanyExpensesTab companyExpensesTabContent = new CompanyExpensesTab();
+            Tab companyExpensesTab = new Tab("Company Expenses", companyExpensesTabContent);
+            companyExpensesTab.setClosable(false);
+            companyExpensesTab.setGraphic(createTabIcon("💳"));
+            logger.info("Company Expenses tab created successfully");
 
             // Loads tab (receives employee data for driver selection)
             logger.debug("Creating Loads tab");
@@ -128,6 +138,18 @@ public class MainController extends BorderPane {
             payrollTab.setGraphic(createTabIcon("💰"));
             logger.info("Payroll tab created successfully");
 
+            // Revenue tab
+            RevenueTab revenueTabContent = new RevenueTab(payrollTabContent, maintenanceTabContent, companyExpensesTabContent);
+            Tab revenueTab = new Tab("Revenue", revenueTabContent);
+            revenueTab.setClosable(false);
+            revenueTab.setGraphic(createTabIcon("📈"));
+
+            // Driver Income tab
+            DriverIncomeTab driverIncomeTabContent = new DriverIncomeTab(payrollTabContent);
+            Tab driverIncomeTab = new Tab("Driver Income", driverIncomeTabContent);
+            driverIncomeTab.setClosable(false);
+            driverIncomeTab.setGraphic(createTabIcon("🚚"));
+
             // Register PayrollTab as a listener for load data changes
             logger.debug("Registering PayrollTab as LoadDataChangeListener");
             loadsTab.addLoadDataChangeListener(payrollTabContent);
@@ -147,9 +169,12 @@ public class MainController extends BorderPane {
                 trucksTab,
                 trailersTab,
                 maintenanceTab,
+                companyExpensesTab,
                 loadsTab,        // Add LoadsTab directly (it is a Tab)
                 fuelImportTab,
                 payrollTab,
+                driverIncomeTab,
+                revenueTab,
                 myTriumphTab     // Add the new MyTriumph Audit Tab
             );
             logger.info("All {} tabs added to TabPane successfully", tabPane.getTabs().size());

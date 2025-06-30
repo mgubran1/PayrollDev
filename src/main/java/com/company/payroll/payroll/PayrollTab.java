@@ -2204,6 +2204,20 @@ public class PayrollTab extends BorderPane implements
         }
     }
 
+    /**
+     * Expose immutable view of the payroll summary rows for other tabs.
+     */
+    public javafx.collections.ObservableList<PayrollCalculator.PayrollRow> getSummaryRows() {
+        return javafx.collections.FXCollections.unmodifiableObservableList(summaryRows);
+    }
+
+    /**
+     * Get summary statistics for the currently calculated payroll.
+     */
+    public PayrollSummaryTable.PayrollSummaryStats getSummaryStats() {
+        return summaryTable.getSummaryStats();
+    }
+
     private void showInfo(String message) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Information");

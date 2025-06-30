@@ -193,7 +193,7 @@ public class TrucksTab extends BorderPane {
         okBtn.setDisable(true);
 
         Runnable validate = ()->{
-            boolean valid = !unitField.getText().trim().isEmpty();
+            boolean valid = !unitField.getText().trim().isEmpty() && !checkDuplicateUnit(unitField.getText().trim(), isAdd? -1 : (truck!=null?truck.getId():-1));
             okBtn.setDisable(!valid);
         };
         unitField.textProperty().addListener((o,ov,nv)->validate.run());
@@ -270,6 +270,16 @@ public class TrucksTab extends BorderPane {
         for(TruckDataChangeListener l:listeners){
             l.onTruckDataChanged(new ArrayList<>(trucks));
         }
+    }
+
+    private boolean checkDuplicateUnit(String unit, int excludeId){
+        String norm = unit.trim().toLowerCase(Locale.ROOT);
+        for(Truck t:trucks){
+            if(t.getId()!=excludeId && t.getUnit()!=null && t.getUnit().trim().toLowerCase(Locale.ROOT).equals(norm)){
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<Truck> getCurrentTrucks(){ return new ArrayList<>(trucks); }

@@ -175,7 +175,7 @@ public class TrailersTab extends BorderPane {
         okBtn.setDisable(true);
 
         Runnable validate = ()->{
-            boolean valid = !numField.getText().trim().isEmpty();
+            boolean valid = !numField.getText().trim().isEmpty() && !checkDuplicateNumber(numField.getText().trim(), isAdd? -1 : (trailer!=null?trailer.getId():-1));
             okBtn.setDisable(!valid);
         };
         numField.textProperty().addListener((o,ov,nv)->validate.run());
@@ -248,6 +248,16 @@ public class TrailersTab extends BorderPane {
         for(TrailerDataChangeListener l:listeners){
             l.onTrailerDataChanged(new ArrayList<>(trailers));
         }
+    }
+
+    private boolean checkDuplicateNumber(String num, int excludeId){
+        String norm = num.trim().toLowerCase(Locale.ROOT);
+        for(Trailer t:trailers){
+            if(t.getId()!=excludeId && t.getNumber()!=null && t.getNumber().trim().toLowerCase(Locale.ROOT).equals(norm)){
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<Trailer> getCurrentTrailers(){ return new ArrayList<>(trailers); }
