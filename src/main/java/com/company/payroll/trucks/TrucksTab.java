@@ -392,8 +392,8 @@ public class TrucksTab extends BorderPane {
         numberField.textProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null && !newVal.trim().isEmpty()) {
                 boolean duplicate = trucks.stream()
-                    .anyMatch(t -> t.getNumber().equalsIgnoreCase(newVal.trim()) && 
-                             (isAdd || !t.getId().equals(truck == null ? -1 : truck.getId())));
+                    .anyMatch(t -> t.getNumber().equalsIgnoreCase(newVal.trim()) &&
+                             (isAdd || t.getId() != (truck == null ? -1 : truck.getId())));
                 
                 errorLabel.setText(duplicate ? "Truck number already exists" : "");
                 okButton.setDisable(duplicate);
@@ -427,14 +427,8 @@ public class TrucksTab extends BorderPane {
                     
                     // Set default values for new trucks
                     if (isAdd) {
-                        result.setCreatedDate(java.time.LocalDateTime.now());
-                        result.setFuelLevel(100.0);
-                        result.setPerformanceScore(100.0);
-                        result.setCurrentCondition("Good");
+                        result.setAssigned(false);
                     }
-                    
-                    result.setModifiedDate(java.time.LocalDateTime.now());
-                    result.setModifiedBy("mgubran1");
                     
                     return result;
                 } catch (Exception ex) {
@@ -658,7 +652,7 @@ public class TrucksTab extends BorderPane {
         try {
             Path docPath = Paths.get(docStoragePath, truckNumber, document);
             File file = docPath.toFile();
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.PRINT)) {
+            if (Desktop.isDesktopSupported() && Desktop.isSupported(Desktop.Action.PRINT)) {
                 Desktop.getDesktop().print(file);
                 logger.info("Printing document: {}", docPath);
             } else {

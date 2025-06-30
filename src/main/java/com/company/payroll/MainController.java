@@ -91,8 +91,8 @@ public class MainController extends BorderPane {
 
             // Trucks tab
             logger.debug("Creating Trucks tab");
-            TrucksTab trucksTab = new TrucksTab();
-            trucksTab.setText("Trucks");
+            TrucksTab trucksTabContent = new TrucksTab();
+            Tab trucksTab = new Tab("Trucks", trucksTabContent);
             trucksTab.setClosable(false);
             trucksTab.setGraphic(createEnhancedTabIcon("🚚", "#2c3e50"));
             logger.info("Trucks tab created successfully");
