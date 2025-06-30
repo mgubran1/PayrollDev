@@ -25,6 +25,10 @@ import java.util.*;
 import java.util.stream.Collectors;
 import com.company.payroll.payroll.PayrollCalculator;
 import com.company.payroll.payroll.PayrollCalculator.PayrollRow;
+import com.company.payroll.employees.EmployeeDAO;
+import com.company.payroll.employees.Employee;
+import com.company.payroll.loads.LoadDAO;
+import com.company.payroll.fuel.FuelTransactionDAO;
 import com.company.payroll.payroll.ExcelExporter;
 import com.company.payroll.export.PDFExporter;
 import javafx.stage.FileChooser;
@@ -51,6 +55,11 @@ public class DriverIncomeTab extends Tab {
     private VBox contentBox;
     private static final NumberFormat CURRENCY_FORMAT = NumberFormat.getCurrencyInstance();
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+
+    private final EmployeeDAO employeeDAO = new EmployeeDAO();
+    private final LoadDAO loadDAO = new LoadDAO();
+    private final FuelTransactionDAO fuelDAO = new FuelTransactionDAO();
+    private final PayrollCalculator payrollCalculator = new PayrollCalculator(employeeDAO, loadDAO, fuelDAO);
     
     public DriverIncomeTab() {
         setText("Driver Income");
@@ -103,8 +112,7 @@ public class DriverIncomeTab extends Tab {
         scrollPane.setFitToWidth(true);
         setContent(scrollPane);
         
-        // Initialize with sample data
-        initializeSampleData();
+        initializeData();
     }
     
     private VBox createHeader() {
@@ -285,43 +293,18 @@ public class DriverIncomeTab extends Tab {
         incomeTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         incomeTable.setPrefHeight(400);
         
-        // Create columns
-        TableColumn<PayrollRow, LocalDate> dateCol = new TableColumn<>("Date");
-        dateCol.setCellValueFactory(new PropertyValueFactory<>("date"));
-        dateCol.setCellFactory(column -> new TableCell<PayrollRow, LocalDate>() {
-            @Override
-            protected void updateItem(LocalDate date, boolean empty) {
-                super.updateItem(date, empty);
-                if (empty || date == null) {
-                    setText(null);
-                } else {
-                    setText(date.format(DATE_FORMAT));
-                }
-            }
-        });
-        
-        TableColumn<PayrollRow, String> loadIdCol = new TableColumn<>("Load ID");
-        loadIdCol.setCellValueFactory(new PropertyValueFactory<>("loadId"));
-        
-        TableColumn<PayrollRow, Integer> milesCol = new TableColumn<>("Miles");
-        milesCol.setCellValueFactory(new PropertyValueFactory<>("miles"));
-        
-        TableColumn<PayrollRow, Double> rateCol = new TableColumn<>("Rate/Mile");
-        rateCol.setCellValueFactory(new PropertyValueFactory<>("ratePerMile"));
-        rateCol.setCellFactory(column -> new TableCell<PayrollRow, Double>() {
-            @Override
-            protected void updateItem(Double rate, boolean empty) {
-                super.updateItem(rate, empty);
-                if (empty || rate == null) {
-                    setText(null);
-                } else {
-                    setText(CURRENCY_FORMAT.format(rate));
-                }
-            }
-        });
-        
-        TableColumn<PayrollRow, Double> grossCol = new TableColumn<>("Gross Pay");
-        grossCol.setCellValueFactory(new PropertyValueFactory<>("grossPay"));
+        // Create columns for aggregated payroll data
+        TableColumn<PayrollRow, String> driverCol = new TableColumn<>("Driver");
+        driverCol.setCellValueFactory(new PropertyValueFactory<>("driverName"));
+
+        TableColumn<PayrollRow, String> truckCol = new TableColumn<>("Truck");
+        truckCol.setCellValueFactory(new PropertyValueFactory<>("truckUnit"));
+
+        TableColumn<PayrollRow, Integer> loadsCol = new TableColumn<>("Loads");
+        loadsCol.setCellValueFactory(new PropertyValueFactory<>("loadCount"));
+
+        TableColumn<PayrollRow, Double> grossCol = new TableColumn<>("Gross");
+        grossCol.setCellValueFactory(new PropertyValueFactory<>("gross"));
         grossCol.setCellFactory(column -> new TableCell<PayrollRow, Double>() {
             @Override
             protected void updateItem(Double amount, boolean empty) {
@@ -339,9 +322,9 @@ public class DriverIncomeTab extends Tab {
             }
         });
         
-        TableColumn<PayrollRow, Double> deductionsCol = new TableColumn<>("Deductions");
-        deductionsCol.setCellValueFactory(new PropertyValueFactory<>("totalDeductions"));
-        deductionsCol.setCellFactory(column -> new TableCell<PayrollRow, Double>() {
+        TableColumn<PayrollRow, Double> fuelCol = new TableColumn<>("Fuel");
+        fuelCol.setCellValueFactory(new PropertyValueFactory<>("fuel"));
+        fuelCol.setCellFactory(column -> new TableCell<PayrollRow, Double>() {
             @Override
             protected void updateItem(Double amount, boolean empty) {
                 super.updateItem(amount, empty);
@@ -353,7 +336,7 @@ public class DriverIncomeTab extends Tab {
                 }
             }
         });
-        
+
         TableColumn<PayrollRow, Double> netCol = new TableColumn<>("Net Pay");
         netCol.setCellValueFactory(new PropertyValueFactory<>("netPay"));
         netCol.setCellFactory(column -> new TableCell<PayrollRow, Double>() {
@@ -375,7 +358,7 @@ public class DriverIncomeTab extends Tab {
             }
         });
         
-        incomeTable.getColumns().addAll(dateCol, loadIdCol, milesCol, rateCol, grossCol, deductionsCol, netCol);
+        incomeTable.getColumns().addAll(driverCol, truckCol, loadsCol, grossCol, fuelCol, netCol);
         
         // Add context menu
         ContextMenu contextMenu = new ContextMenu();
@@ -471,10 +454,16 @@ public class DriverIncomeTab extends Tab {
         Task<List<PayrollRow>> task = new Task<List<PayrollRow>>() {
             @Override
             protected List<PayrollRow> call() throws Exception {
-                // Simulate loading data
-                Thread.sleep(1000);
-                // In real implementation, fetch from database
-                return generateSampleData();
+                Employee driver = employeeDAO.getActive().stream()
+                    .filter(d -> d.getName().equals(selectedDriver))
+                    .findFirst()
+                    .orElse(null);
+                if (driver == null) {
+                    return Collections.emptyList();
+                }
+                return payrollCalculator.calculatePayrollRows(
+                    Collections.singletonList(driver),
+                    startDatePicker.getValue(), endDatePicker.getValue());
             }
         };
         
@@ -591,53 +580,11 @@ public class DriverIncomeTab extends Tab {
         alert.showAndWait();
     }
     
-    private void initializeSampleData() {
-        // Initialize driver list
-        ObservableList<String> drivers = FXCollections.observableArrayList(
-            "John Smith", "Jane Doe", "Mike Johnson", "Sarah Williams", "Robert Brown"
-        );
-        driverComboBox.setItems(drivers);
+    private void initializeData() {
+        List<Employee> drivers = employeeDAO.getActive();
+        ObservableList<String> names = FXCollections.observableArrayList(
+            drivers.stream().map(Employee::getName).collect(Collectors.toList()));
+        driverComboBox.setItems(names);
     }
-    
-    private List<PayrollRow> generateSampleData() {
-        List<PayrollRow> data = new ArrayList<>();
-        Random random = new Random();
 
-        for (int i = 0; i < 20; i++) {
-            double gross = 1000 + random.nextDouble() * 500;
-            double serviceFee = -100;
-            double grossAfterSF = gross + serviceFee;
-            double companyPay = grossAfterSF * 0.5;
-            double driverPay = grossAfterSF - companyPay;
-            double fuel = -150;
-            double grossAfterFuel = grossAfterSF + fuel;
-            double recurringFees = -50;
-            double netPay = grossAfterFuel + recurringFees;
-
-            PayrollRow row = new PayrollRow(
-                "Driver " + (i + 1),
-                "Unit" + (i + 1),
-                random.nextInt(5) + 1,
-                gross,
-                serviceFee,
-                grossAfterSF,
-                companyPay,
-                driverPay,
-                fuel,
-                grossAfterFuel,
-                recurringFees,
-                0,
-                0,
-                0,
-                0,
-                0,
-                netPay,
-                Collections.emptyList(),
-                Collections.emptyList()
-            );
-            data.add(row);
-        }
-
-        return data;
-    }
 }

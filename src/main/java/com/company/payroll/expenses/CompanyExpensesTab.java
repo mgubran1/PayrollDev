@@ -25,6 +25,7 @@ import java.time.format.DateTimeFormatter;
 import java.text.NumberFormat;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.company.payroll.expenses.CompanyExpenseDAO;
 import javafx.stage.FileChooser;
 import java.io.File;
 import javafx.concurrent.Task;
@@ -63,6 +64,8 @@ public class CompanyExpensesTab extends Tab {
         "Marketing", "Payroll", "Equipment", "Rent", "Professional Services",
         "Travel", "Software", "Hardware", "Other"
     );
+
+    private final CompanyExpenseDAO expenseDAO = new CompanyExpenseDAO();
     
     public CompanyExpensesTab() {
         setText("Company Expenses");
@@ -929,8 +932,17 @@ public class CompanyExpensesTab extends Tab {
         Task<List<CompanyExpense>> task = new Task<List<CompanyExpense>>() {
             @Override
             protected List<CompanyExpense> call() throws Exception {
-                Thread.sleep(1000); // Simulate loading
-                return generateSampleData();
+                List<CompanyExpense> all = expenseDAO.getAll();
+                LocalDate start = startDatePicker.getValue();
+                LocalDate end = endDatePicker.getValue();
+                if (start != null && end != null) {
+                    return all.stream()
+                        .filter(e -> e.getExpenseDate() != null &&
+                             !e.getExpenseDate().isBefore(start) &&
+                             !e.getExpenseDate().isAfter(end))
+                        .collect(Collectors.toList());
+                }
+                return all;
             }
         };
         
@@ -1393,45 +1405,19 @@ public class CompanyExpensesTab extends Tab {
     }
     
     private void initializeData() {
-        // Initialize vendor list
-        Set<String> vendors = new HashSet<>();
-        vendors.add("Shell Gas Station");
-        vendors.add("Midas Auto Service");
-        vendors.add("Staples");
-        vendors.add("Amazon Business");
-        vendors.add("FedEx");
-        vendors.add("UPS");
-        vendors.add("Office Depot");
-        vendors.add("Best Buy Business");
-        
-        vendorComboBox.getItems().add("All Vendors");
-        vendorComboBox.getItems().addAll(vendors);
+        try {
+            List<CompanyExpense> all = expenseDAO.getAll();
+            Set<String> vendors = all.stream()
+                .map(CompanyExpense::getVendor)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(TreeSet::new));
+            vendorComboBox.getItems().add("All Vendors");
+            vendorComboBox.getItems().addAll(vendors);
+        } catch (Exception e) {
+            vendorComboBox.getItems().add("All Vendors");
+        }
     }
     
-    private List<CompanyExpense> generateSampleData() {
-        List<CompanyExpense> data = new ArrayList<>();
-        Random random = new Random();
-        
-        String[] vendors = {"Shell Gas Station", "Midas Auto Service", "Staples", 
-                          "Amazon Business", "FedEx", "UPS", "Office Depot"};
-        String[] statuses = {"Approved", "Pending", "Rejected"};
-        
-        for (int i = 0; i < 100; i++) {
-            CompanyExpense expense = new CompanyExpense();
-            expense.setDate(LocalDate.now().minusDays(random.nextInt(90)));
-            expense.setVendor(vendors[random.nextInt(vendors.length)]);
-            expense.setCategory(expenseCategories.get(random.nextInt(expenseCategories.size())));
-            expense.setAmount(50 + random.nextDouble() * 2000);
-            expense.setDescription("Business expense #" + (i + 1));
-            expense.setStatus(statuses[random.nextInt(statuses.length)]);
-            expense.setHasReceipt(random.nextBoolean() ? "Yes" : "No");
-            expense.setEmployee("Employee" + (random.nextInt(5) + 1));
-            expense.setSelected(false);
-            data.add(expense);
-        }
-        
-        return data;
-    }
     
     // Inner class for Company Expense
     public static class CompanyExpense {

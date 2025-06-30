@@ -25,6 +25,7 @@ import java.time.temporal.ChronoUnit;
 import java.text.NumberFormat;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.company.payroll.maintenance.MaintenanceDAO;
 import javafx.stage.FileChooser;
 import java.io.File;
 import javafx.concurrent.Task;
@@ -63,6 +64,8 @@ public class MaintenanceTab extends Tab {
         "Transmission Service", "Coolant Flush", "Air Filter", "Fuel Filter",
         "Battery Service", "Alignment", "Inspection", "Other"
     );
+
+    private final MaintenanceDAO maintenanceDAO = new MaintenanceDAO();
     
     public MaintenanceTab() {
         setText("Maintenance");
@@ -875,8 +878,8 @@ public class MaintenanceTab extends Tab {
         Task<MaintenanceData> task = new Task<MaintenanceData>() {
             @Override
             protected MaintenanceData call() throws Exception {
-                Thread.sleep(1000); // Simulate loading
-                return generateSampleData();
+                return maintenanceDAO.getMaintenanceData(
+                    startDatePicker.getValue(), endDatePicker.getValue());
             }
         };
         
@@ -1347,56 +1350,20 @@ public class MaintenanceTab extends Tab {
     }
     
     private void initializeData() {
-        // Initialize vehicle list
-        ObservableList<String> vehicles = FXCollections.observableArrayList(
-            "Truck #101", "Truck #102", "Truck #103", "Truck #104",
-            "Truck #105", "Truck #106", "Truck #107", "Truck #108"
-        );
-        vehicleComboBox.getItems().add("All Vehicles");
-        vehicleComboBox.getItems().addAll(vehicles);
+        // Load vehicles from database
+        try {
+            List<MaintenanceRecord> records = maintenanceDAO.findAll();
+            Set<String> vehicles = records.stream()
+                .map(MaintenanceRecord::getVehicle)
+                .collect(Collectors.toCollection(TreeSet::new));
+            vehicleComboBox.getItems().add("All Vehicles");
+            vehicleComboBox.getItems().addAll(vehicles);
+        } catch (Exception e) {
+            // Fallback to empty list if database is not available
+            vehicleComboBox.getItems().add("All Vehicles");
+        }
     }
     
-    private MaintenanceData generateSampleData() {
-        MaintenanceData data = new MaintenanceData();
-        Random random = new Random();
-        
-        String[] vehicles = {"Truck #101", "Truck #102", "Truck #103", "Truck #104", "Truck #105"};
-        String[] technicians = {"John Smith", "Mike Johnson", "Bob Williams", "Tom Davis"};
-        String[] statuses = {"Completed", "Scheduled", "In Progress"};
-        
-        // Generate maintenance records
-        List<MaintenanceRecord> records = new ArrayList<>();
-        for (int i = 0; i < 50; i++) {
-            MaintenanceRecord record = new MaintenanceRecord();
-            record.setDate(LocalDate.now().minusDays(random.nextInt(180)));
-            record.setVehicle(vehicles[random.nextInt(vehicles.length)]);
-            record.setServiceType(serviceTypes.get(random.nextInt(serviceTypes.size())));
-            record.setMileage(50000 + random.nextInt(100000));
-            record.setCost(100 + random.nextDouble() * 900);
-            record.setTechnician(technicians[random.nextInt(technicians.length)]);
-            record.setStatus(statuses[random.nextInt(statuses.length)]);
-            record.setNotes("Service completed successfully");
-            records.add(record);
-        }
-        data.setRecords(records);
-        
-        // Generate schedules
-        List<MaintenanceSchedule> schedules = new ArrayList<>();
-        for (String vehicle : vehicles) {
-            for (int i = 0; i < 3; i++) {
-                MaintenanceSchedule schedule = new MaintenanceSchedule();
-                schedule.setVehicle(vehicle);
-                schedule.setService(serviceTypes.get(random.nextInt(serviceTypes.size())));
-                schedule.setDueDate(LocalDate.now().plusDays(random.nextInt(60) - 10));
-                schedule.setDueMileage(60000 + random.nextInt(40000));
-                schedule.setPriority(new String[]{"High", "Medium", "Low"}[random.nextInt(3)]);
-                schedules.add(schedule);
-            }
-        }
-        data.setSchedules(schedules);
-        
-        return data;
-    }
     
     // Inner classes
     public static class MaintenanceRecord {
