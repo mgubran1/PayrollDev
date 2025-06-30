@@ -1352,9 +1352,9 @@ public class MaintenanceTab extends Tab {
     private void initializeData() {
         // Load vehicles from database
         try {
-            List<MaintenanceRecord> records = maintenanceDAO.findAll();
+            List<com.company.payroll.maintenance.MaintenanceRecord> records = maintenanceDAO.findAll();
             Set<String> vehicles = records.stream()
-                .map(MaintenanceRecord::getVehicle)
+                .map(com.company.payroll.maintenance.MaintenanceRecord::getVehicle)
                 .collect(Collectors.toCollection(TreeSet::new));
             vehicleComboBox.getItems().add("All Vehicles");
             vehicleComboBox.getItems().addAll(vehicles);
