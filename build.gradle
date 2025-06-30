@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
 }
 
 group = 'com.company'
@@ -10,11 +11,12 @@ repositories {
     mavenCentral()
 }
 
+javafx {
+    version = '24.0.1'
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.base', 'javafx.graphics']
+}
+
 dependencies {
-    implementation 'org.openjfx:javafx-controls:24.0.1'
-    implementation 'org.openjfx:javafx-fxml:24.0.1'
-    implementation 'org.openjfx:javafx-base:24.0.1'
-    implementation 'org.openjfx:javafx-graphics:24.0.1'
     implementation 'org.xerial:sqlite-jdbc:3.45.3.0'
     implementation 'org.slf4j:slf4j-api:2.0.13'
     runtimeOnly 'ch.qos.logback:logback-classic:1.4.14'
@@ -70,6 +72,7 @@ task fatJar(type: Jar) {
     archiveBaseName = project.name
     archiveVersion = project.version
     archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
