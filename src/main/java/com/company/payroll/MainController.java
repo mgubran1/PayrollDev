@@ -23,14 +23,6 @@ import com.company.payroll.employees.EmployeeDAO;
 import com.company.payroll.loads.LoadDAO;
 import com.company.payroll.fuel.FuelTransactionDAO;
 import com.company.payroll.triumph.MyTriumphTab;
-import mgubran1.PayrollDev.DashboardTab;
-import mgubran1.PayrollDev.InvoiceTab;
-import mgubran1.PayrollDev.MaintenanceTab;
-import mgubran1.PayrollDev.CompanyRevenueTab;
-import mgubran1.PayrollDev.PayStubTab;
-import mgubran1.PayrollDev.EmployeeIncomeTab;
-import mgubran1.PayrollDev.trucks.TrucksTab;
-import mgubran1.PayrollDev.trailers.TrailersTab;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,12 +51,6 @@ public class MainController extends BorderPane {
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
         try {
-            // Dashboard tab
-            DashboardTab dashboardTabContent = new DashboardTab();
-            Tab dashboardTab = new Tab("Dashboard", dashboardTabContent);
-            dashboardTab.setClosable(false);
-            dashboardTab.setGraphic(createTabIcon("\uD83D\uDCC8"));
-
             // Employees tab (must be created first, for cross-tab event support)
             logger.debug("Creating Employees tab");
             EmployeesTab employeesTabContent = new EmployeesTab();
@@ -99,24 +85,6 @@ public class MainController extends BorderPane {
             fuelImportTab.setGraphic(createTabIcon("⛽"));
             logger.info("Fuel Import tab created successfully");
 
-            // Trucks tab
-            TrucksTab trucksTabContent = new TrucksTab();
-            Tab trucksTab = new Tab("Trucks", trucksTabContent);
-            trucksTab.setClosable(false);
-            trucksTab.setGraphic(createTabIcon("\uD83D\uDE9A"));
-
-            // Trailers tab
-            TrailersTab trailersTabContent = new TrailersTab();
-            Tab trailersTab = new Tab("Trailers", trailersTabContent);
-            trailersTab.setClosable(false);
-            trailersTab.setGraphic(createTabIcon("\uD83D\uDEA7"));
-
-            // Maintenance tab
-            MaintenanceTab maintenanceTabContent = new MaintenanceTab();
-            Tab maintenanceTab = new Tab("Maintenance", maintenanceTabContent);
-            maintenanceTab.setClosable(false);
-            maintenanceTab.setGraphic(createTabIcon("\u2699"));
-
             // Payroll calculator (needs DAOs)
             logger.debug("Creating DAOs for Payroll calculator");
             EmployeeDAO employeeDAO = new EmployeeDAO();
@@ -143,48 +111,16 @@ public class MainController extends BorderPane {
             fuelImportTabContent.addFuelDataChangeListener(payrollTabContent);
             logger.info("PayrollTab registered as fuel data change listener");
 
-            // Pay stub tab
-            PayStubTab payStubTabContent = new PayStubTab();
-            Tab payStubTab = new Tab("Pay Stubs", payStubTabContent);
-            payStubTab.setClosable(false);
-            payStubTab.setGraphic(createTabIcon("\uD83D\uDCC4"));
-
-            // Employee income tab
-            EmployeeIncomeTab employeeIncomeTabContent = new EmployeeIncomeTab();
-            Tab employeeIncomeTab = new Tab("Driver Income", employeeIncomeTabContent);
-            employeeIncomeTab.setClosable(false);
-            employeeIncomeTab.setGraphic(createTabIcon("\uD83D\uDCB0"));
-
-            // Invoice tab
-            InvoiceTab invoiceTabContent = new InvoiceTab();
-            Tab invoiceTab = new Tab("Invoices", invoiceTabContent);
-            invoiceTab.setClosable(false);
-            invoiceTab.setGraphic(createTabIcon("\uD83D\uDCCB"));
-
-            // Company revenue tab
-            CompanyRevenueTab companyRevenueTabContent = new CompanyRevenueTab();
-            Tab companyRevenueTab = new Tab("Company Revenue", companyRevenueTabContent);
-            companyRevenueTab.setClosable(false);
-            companyRevenueTab.setGraphic(createTabIcon("\uD83D\uDCB5"));
-
             logger.info("MyTriumph Audit tab created successfully");
 
             // Add to TabPane in UX order
             logger.debug("Adding all tabs to TabPane");
             tabPane.getTabs().addAll(
-                dashboardTab,
                 employeesTab,
-                loadsTab,
+                loadsTab,        // Add LoadsTab directly (it is a Tab)
                 fuelImportTab,
-                trucksTab,
-                trailersTab,
-                maintenanceTab,
                 payrollTab,
-                payStubTab,
-                employeeIncomeTab,
-                invoiceTab,
-                companyRevenueTab,
-                myTriumphTab
+                myTriumphTab     // Add the new MyTriumph Audit Tab
             );
             logger.info("All {} tabs added to TabPane successfully", tabPane.getTabs().size());
 
