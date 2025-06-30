@@ -9,15 +9,21 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
+import javafx.stage.FileChooser;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.layout.GridPane;
 import javafx.util.Callback;
+import com.company.payroll.trucks.TrucksTab;
+import com.company.payroll.trailers.TrailersTab;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,14 +34,18 @@ public class MaintenanceTab extends BorderPane {
 
     private final ObservableList<MaintenanceRecord> records = FXCollections.observableArrayList();
     private final MaintenanceDAO dao = new MaintenanceDAO();
+    private final TrucksTab trucksTab;
+    private final TrailersTab trailersTab;
 
     public interface MaintenanceDataChangeListener {
         void onMaintenanceDataChanged(List<MaintenanceRecord> currentList);
     }
     private final List<MaintenanceDataChangeListener> listeners = new ArrayList<>();
 
-    public MaintenanceTab() {
+    public MaintenanceTab(TrucksTab trucksTab, TrailersTab trailersTab) {
         logger.info("Initializing MaintenanceTab");
+        this.trucksTab = trucksTab;
+        this.trailersTab = trailersTab;
         records.setAll(dao.getAll());
 
         TextField searchField = new TextField();
@@ -134,19 +144,62 @@ public class MaintenanceTab extends BorderPane {
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
         ComboBox<MaintenanceRecord.VehicleType> typeBox = new ComboBox<>(FXCollections.observableArrayList(MaintenanceRecord.VehicleType.values()));
-        TextField idField = new TextField();
+        ComboBox<String> idBox = new ComboBox<>();
         DatePicker serviceDatePicker = new DatePicker();
         TextField descField = new TextField();
         TextField costField = new TextField();
         DatePicker nextDuePicker = new DatePicker();
+        TextField receiptNumField = new TextField();
+        TextField receiptPathField = new TextField();
+        receiptPathField.setEditable(false);
+        Button browseBtn = new Button("Browse...");
+        browseBtn.setOnAction(e->{
+            FileChooser chooser = new FileChooser();
+            chooser.setTitle("Select Receipt");
+            File file = chooser.showOpenDialog(getScene().getWindow());
+            if(file!=null){
+                try{
+                    File destDir = new File("receipts");
+                    destDir.mkdirs();
+                    File dest = new File(destDir,file.getName());
+                    Files.copy(file.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    receiptPathField.setText(dest.getAbsolutePath());
+                }catch(Exception ex){
+                    logger.error("Failed to copy receipt",ex);
+                }
+            }
+        });
+        Button previewBtn = new Button("Preview");
+        previewBtn.setOnAction(e->{
+            String path = receiptPathField.getText();
+            if(path!=null && !path.isEmpty()){
+                try{ java.awt.Desktop.getDesktop().open(new File(path)); }catch(Exception ex){ logger.error("Failed to open receipt",ex); }
+            }
+        });
+
+        typeBox.valueProperty().addListener((o,ov,nv)->{
+            idBox.getItems().clear();
+            if(nv==MaintenanceRecord.VehicleType.TRUCK && trucksTab!=null){
+                trucksTab.getCurrentTrucks().forEach(t->idBox.getItems().add(t.getUnit()));
+            }else if(nv==MaintenanceRecord.VehicleType.TRAILER && trailersTab!=null){
+                trailersTab.getCurrentTrailers().forEach(tr->idBox.getItems().add(tr.getNumber()));
+            }
+        });
 
         if(record!=null){
             typeBox.setValue(record.getVehicleType());
-            idField.setText(String.valueOf(record.getVehicleId()));
+            if(record.getVehicleType()==MaintenanceRecord.VehicleType.TRUCK){
+                trucksTab.getCurrentTrucks().forEach(t->idBox.getItems().add(t.getUnit()));
+            }else if(record.getVehicleType()==MaintenanceRecord.VehicleType.TRAILER){
+                trailersTab.getCurrentTrailers().forEach(tr->idBox.getItems().add(tr.getNumber()));
+            }
+            idBox.setValue(String.valueOf(record.getVehicleId()));
             serviceDatePicker.setValue(record.getServiceDate());
             descField.setText(record.getDescription());
             costField.setText(String.valueOf(record.getCost()));
             nextDuePicker.setValue(record.getNextDue());
+            receiptNumField.setText(record.getReceiptNumber());
+            receiptPathField.setText(record.getReceiptPath());
         }
 
         GridPane grid = new GridPane();
@@ -155,34 +208,40 @@ public class MaintenanceTab extends BorderPane {
         grid.setPadding(new Insets(15));
         int r=0;
         grid.add(new Label("Vehicle Type"),0,r); grid.add(typeBox,1,r++);
-        grid.add(new Label("Vehicle ID"),0,r); grid.add(idField,1,r++);
+        grid.add(new Label("Vehicle ID"),0,r); grid.add(idBox,1,r++);
         grid.add(new Label("Service Date"),0,r); grid.add(serviceDatePicker,1,r++);
         grid.add(new Label("Description"),0,r); grid.add(descField,1,r++);
         grid.add(new Label("Cost"),0,r); grid.add(costField,1,r++);
         grid.add(new Label("Next Due"),0,r); grid.add(nextDuePicker,1,r++);
+        grid.add(new Label("Receipt #"),0,r); grid.add(receiptNumField,1,r++);
+        HBox recBox = new HBox(5, receiptPathField, browseBtn, previewBtn);
+        grid.add(recBox,1,r++);
 
         Node okBtn = dialog.getDialogPane().lookupButton(ButtonType.OK);
         okBtn.setDisable(true);
 
         Runnable validate = ()->{
-            boolean valid = typeBox.getValue()!=null && !idField.getText().trim().isEmpty();
+            boolean valid = typeBox.getValue()!=null && idBox.getValue()!=null && !idBox.getValue().trim().isEmpty();
             okBtn.setDisable(!valid);
         };
         typeBox.valueProperty().addListener((o,ov,nv)->validate.run());
-        idField.textProperty().addListener((o,ov,nv)->validate.run());
+        idBox.valueProperty().addListener((o,ov,nv)->validate.run());
         validate.run();
 
         dialog.getDialogPane().setContent(grid);
         dialog.setResultConverter(btn->{
             if(btn==ButtonType.OK){
                 MaintenanceRecord.VehicleType type = typeBox.getValue();
-                int vehicleId = Integer.parseInt(idField.getText().trim());
+                String idVal = idBox.getValue();
+                int vehicleId = idVal==null?0:Integer.parseInt(idVal);
                 LocalDate serviceDate = serviceDatePicker.getValue();
                 String description = descField.getText().trim();
                 double cost = costField.getText().trim().isEmpty()?0.0:Double.parseDouble(costField.getText().trim());
                 LocalDate nextDue = nextDuePicker.getValue();
+                String recNum = receiptNumField.getText().trim();
+                String recPath = receiptPathField.getText();
                 if(isAdd){
-                    MaintenanceRecord rec = new MaintenanceRecord(0,type,vehicleId,serviceDate,description,cost,nextDue);
+                    MaintenanceRecord rec = new MaintenanceRecord(0,type,vehicleId,serviceDate,description,cost,nextDue,recNum,recPath);
                     int id = dao.add(rec);
                     rec.setId(id);
                     records.setAll(dao.getAll());
@@ -195,6 +254,8 @@ public class MaintenanceTab extends BorderPane {
                     record.setDescription(description);
                     record.setCost(cost);
                     record.setNextDue(nextDue);
+                    record.setReceiptNumber(recNum);
+                    record.setReceiptPath(recPath);
                     dao.update(record);
                     records.setAll(dao.getAll());
                     notifyMaintenanceDataChanged();

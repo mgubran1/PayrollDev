@@ -23,7 +23,9 @@ public class MaintenanceDAO {
                     service_date DATE,
                     description TEXT,
                     cost REAL,
-                    next_due DATE
+                    next_due DATE,
+                    receipt_number TEXT UNIQUE,
+                    receipt_path TEXT
                 );
             """;
             conn.createStatement().execute(sql);
@@ -50,8 +52,8 @@ public class MaintenanceDAO {
 
     public int add(MaintenanceRecord r) {
         String sql = """
-            INSERT INTO maintenance (vehicle_type, vehicle_id, service_date, description, cost, next_due)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO maintenance (vehicle_type, vehicle_id, service_date, description, cost, next_due, receipt_number, receipt_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """;
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -70,13 +72,13 @@ public class MaintenanceDAO {
 
     public void update(MaintenanceRecord r) {
         String sql = """
-            UPDATE maintenance SET vehicle_type=?, vehicle_id=?, service_date=?, description=?, cost=?, next_due=?
+            UPDATE maintenance SET vehicle_type=?, vehicle_id=?, service_date=?, description=?, cost=?, next_due=?, receipt_number=?, receipt_path=?
             WHERE id=?
         """;
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement ps = conn.prepareStatement(sql)) {
             setParams(ps, r);
-            ps.setInt(7, r.getId());
+            ps.setInt(9, r.getId());
             ps.executeUpdate();
         } catch (SQLException e) {
             logger.error("Error updating maintenance record", e);
@@ -103,7 +105,9 @@ public class MaintenanceDAO {
                 getDate(rs,"service_date"),
                 rs.getString("description"),
                 rs.getDouble("cost"),
-                getDate(rs,"next_due")
+                getDate(rs,"next_due"),
+                rs.getString("receipt_number"),
+                rs.getString("receipt_path")
         );
     }
 
@@ -118,5 +122,7 @@ public class MaintenanceDAO {
         ps.setString(4, r.getDescription());
         ps.setDouble(5, r.getCost());
         if (r.getNextDue() != null) ps.setDate(6, Date.valueOf(r.getNextDue())); else ps.setNull(6, Types.DATE);
+        ps.setString(7, r.getReceiptNumber());
+        ps.setString(8, r.getReceiptPath());
     }
 }

@@ -12,10 +12,12 @@ public class MaintenanceRecord {
     private String description;
     private double cost;
     private LocalDate nextDue;
+    private String receiptNumber;
+    private String receiptPath;
 
     public MaintenanceRecord(int id, VehicleType vehicleType, int vehicleId,
                              LocalDate serviceDate, String description, double cost,
-                             LocalDate nextDue) {
+                             LocalDate nextDue, String receiptNumber, String receiptPath) {
         this.id = id;
         this.vehicleType = vehicleType;
         this.vehicleId = vehicleId;
@@ -23,6 +25,8 @@ public class MaintenanceRecord {
         this.description = description;
         this.cost = cost;
         this.nextDue = nextDue;
+        this.receiptNumber = receiptNumber;
+        this.receiptPath = receiptPath;
     }
 
     public int getId() { return id; }
@@ -39,4 +43,8 @@ public class MaintenanceRecord {
     public void setCost(double cost) { this.cost = cost; }
     public LocalDate getNextDue() { return nextDue; }
     public void setNextDue(LocalDate nextDue) { this.nextDue = nextDue; }
+    public String getReceiptNumber() { return receiptNumber; }
+    public void setReceiptNumber(String receiptNumber) { this.receiptNumber = receiptNumber; }
+    public String getReceiptPath() { return receiptPath; }
+    public void setReceiptPath(String receiptPath) { this.receiptPath = receiptPath; }
 }
