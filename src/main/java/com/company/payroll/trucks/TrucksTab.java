@@ -36,6 +36,9 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.Arc;
 import javafx.scene.shape.ArcType;
+import javafx.geometry.Orientation;
+import javafx.geometry.Side;
+import javafx.application.Platform;
 
 public class TrucksTab extends Tab {
     private TableView<Truck> trucksTable;

@@ -34,6 +34,7 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.application.Platform;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.geometry.Orientation;
 
 public class DriverIncomeTab extends Tab {
     private TableView<PayrollRow> incomeTable;
