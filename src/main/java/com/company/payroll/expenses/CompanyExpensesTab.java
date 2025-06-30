@@ -928,21 +928,23 @@ public class CompanyExpensesTab extends Tab {
     
     private void loadExpenseData() {
         loadingIndicator.setVisible(true);
-        
+
         Task<List<CompanyExpense>> task = new Task<List<CompanyExpense>>() {
             @Override
             protected List<CompanyExpense> call() throws Exception {
-                List<CompanyExpense> all = expenseDAO.getAll();
+                List<com.company.payroll.expenses.CompanyExpense> all = expenseDAO.getAll();
                 LocalDate start = startDatePicker.getValue();
                 LocalDate end = endDatePicker.getValue();
                 if (start != null && end != null) {
-                    return all.stream()
+                    all = all.stream()
                         .filter(e -> e.getExpenseDate() != null &&
                              !e.getExpenseDate().isBefore(start) &&
                              !e.getExpenseDate().isAfter(end))
                         .collect(Collectors.toList());
                 }
-                return all;
+                return all.stream()
+                    .map(CompanyExpensesTab.this::mapToViewModel)
+                    .collect(Collectors.toList());
             }
         };
         
@@ -1403,12 +1405,25 @@ public class CompanyExpensesTab extends Tab {
         alert.setContentText(content);
         alert.showAndWait();
     }
+
+    private CompanyExpense mapToViewModel(com.company.payroll.expenses.CompanyExpense exp) {
+        CompanyExpense ce = new CompanyExpense();
+        ce.setDate(exp.getExpenseDate());
+        ce.setVendor(exp.getVendor());
+        ce.setCategory(exp.getCategory());
+        ce.setDescription(exp.getDescription());
+        ce.setAmount(exp.getAmount());
+        ce.setStatus(exp.getStatus());
+        ce.setHasReceipt((exp.getReceiptNumber() != null && !exp.getReceiptNumber().isEmpty()) ? "Yes" : "No");
+        ce.setEmployee(exp.getEmployeeId());
+        return ce;
+    }
     
     private void initializeData() {
         try {
-            List<CompanyExpense> all = expenseDAO.getAll();
+            List<com.company.payroll.expenses.CompanyExpense> all = expenseDAO.getAll();
             Set<String> vendors = all.stream()
-                .map(CompanyExpense::getVendor)
+                .map(com.company.payroll.expenses.CompanyExpense::getVendor)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(TreeSet::new));
             vendorComboBox.getItems().add("All Vendors");
