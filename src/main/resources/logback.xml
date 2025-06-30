@@ -1,0 +1,99 @@
+<configuration>
+    <!-- Console Appender -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- File Appender -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/payroll.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- Daily rollover -->
+            <fileNamePattern>logs/payroll.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <!-- Keep 30 days of logs -->
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Audit File Appender for Payroll Transactions -->
+    <appender name="PAYROLL_AUDIT" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/payroll-audit.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/payroll-audit.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <!-- Keep 365 days of audit logs -->
+            <maxHistory>365</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %logger - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Async appender for better performance -->
+    <appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="FILE"/>
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+    </appender>
+    
+    <!-- Application logging -->
+    <logger name="com.company.payroll" level="INFO"/>
+    
+    <!-- Database logging -->
+    <logger name="com.company.payroll.employees.EmployeeDAO" level="DEBUG"/>
+    <logger name="com.company.payroll.loads.LoadDAO" level="DEBUG"/>
+    <logger name="com.company.payroll.fuel.FuelTransactionDAO" level="DEBUG"/>
+    <logger name="com.company.payroll.triumph.MyTriumphDAO" level="DEBUG"/>
+    
+    <!-- Payroll specific logging with audit trail -->
+    <logger name="com.company.payroll.payroll.PayrollCalculator" level="INFO" additivity="false">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="PAYROLL_AUDIT"/>
+    </logger>
+    
+    <logger name="com.company.payroll.payroll.PayrollTab" level="INFO"/>
+    
+    <!-- Payroll components with detailed logging -->
+    <logger name="com.company.payroll.payroll.PayrollRecurring" level="INFO" additivity="false">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="PAYROLL_AUDIT"/>
+    </logger>
+    
+    <logger name="com.company.payroll.payroll.PayrollAdvances" level="INFO" additivity="false">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="PAYROLL_AUDIT"/>
+    </logger>
+    
+    <logger name="com.company.payroll.payroll.PayrollOtherAdjustments" level="INFO" additivity="false">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="PAYROLL_AUDIT"/>
+    </logger>
+    
+    <!-- Apache POI logging (reduce noise) -->
+    <logger name="org.apache.poi" level="WARN"/>
+    <logger name="org.apache.xmlbeans" level="WARN"/>
+    
+    <!-- SQLite logging -->
+    <logger name="org.sqlite" level="WARN"/>
+    
+    <!-- JavaFX logging -->
+    <logger name="javafx" level="WARN"/>
+    <logger name="com.sun.javafx" level="WARN"/>
+    
+    <!-- Log4j bridge logging (suppress bridge warnings) -->
+    <logger name="org.apache.logging.log4j" level="ERROR"/>
+    
+    <!-- Root logger -->
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+        <appender-ref ref="ASYNC"/>
+    </root>
+</configuration>
