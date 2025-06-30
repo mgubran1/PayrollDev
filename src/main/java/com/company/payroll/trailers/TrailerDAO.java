@@ -1,129 +1,845 @@
 package com.company.payroll.trailers;
 
-import com.company.payroll.exception.DataAccessException;
+import com.company.exception.DataAccessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Data Access Object for Trailer operations.
+ * Handles database interactions for trailer management.
+ */
 public class TrailerDAO {
     private static final Logger logger = LoggerFactory.getLogger(TrailerDAO.class);
     private static final String DB_URL = "jdbc:sqlite:payroll.db";
-
+    
     public TrailerDAO() {
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
-            String sql = """
+        initializeDatabase();
+    }
+    
+    private void initializeDatabase() {
+        logger.info("Initializing Trailer database");
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement()) {
+             
+            // Create trailers table
+            String createTable = """
                 CREATE TABLE IF NOT EXISTS trailers (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    number TEXT UNIQUE,
-                    type TEXT,
-                    year INTEGER,
+                    trailer_number TEXT NOT NULL UNIQUE,
                     vin TEXT,
+                    make TEXT,
+                    model TEXT,
+                    year INTEGER,
+                    type TEXT,
+                    status TEXT,
                     license_plate TEXT,
-                    license_expiry DATE,
-                    inspection_expiry DATE,
-                    status TEXT
-                );
+                    registration_expiry_date DATE,
+                    current_location TEXT,
+                    length REAL,
+                    width REAL,
+                    height REAL,
+                    max_weight REAL,
+                    empty_weight REAL,
+                    axle_count INTEGER,
+                    suspension_type TEXT,
+                    has_thermal_unit BOOLEAN,
+                    thermal_unit_details TEXT,
+                    ownership_type TEXT,
+                    purchase_price REAL,
+                    purchase_date DATE,
+                    current_value REAL,
+                    monthly_lease_cost REAL,
+                    lease_details TEXT,
+                    insurance_policy_number TEXT,
+                    insurance_expiry_date DATE,
+                    odometer_reading INTEGER,
+                    last_inspection_date DATE,
+                    next_inspection_due_date DATE,
+                    last_service_date DATE,
+                    next_service_due_date DATE,
+                    current_condition TEXT,
+                    maintenance_notes TEXT,
+                    assigned_driver TEXT,
+                    assigned_truck TEXT,
+                    is_assigned BOOLEAN,
+                    current_job_id TEXT,
+                    last_updated TIMESTAMP,
+                    updated_by TEXT,
+                    notes TEXT
+                )
             """;
-            conn.createStatement().execute(sql);
+            stmt.execute(createTable);
+            
+            // Create indexes for performance
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_trailer_number ON trailers(trailer_number)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_trailer_status ON trailers(status)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_trailer_assigned_driver ON trailers(assigned_driver)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_trailer_assigned_truck ON trailers(assigned_truck)");
+            
+            logger.info("Trailer database initialized successfully");
+            
         } catch (SQLException e) {
-            logger.error("Failed to initialize TrailerDAO", e);
-            throw new DataAccessException("Failed to initialize TrailerDAO", e);
+            logger.error("Failed to initialize trailer database", e);
+            throw new DataAccessException("Failed to initialize database", e);
         }
     }
-
-    public List<Trailer> getAll() {
-        List<Trailer> list = new ArrayList<>();
-        String sql = "SELECT * FROM trailers ORDER BY number COLLATE NOCASE";
-        try (Connection conn = DriverManager.getConnection(DB_URL); Statement st = conn.createStatement()) {
-            ResultSet rs = st.executeQuery(sql);
-            while (rs.next()) {
-                list.add(mapRow(rs));
-            }
-        } catch (SQLException e) {
-            logger.error("Error getting trailers", e);
-            throw new DataAccessException("Error getting trailers", e);
+    
+    // CRUD Operations
+    
+    public Trailer save(Trailer trailer) {
+        if (trailer.getId() > 0) {
+            return update(trailer);
+        } else {
+            return insert(trailer);
         }
-        return list;
     }
-
-    public int add(Trailer t) {
+    
+    private Trailer insert(Trailer trailer) {
         String sql = """
-            INSERT INTO trailers (number, type, year, vin, license_plate, license_expiry, inspection_expiry, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO trailers (
+                trailer_number, vin, make, model, year, type, status,
+                license_plate, registration_expiry_date, current_location,
+                length, width, height, max_weight, empty_weight, axle_count,
+                suspension_type, has_thermal_unit, thermal_unit_details,
+                ownership_type, purchase_price, purchase_date, current_value,
+                monthly_lease_cost, lease_details, insurance_policy_number,
+                insurance_expiry_date, odometer_reading, last_inspection_date,
+                next_inspection_due_date, last_service_date, next_service_due_date,
+                current_condition, maintenance_notes, assigned_driver,
+                assigned_truck, is_assigned, current_job_id, last_updated,
+                updated_by, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
+        
         try (Connection conn = DriverManager.getConnection(DB_URL);
-             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            setParams(ps, t);
-            ps.executeUpdate();
-            ResultSet keys = ps.getGeneratedKeys();
-            if (keys.next()) {
-                return keys.getInt(1);
+             PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+             
+            setTrailerParameters(pstmt, trailer);
+            
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows == 0) {
+                throw new DataAccessException("Creating trailer failed, no rows affected.");
             }
+            
+            try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    int id = generatedKeys.getInt(1);
+                    trailer.setId(id);
+                    logger.info("Created trailer with ID: {}", id);
+                }
+            }
+            
+            return trailer;
+            
         } catch (SQLException e) {
-            logger.error("Error adding trailer", e);
-            throw new DataAccessException("Error adding trailer", e);
+            logger.error("Failed to insert trailer: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to insert trailer", e);
         }
-        return -1;
     }
-
-    public void update(Trailer t) {
+    
+    private Trailer update(Trailer trailer) {
         String sql = """
-            UPDATE trailers SET number=?, type=?, year=?, vin=?, license_plate=?, license_expiry=?, inspection_expiry=?, status=?
-            WHERE id=?
+            UPDATE trailers SET
+                trailer_number = ?, vin = ?, make = ?, model = ?, year = ?,
+                type = ?, status = ?, license_plate = ?, registration_expiry_date = ?,
+                current_location = ?, length = ?, width = ?, height = ?,
+                max_weight = ?, empty_weight = ?, axle_count = ?, suspension_type = ?,
+                has_thermal_unit = ?, thermal_unit_details = ?, ownership_type = ?,
+                purchase_price = ?, purchase_date = ?, current_value = ?,
+                monthly_lease_cost = ?, lease_details = ?, insurance_policy_number = ?,
+                insurance_expiry_date = ?, odometer_reading = ?, last_inspection_date = ?,
+                next_inspection_due_date = ?, last_service_date = ?, next_service_due_date = ?,
+                current_condition = ?, maintenance_notes = ?, assigned_driver = ?,
+                assigned_truck = ?, is_assigned = ?, current_job_id = ?, last_updated = ?,
+                updated_by = ?, notes = ?
+            WHERE id = ?
         """;
+        
         try (Connection conn = DriverManager.getConnection(DB_URL);
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            setParams(ps, t);
-            ps.setInt(9, t.getId());
-            ps.executeUpdate();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            setTrailerParameters(pstmt, trailer);
+            pstmt.setInt(42, trailer.getId());
+            
+            int affectedRows = pstmt.executeUpdate();
+            if (affectedRows == 0) {
+                throw new DataAccessException("Updating trailer failed, no rows affected.");
+            }
+            
+            logger.info("Updated trailer with ID: {}", trailer.getId());
+            return trailer;
+            
         } catch (SQLException e) {
-            logger.error("Error updating trailer", e);
-            throw new DataAccessException("Error updating trailer", e);
+            logger.error("Failed to update trailer: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to update trailer", e);
         }
     }
-
+    
     public void delete(int id) {
-        String sql = "DELETE FROM trailers WHERE id=?";
+        String sql = "DELETE FROM trailers WHERE id = ?";
+        
         try (Connection conn = DriverManager.getConnection(DB_URL);
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, id);
-            ps.executeUpdate();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setInt(1, id);
+            int affectedRows = pstmt.executeUpdate();
+            
+            if (affectedRows == 0) {
+                throw new DataAccessException("Deleting trailer failed, no trailer with ID: " + id);
+            }
+            
+            logger.info("Deleted trailer with ID: {}", id);
+            
         } catch (SQLException e) {
-            logger.error("Error deleting trailer", e);
-            throw new DataAccessException("Error deleting trailer", e);
+            logger.error("Failed to delete trailer: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to delete trailer", e);
         }
     }
-
-    private Trailer mapRow(ResultSet rs) throws SQLException {
-        return new Trailer(
-                rs.getInt("id"),
-                rs.getString("number"),
-                rs.getString("type"),
-                rs.getInt("year"),
-                rs.getString("vin"),
-                rs.getString("license_plate"),
-                getDate(rs, "license_expiry"),
-                getDate(rs, "inspection_expiry"),
-                rs.getString("status") != null ? Trailer.Status.valueOf(rs.getString("status")) : null
-        );
+    
+    // Query Operations
+    
+    public Trailer findById(int id) {
+        String sql = "SELECT * FROM trailers WHERE id = ?";
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setInt(1, id);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return mapResultSetToTrailer(rs);
+                }
+            }
+            
+            return null;
+            
+        } catch (SQLException e) {
+            logger.error("Failed to find trailer by ID: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to find trailer", e);
+        }
     }
-
-    private LocalDate getDate(ResultSet rs, String col) throws SQLException {
-        return rs.getObject(col) != null ? rs.getDate(col).toLocalDate() : null;
+    
+    public Trailer findByTrailerNumber(String trailerNumber) {
+        String sql = "SELECT * FROM trailers WHERE trailer_number = ?";
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setString(1, trailerNumber);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return mapResultSetToTrailer(rs);
+                }
+            }
+            
+            return null;
+            
+        } catch (SQLException e) {
+            logger.error("Failed to find trailer by trailer number: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to find trailer", e);
+        }
     }
-
-    private void setParams(PreparedStatement ps, Trailer t) throws SQLException {
-        ps.setString(1, t.getNumber());
-        ps.setString(2, t.getType());
-        if (t.getYear() > 0) ps.setInt(3, t.getYear()); else ps.setNull(3, Types.INTEGER);
-        ps.setString(4, t.getVin());
-        ps.setString(5, t.getLicensePlate());
-        if (t.getLicenseExpiry() != null) ps.setDate(6, Date.valueOf(t.getLicenseExpiry())); else ps.setNull(6, Types.DATE);
-        if (t.getInspectionExpiry() != null) ps.setDate(7, Date.valueOf(t.getInspectionExpiry())); else ps.setNull(7, Types.DATE);
-        ps.setString(8, t.getStatus() != null ? t.getStatus().name() : null);
+    
+    public List<Trailer> findAll() {
+        String sql = "SELECT * FROM trailers ORDER BY trailer_number";
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+             
+            List<Trailer> trailers = new ArrayList<>();
+            while (rs.next()) {
+                trailers.add(mapResultSetToTrailer(rs));
+            }
+            
+            return trailers;
+            
+        } catch (SQLException e) {
+            logger.error("Failed to find all trailers: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to find trailers", e);
+        }
+    }
+    
+    public List<Trailer> findByStatus(Trailer.Status status) {
+        String sql = "SELECT * FROM trailers WHERE status = ? ORDER BY trailer_number";
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setString(1, status.name());
+            try (ResultSet rs = pstmt.executeQuery()) {
+                List<Trailer> trailers = new ArrayList<>();
+                while (rs.next()) {
+                    trailers.add(mapResultSetToTrailer(rs));
+                }
+                return trailers;
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Failed to find trailers by status: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to find trailers", e);
+        }
+    }
+    
+    public List<Trailer> findByAssignedDriver(String driverName) {
+        String sql = "SELECT * FROM trailers WHERE assigned_driver = ? ORDER BY trailer_number";
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setString(1, driverName);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                List<Trailer> trailers = new ArrayList<>();
+                while (rs.next()) {
+                    trailers.add(mapResultSetToTrailer(rs));
+                }
+                return trailers;
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Failed to find trailers by assigned driver: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to find trailers", e);
+        }
+    }
+    
+    public List<Trailer> findByAssignedTruck(String truckNumber) {
+        String sql = "SELECT * FROM trailers WHERE assigned_truck = ? ORDER BY trailer_number";
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setString(1, truckNumber);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                List<Trailer> trailers = new ArrayList<>();
+                while (rs.next()) {
+                    trailers.add(mapResultSetToTrailer(rs));
+                }
+                return trailers;
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Failed to find trailers by assigned truck: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to find trailers", e);
+        }
+    }
+    
+    public List<Trailer> findAvailable() {
+        String sql = "SELECT * FROM trailers WHERE is_assigned = 0 AND status = ? ORDER BY trailer_number";
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setString(1, Trailer.Status.ACTIVE.name());
+            try (ResultSet rs = pstmt.executeQuery()) {
+                List<Trailer> trailers = new ArrayList<>();
+                while (rs.next()) {
+                    trailers.add(mapResultSetToTrailer(rs));
+                }
+                return trailers;
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Failed to find available trailers: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to find available trailers", e);
+        }
+    }
+    
+    public List<Trailer> findDueForInspection(LocalDate cutoffDate) {
+        String sql = """
+            SELECT * FROM trailers 
+            WHERE next_inspection_due_date IS NOT NULL 
+            AND next_inspection_due_date <= ? 
+            ORDER BY next_inspection_due_date
+        """;
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setDate(1, Date.valueOf(cutoffDate));
+            try (ResultSet rs = pstmt.executeQuery()) {
+                List<Trailer> trailers = new ArrayList<>();
+                while (rs.next()) {
+                    trailers.add(mapResultSetToTrailer(rs));
+                }
+                return trailers;
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Failed to find trailers due for inspection: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to find trailers", e);
+        }
+    }
+    
+    public List<Trailer> findDueForService(LocalDate cutoffDate) {
+        String sql = """
+            SELECT * FROM trailers 
+            WHERE next_service_due_date IS NOT NULL 
+            AND next_service_due_date <= ? 
+            ORDER BY next_service_due_date
+        """;
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setDate(1, Date.valueOf(cutoffDate));
+            try (ResultSet rs = pstmt.executeQuery()) {
+                List<Trailer> trailers = new ArrayList<>();
+                while (rs.next()) {
+                    trailers.add(mapResultSetToTrailer(rs));
+                }
+                return trailers;
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Failed to find trailers due for service: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to find trailers", e);
+        }
+    }
+    
+    public List<Trailer> findByExpiringRegistration(LocalDate cutoffDate) {
+        String sql = """
+            SELECT * FROM trailers 
+            WHERE registration_expiry_date IS NOT NULL 
+            AND registration_expiry_date <= ? 
+            ORDER BY registration_expiry_date
+        """;
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setDate(1, Date.valueOf(cutoffDate));
+            try (ResultSet rs = pstmt.executeQuery()) {
+                List<Trailer> trailers = new ArrayList<>();
+                while (rs.next()) {
+                    trailers.add(mapResultSetToTrailer(rs));
+                }
+                return trailers;
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Failed to find trailers with expiring registration: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to find trailers", e);
+        }
+    }
+    
+    public List<Trailer> search(String searchTerm) {
+        String sql = """
+            SELECT * FROM trailers 
+            WHERE trailer_number LIKE ? 
+               OR vin LIKE ? 
+               OR make LIKE ? 
+               OR model LIKE ? 
+               OR license_plate LIKE ? 
+               OR current_location LIKE ? 
+               OR notes LIKE ?
+            ORDER BY trailer_number
+        """;
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            String pattern = "%" + searchTerm + "%";
+            for (int i = 1; i <= 7; i++) {
+                pstmt.setString(i, pattern);
+            }
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                List<Trailer> trailers = new ArrayList<>();
+                while (rs.next()) {
+                    trailers.add(mapResultSetToTrailer(rs));
+                }
+                return trailers;
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Failed to search trailers: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to search trailers", e);
+        }
+    }
+    
+    // Utility methods
+    
+    public int getTrailersCount() {
+        String sql = "SELECT COUNT(*) FROM trailers";
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+             
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+            return 0;
+            
+        } catch (SQLException e) {
+            logger.error("Failed to get trailers count: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to get trailers count", e);
+        }
+    }
+    
+    public int getAvailableTrailersCount() {
+        String sql = "SELECT COUNT(*) FROM trailers WHERE is_assigned = 0 AND status = ?";
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             
+            pstmt.setString(1, Trailer.Status.ACTIVE.name());
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+                return 0;
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Failed to get available trailers count: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to get available trailers count", e);
+        }
+    }
+    
+    // Helper methods
+    
+    private void setTrailerParameters(PreparedStatement pstmt, Trailer trailer) throws SQLException {
+        pstmt.setString(1, trailer.getTrailerNumber());
+        pstmt.setString(2, trailer.getVin());
+        pstmt.setString(3, trailer.getMake());
+        pstmt.setString(4, trailer.getModel());
+        pstmt.setInt(5, trailer.getYear());
+        pstmt.setString(6, trailer.getType());
+        pstmt.setString(7, trailer.getStatus() != null ? trailer.getStatus().name() : null);
+        pstmt.setString(8, trailer.getLicensePlate());
+        
+        LocalDate regExpiry = trailer.getRegistrationExpiryDate();
+        pstmt.setDate(9, regExpiry != null ? Date.valueOf(regExpiry) : null);
+        
+        pstmt.setString(10, trailer.getCurrentLocation());
+        pstmt.setDouble(11, trailer.getLength());
+        pstmt.setDouble(12, trailer.getWidth());
+        pstmt.setDouble(13, trailer.getHeight());
+        pstmt.setDouble(14, trailer.getMaxWeight());
+        pstmt.setDouble(15, trailer.getEmptyWeight());
+        pstmt.setInt(16, trailer.getAxleCount());
+        pstmt.setString(17, trailer.getSuspensionType());
+        pstmt.setBoolean(18, trailer.isHasThermalUnit());
+        pstmt.setString(19, trailer.getThermalUnitDetails());
+        pstmt.setString(20, trailer.getOwnershipType());
+        pstmt.setDouble(21, trailer.getPurchasePrice());
+        
+        LocalDate purchaseDate = trailer.getPurchaseDate();
+        pstmt.setDate(22, purchaseDate != null ? Date.valueOf(purchaseDate) : null);
+        
+        pstmt.setDouble(23, trailer.getCurrentValue());
+        pstmt.setDouble(24, trailer.getMonthlyLeaseCost());
+        pstmt.setString(25, trailer.getLeaseDetails());
+        pstmt.setString(26, trailer.getInsurancePolicyNumber());
+        
+        LocalDate insuranceExpiry = trailer.getInsuranceExpiryDate();
+        pstmt.setDate(27, insuranceExpiry != null ? Date.valueOf(insuranceExpiry) : null);
+        
+        pstmt.setInt(28, trailer.getOdometerReading());
+        
+        LocalDate lastInspection = trailer.getLastInspectionDate();
+        pstmt.setDate(29, lastInspection != null ? Date.valueOf(lastInspection) : null);
+        
+        LocalDate nextInspection = trailer.getNextInspectionDueDate();
+        pstmt.setDate(30, nextInspection != null ? Date.valueOf(nextInspection) : null);
+        
+        LocalDate lastService = trailer.getLastServiceDate();
+        pstmt.setDate(31, lastService != null ? Date.valueOf(lastService) : null);
+        
+        LocalDate nextService = trailer.getNextServiceDueDate();
+        pstmt.setDate(32, nextService != null ? Date.valueOf(nextService) : null);
+        
+        pstmt.setString(33, trailer.getCurrentCondition());
+        pstmt.setString(34, trailer.getMaintenanceNotes());
+        pstmt.setString(35, trailer.getAssignedDriver());
+        pstmt.setString(36, trailer.getAssignedTruck());
+        pstmt.setBoolean(37, trailer.isAssigned());
+        pstmt.setString(38, trailer.getCurrentJobId());
+        
+        LocalDateTime lastUpdated = trailer.getLastUpdated();
+        pstmt.setTimestamp(39, lastUpdated != null ? Timestamp.valueOf(lastUpdated) : Timestamp.valueOf(LocalDateTime.now()));
+        
+        pstmt.setString(40, trailer.getUpdatedBy());
+        pstmt.setString(41, trailer.getNotes());
+    }
+    
+    private Trailer mapResultSetToTrailer(ResultSet rs) throws SQLException {
+        Trailer trailer = new Trailer();
+        
+        trailer.setId(rs.getInt("id"));
+        trailer.setTrailerNumber(rs.getString("trailer_number"));
+        trailer.setVin(rs.getString("vin"));
+        trailer.setMake(rs.getString("make"));
+        trailer.setModel(rs.getString("model"));
+        trailer.setYear(rs.getInt("year"));
+        trailer.setType(rs.getString("type"));
+        
+        String statusStr = rs.getString("status");
+        if (statusStr != null) {
+            try {
+                trailer.setStatus(Trailer.Status.valueOf(statusStr));
+            } catch (IllegalArgumentException e) {
+                trailer.setStatus(Trailer.Status.ACTIVE);
+                logger.warn("Invalid status value in database: {}", statusStr);
+            }
+        }
+        
+        trailer.setLicensePlate(rs.getString("license_plate"));
+        
+        Date regExpiry = rs.getDate("registration_expiry_date");
+        if (regExpiry != null) {
+            trailer.setRegistrationExpiryDate(regExpiry.toLocalDate());
+        }
+        
+        trailer.setCurrentLocation(rs.getString("current_location"));
+        trailer.setLength(rs.getDouble("length"));
+        trailer.setWidth(rs.getDouble("width"));
+        trailer.setHeight(rs.getDouble("height"));
+        trailer.setMaxWeight(rs.getDouble("max_weight"));
+        trailer.setEmptyWeight(rs.getDouble("empty_weight"));
+        trailer.setAxleCount(rs.getInt("axle_count"));
+        trailer.setSuspensionType(rs.getString("suspension_type"));
+        trailer.setHasThermalUnit(rs.getBoolean("has_thermal_unit"));
+        trailer.setThermalUnitDetails(rs.getString("thermal_unit_details"));
+        trailer.setOwnershipType(rs.getString("ownership_type"));
+        trailer.setPurchasePrice(rs.getDouble("purchase_price"));
+        
+        Date purchaseDate = rs.getDate("purchase_date");
+        if (purchaseDate != null) {
+            trailer.setPurchaseDate(purchaseDate.toLocalDate());
+        }
+        
+        trailer.setCurrentValue(rs.getDouble("current_value"));
+        trailer.setMonthlyLeaseCost(rs.getDouble("monthly_lease_cost"));
+        trailer.setLeaseDetails(rs.getString("lease_details"));
+        trailer.setInsurancePolicyNumber(rs.getString("insurance_policy_number"));
+        
+        Date insuranceExpiry = rs.getDate("insurance_expiry_date");
+        if (insuranceExpiry != null) {
+            trailer.setInsuranceExpiryDate(insuranceExpiry.toLocalDate());
+        }
+        
+        trailer.setOdometerReading(rs.getInt("odometer_reading"));
+        
+        Date lastInspection = rs.getDate("last_inspection_date");
+        if (lastInspection != null) {
+            trailer.setLastInspectionDate(lastInspection.toLocalDate());
+        }
+        
+        Date nextInspection = rs.getDate("next_inspection_due_date");
+        if (nextInspection != null) {
+            trailer.setNextInspectionDueDate(nextInspection.toLocalDate());
+        }
+        
+        Date lastService = rs.getDate("last_service_date");
+        if (lastService != null) {
+            trailer.setLastServiceDate(lastService.toLocalDate());
+        }
+        
+        Date nextService = rs.getDate("next_service_due_date");
+        if (nextService != null) {
+            trailer.setNextServiceDueDate(nextService.toLocalDate());
+        }
+        
+        trailer.setCurrentCondition(rs.getString("current_condition"));
+        trailer.setMaintenanceNotes(rs.getString("maintenance_notes"));
+        trailer.setAssignedDriver(rs.getString("assigned_driver"));
+        trailer.setAssignedTruck(rs.getString("assigned_truck"));
+        trailer.setAssigned(rs.getBoolean("is_assigned"));
+        trailer.setCurrentJobId(rs.getString("current_job_id"));
+        
+        Timestamp lastUpdated = rs.getTimestamp("last_updated");
+        if (lastUpdated != null) {
+            trailer.setLastUpdated(lastUpdated.toLocalDateTime());
+        }
+        
+        trailer.setUpdatedBy(rs.getString("updated_by"));
+        trailer.setNotes(rs.getString("notes"));
+        
+        return trailer;
+    }
+    
+    // Generate sample data for testing
+    public void generateSampleData() {
+        if (getTrailersCount() > 0) {
+            logger.info("Sample trailer data already exists, skipping generation");
+            return;
+        }
+        
+        logger.info("Generating sample trailer data");
+        
+        try {
+            // Sample dry van trailers
+            for (int i = 1; i <= 5; i++) {
+                Trailer trailer = new Trailer();
+                trailer.setTrailerNumber("DVT-" + (1000 + i));
+                trailer.setVin("1DRY" + i + "00000" + i);
+                trailer.setMake("Great Dane");
+                trailer.setModel("Champion");
+                trailer.setYear(2020 + (i % 3));
+                trailer.setType("Dry Van");
+                trailer.setStatus(Trailer.Status.ACTIVE);
+                trailer.setLicensePlate("TR" + (7000 + i));
+                trailer.setRegistrationExpiryDate(LocalDate.now().plusMonths(6 + i));
+                trailer.setLength(53.0);
+                trailer.setWidth(8.5);
+                trailer.setHeight(13.5);
+                trailer.setMaxWeight(45000 + (i * 500));
+                trailer.setEmptyWeight(14000 + (i * 100));
+                trailer.setAxleCount(2);
+                trailer.setSuspensionType("Air Ride");
+                trailer.setOwnershipType("Company");
+                trailer.setPurchasePrice(32000 + (i * 500));
+                trailer.setPurchaseDate(LocalDate.now().minusYears(2).minusMonths(i));
+                trailer.setCurrentValue(28000 - (i * 1000));
+                trailer.setInsurancePolicyNumber("INS-TR-" + (2000 + i));
+                trailer.setInsuranceExpiryDate(LocalDate.now().plusMonths(3 + i));
+                trailer.setLastInspectionDate(LocalDate.now().minusMonths(3));
+                trailer.setNextInspectionDueDate(LocalDate.now().plusMonths(3));
+                trailer.setLastServiceDate(LocalDate.now().minusMonths(2));
+                trailer.setNextServiceDueDate(LocalDate.now().plusMonths(4));
+                trailer.setCurrentCondition("Good");
+                
+                if (i % 3 == 0) {
+                    trailer.setAssignedDriver("John Smith");
+                    trailer.setAssignedTruck("TRK-8001");
+                    trailer.setAssigned(true);
+                    trailer.setCurrentLocation("On Route I-95");
+                } else if (i % 3 == 1) {
+                    trailer.setAssignedDriver("Mike Johnson");
+                    trailer.setAssignedTruck("TRK-8002");
+                    trailer.setAssigned(true);
+                    trailer.setCurrentLocation("Warehouse #3");
+                } else {
+                    trailer.setCurrentLocation("Main Yard");
+                }
+                
+                save(trailer);
+            }
+            
+            // Sample refrigerated trailers
+            for (int i = 1; i <= 3; i++) {
+                Trailer trailer = new Trailer();
+                trailer.setTrailerNumber("RFT-" + (2000 + i));
+                trailer.setVin("1REF" + i + "00000" + i);
+                trailer.setMake("Utility");
+                trailer.setModel("3000R");
+                trailer.setYear(2021 + (i % 2));
+                trailer.setType("Refrigerated");
+                trailer.setStatus(Trailer.Status.ACTIVE);
+                trailer.setLicensePlate("TR" + (8000 + i));
+                trailer.setRegistrationExpiryDate(LocalDate.now().plusMonths(8 + i));
+                trailer.setLength(53.0);
+                trailer.setWidth(8.5);
+                trailer.setHeight(13.6);
+                trailer.setMaxWeight(44000 + (i * 400));
+                trailer.setEmptyWeight(16000 + (i * 200));
+                trailer.setAxleCount(2);
+                trailer.setSuspensionType("Air Ride");
+                trailer.setHasThermalUnit(true);
+                trailer.setThermalUnitDetails("Carrier Transicold Model X4 7300");
+                trailer.setOwnershipType("Company");
+                trailer.setPurchasePrice(65000 + (i * 1000));
+                trailer.setPurchaseDate(LocalDate.now().minusYears(1).minusMonths(i));
+                trailer.setCurrentValue(60000 - (i * 2000));
+                trailer.setInsurancePolicyNumber("INS-TR-" + (3000 + i));
+                trailer.setInsuranceExpiryDate(LocalDate.now().plusMonths(5 + i));
+                trailer.setLastInspectionDate(LocalDate.now().minusMonths(2));
+                trailer.setNextInspectionDueDate(LocalDate.now().plusMonths(4));
+                trailer.setLastServiceDate(LocalDate.now().minusMonths(1));
+                trailer.setNextServiceDueDate(LocalDate.now().plusMonths(5));
+                trailer.setCurrentCondition("Excellent");
+                
+                if (i % 2 == 0) {
+                    trailer.setAssignedDriver("Alex Rodriguez");
+                    trailer.setAssignedTruck("TRK-8003");
+                    trailer.setAssigned(true);
+                    trailer.setCurrentLocation("Cold Storage Facility #2");
+                } else {
+                    trailer.setCurrentLocation("Main Yard");
+                }
+                
+                save(trailer);
+            }
+            
+            // Sample flatbed trailer
+            Trailer flatbed = new Trailer();
+            flatbed.setTrailerNumber("FBT-3001");
+            flatbed.setVin("1FLT10000001");
+            flatbed.setMake("Fontaine");
+            flatbed.setModel("Revolution");
+            flatbed.setYear(2022);
+            flatbed.setType("Flatbed");
+            flatbed.setStatus(Trailer.Status.ACTIVE);
+            flatbed.setLicensePlate("TR9001");
+            flatbed.setRegistrationExpiryDate(LocalDate.now().plusMonths(7));
+            flatbed.setLength(48.0);
+            flatbed.setWidth(8.5);
+            flatbed.setHeight(5.0);
+            flatbed.setMaxWeight(48000);
+            flatbed.setEmptyWeight(12000);
+            flatbed.setAxleCount(2);
+            flatbed.setSuspensionType("Spring");
+            flatbed.setOwnershipType("Leased");
+            flatbed.setMonthlyLeaseCost(950.0);
+            flatbed.setLeaseDetails("36 month lease from TransLease Inc.");
+            flatbed.setCurrentValue(40000);
+            flatbed.setInsurancePolicyNumber("INS-TR-4001");
+            flatbed.setInsuranceExpiryDate(LocalDate.now().plusMonths(9));
+            flatbed.setLastInspectionDate(LocalDate.now().minusMonths(1));
+            flatbed.setNextInspectionDueDate(LocalDate.now().plusMonths(5));
+            flatbed.setLastServiceDate(LocalDate.now().minusMonths(2));
+            flatbed.setNextServiceDueDate(LocalDate.now().plusMonths(4));
+            flatbed.setCurrentCondition("Good");
+            flatbed.setCurrentLocation("Main Yard");
+            save(flatbed);
+            
+            // One maintenance trailer
+            Trailer maintenance = new Trailer();
+            maintenance.setTrailerNumber("DVT-1006");
+            maintenance.setVin("1DRY600000006");
+            maintenance.setMake("Great Dane");
+            maintenance.setModel("Champion");
+            maintenance.setYear(2019);
+            maintenance.setType("Dry Van");
+            maintenance.setStatus(Trailer.Status.IN_MAINTENANCE);
+            maintenance.setLicensePlate("TR7006");
+            maintenance.setRegistrationExpiryDate(LocalDate.now().plusMonths(4));
+            maintenance.setLength(53.0);
+            maintenance.setWidth(8.5);
+            maintenance.setHeight(13.5);
+            maintenance.setMaxWeight(45000);
+            maintenance.setEmptyWeight(14000);
+            maintenance.setAxleCount(2);
+            maintenance.setSuspensionType("Air Ride");
+            maintenance.setOwnershipType("Company");
+            maintenance.setPurchasePrice(28000);
+            maintenance.setPurchaseDate(LocalDate.now().minusYears(4));
+            maintenance.setCurrentValue(18000);
+            maintenance.setInsurancePolicyNumber("INS-TR-2006");
+            maintenance.setInsuranceExpiryDate(LocalDate.now().plusMonths(2));
+            maintenance.setLastInspectionDate(LocalDate.now().minusMonths(6));
+            maintenance.setNextInspectionDueDate(LocalDate.now());
+            maintenance.setLastServiceDate(LocalDate.now().minusMonths(5));
+            maintenance.setNextServiceDueDate(LocalDate.now().plusMonths(1));
+            maintenance.setCurrentCondition("Needs Repair");
+            maintenance.setMaintenanceNotes("In shop for brake repair and annual inspection");
+            maintenance.setCurrentLocation("Service Center");
+            save(maintenance);
+            
+            logger.info("Generated sample data for trailers");
+            
+        } catch (Exception e) {
+            logger.error("Failed to generate sample trailer data: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to generate sample data", e);
+        }
     }
 }
