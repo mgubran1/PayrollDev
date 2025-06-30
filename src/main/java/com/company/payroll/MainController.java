@@ -121,13 +121,13 @@ public class MainController extends BorderPane {
             companyExpensesTab.setGraphic(createEnhancedTabIcon("💳", "#e74c3c"));
             logger.info("Company Expenses tab created successfully");
 
-            // Loads tab (receives employee data for driver selection)
-            logger.debug("Creating Loads tab");
-            LoadsTab loadsTab = new LoadsTab(employeesTabContent);
+            // Loads tab (receives employee data AND trailer data)
+            logger.debug("Creating Loads tab with employees and trailers integration");
+            LoadsTab loadsTab = new LoadsTab(employeesTabContent, trailersTabContent);
             // LoadsTab already extends Tab, so we add it directly
             loadsTab.setClosable(false);
             loadsTab.setGraphic(createEnhancedTabIcon("📦", "#f39c12"));
-            logger.info("Loads tab created successfully");
+            logger.info("Loads tab created successfully with trailer integration");
 
             // Wire up sync callback from Loads to MyTriumph
             logger.debug("Setting up Loads to MyTriumph sync callback");
