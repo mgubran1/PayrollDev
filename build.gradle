@@ -11,10 +11,14 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.openjfx:javafx-controls:24.0.1'
-    implementation 'org.openjfx:javafx-fxml:24.0.1'
-    implementation 'org.openjfx:javafx-base:24.0.1'
-    implementation 'org.openjfx:javafx-graphics:24.0.1'
+    def javafxVersion = '24.0.1'
+    def platform = org.gradle.internal.os.OperatingSystem.current()
+    def classifier = platform.isWindows() ? 'win' : platform.isMacOsX() ? 'mac' : 'linux'
+
+    implementation "org.openjfx:javafx-controls:${javafxVersion}:${classifier}"
+    implementation "org.openjfx:javafx-fxml:${javafxVersion}:${classifier}"
+    implementation "org.openjfx:javafx-base:${javafxVersion}:${classifier}"
+    implementation "org.openjfx:javafx-graphics:${javafxVersion}:${classifier}"
     implementation 'org.xerial:sqlite-jdbc:3.45.3.0'
     implementation 'org.slf4j:slf4j-api:2.0.13'
     runtimeOnly 'ch.qos.logback:logback-classic:1.4.14'
@@ -36,8 +40,9 @@ dependencies {
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
-    sourceCompatibility = '24'
-    targetCompatibility = '24'
+    // Compile against the JDK available in the container (Java 21)
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
 }
 
 application {

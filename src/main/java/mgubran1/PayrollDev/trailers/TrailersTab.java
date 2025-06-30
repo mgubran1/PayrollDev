@@ -30,7 +30,7 @@ public class TrailersTab extends BorderPane {
         TableColumn<Trailer, String> typeCol = new TableColumn<>("Type");
         typeCol.setCellValueFactory(new PropertyValueFactory<>("type"));
         TableColumn<Trailer, String> statusCol = new TableColumn<>("Status");
-        statusCol.setCellValueFactory(c -> javafx.beans.property.SimpleStringProperty.stringExpression(c.getValue().getStatus().name()));
+        statusCol.setCellValueFactory(c -> new javafx.beans.property.ReadOnlyStringWrapper(c.getValue().getStatus().name()));
 
         table.getColumns().addAll(numCol, typeCol, statusCol);
 

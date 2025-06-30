@@ -34,7 +34,7 @@ public class TrucksTab extends BorderPane {
         TableColumn<Truck, Integer> yearCol = new TableColumn<>("Year");
         yearCol.setCellValueFactory(new PropertyValueFactory<>("year"));
         TableColumn<Truck, String> statusCol = new TableColumn<>("Status");
-        statusCol.setCellValueFactory(c -> javafx.beans.property.SimpleStringProperty.stringExpression(c.getValue().getStatus().name()));
+        statusCol.setCellValueFactory(c -> new javafx.beans.property.ReadOnlyStringWrapper(c.getValue().getStatus().name()));
 
         table.getColumns().addAll(unitCol, makeCol, modelCol, yearCol, statusCol);
 
