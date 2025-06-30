@@ -3,6 +3,8 @@ package com.company.payroll.loads;
 import com.company.payroll.employees.Employee;
 import com.company.payroll.employees.EmployeeDAO;
 import com.company.payroll.exception.DataAccessException;
+import com.company.payroll.trailers.Trailer;
+import com.company.payroll.trailers.TrailerDAO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +17,7 @@ public class LoadDAO {
     private static final Logger logger = LoggerFactory.getLogger(LoadDAO.class);
     private static final String DB_URL = "jdbc:sqlite:payroll.db";
     private final EmployeeDAO employeeDAO = new EmployeeDAO();
+    private final TrailerDAO trailerDAO = new TrailerDAO();
 
     public LoadDAO() {
         logger.debug("Initializing LoadDAO");
@@ -54,6 +57,21 @@ public class LoadDAO {
             } catch (SQLException ignore) {
                 logger.debug("has_revised_rate_confirmation column already exists");
             }
+            
+            // Add trailer-related columns
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN trailer_id INTEGER");
+                logger.info("Added trailer_id column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("trailer_id column already exists");
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN trailer_number TEXT");
+                logger.info("Added trailer_number column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("trailer_number column already exists");
+            }
         } catch (SQLException ignore) {}
         
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
@@ -67,6 +85,8 @@ public class LoadDAO {
                     drop_location TEXT,
                     driver_id INTEGER,
                     truck_unit_snapshot TEXT,
+                    trailer_id INTEGER,
+                    trailer_number TEXT,
                     status TEXT,
                     gross_amount REAL,
                     notes TEXT,
@@ -74,7 +94,8 @@ public class LoadDAO {
                     reminder TEXT,
                     has_lumper INTEGER DEFAULT 0,
                     has_revised_rate_confirmation INTEGER DEFAULT 0,
-                    FOREIGN KEY(driver_id) REFERENCES employees(id)
+                    FOREIGN KEY(driver_id) REFERENCES employees(id),
+                    FOREIGN KEY(trailer_id) REFERENCES trailers(id)
                 );
             """;
             conn.createStatement().execute(sql);
@@ -134,9 +155,9 @@ public class LoadDAO {
             load.getGrossAmount());
         String sql = """
             INSERT INTO loads (load_number, po_number, customer, pick_up_location, drop_location, 
-            driver_id, truck_unit_snapshot, status, gross_amount, notes, delivery_date, 
+            driver_id, truck_unit_snapshot, trailer_id, trailer_number, status, gross_amount, notes, delivery_date, 
             reminder, has_lumper, has_revised_rate_confirmation) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -147,16 +168,18 @@ public class LoadDAO {
             ps.setString(5, load.getDropLocation());
             ps.setObject(6, load.getDriver() != null ? load.getDriver().getId() : null);
             ps.setString(7, load.getTruckUnitSnapshot());
-            ps.setString(8, load.getStatus().name());
-            ps.setDouble(9, load.getGrossAmount());
-            ps.setString(10, load.getNotes());
+            ps.setInt(8, load.getTrailerId());
+            ps.setString(9, load.getTrailerNumber());
+            ps.setString(10, load.getStatus().name());
+            ps.setDouble(11, load.getGrossAmount());
+            ps.setString(12, load.getNotes());
             if (load.getDeliveryDate() != null)
-                ps.setDate(11, java.sql.Date.valueOf(load.getDeliveryDate()));
+                ps.setDate(13, java.sql.Date.valueOf(load.getDeliveryDate()));
             else
-                ps.setNull(11, java.sql.Types.DATE);
-            ps.setString(12, load.getReminder());
-            ps.setInt(13, load.isHasLumper() ? 1 : 0);
-            ps.setInt(14, load.isHasRevisedRateConfirmation() ? 1 : 0);
+                ps.setNull(13, java.sql.Types.DATE);
+            ps.setString(14, load.getReminder());
+            ps.setInt(15, load.isHasLumper() ? 1 : 0);
+            ps.setInt(16, load.isHasRevisedRateConfirmation() ? 1 : 0);
             ps.executeUpdate();
             ResultSet keys = ps.getGeneratedKeys();
             if (keys.next()) {
@@ -184,7 +207,7 @@ public class LoadDAO {
             load.getId(), load.getLoadNumber(), load.getStatus());
         String sql = """
             UPDATE loads SET load_number=?, po_number=?, customer=?, pick_up_location=?, 
-            drop_location=?, driver_id=?, truck_unit_snapshot=?, status=?, gross_amount=?, 
+            drop_location=?, driver_id=?, truck_unit_snapshot=?, trailer_id=?, trailer_number=?, status=?, gross_amount=?, 
             notes=?, delivery_date=?, reminder=?, has_lumper=?, has_revised_rate_confirmation=? 
             WHERE id=?
         """;
@@ -197,17 +220,19 @@ public class LoadDAO {
             ps.setString(5, load.getDropLocation());
             ps.setObject(6, load.getDriver() != null ? load.getDriver().getId() : null);
             ps.setString(7, load.getTruckUnitSnapshot());
-            ps.setString(8, load.getStatus().name());
-            ps.setDouble(9, load.getGrossAmount());
-            ps.setString(10, load.getNotes());
+            ps.setInt(8, load.getTrailerId());
+            ps.setString(9, load.getTrailerNumber());
+            ps.setString(10, load.getStatus().name());
+            ps.setDouble(11, load.getGrossAmount());
+            ps.setString(12, load.getNotes());
             if (load.getDeliveryDate() != null)
-                ps.setDate(11, java.sql.Date.valueOf(load.getDeliveryDate()));
+                ps.setDate(13, java.sql.Date.valueOf(load.getDeliveryDate()));
             else
-                ps.setNull(11, java.sql.Types.DATE);
-            ps.setString(12, load.getReminder());
-            ps.setInt(13, load.isHasLumper() ? 1 : 0);
-            ps.setInt(14, load.isHasRevisedRateConfirmation() ? 1 : 0);
-            ps.setInt(15, load.getId());
+                ps.setNull(13, java.sql.Types.DATE);
+            ps.setString(14, load.getReminder());
+            ps.setInt(15, load.isHasLumper() ? 1 : 0);
+            ps.setInt(16, load.isHasRevisedRateConfirmation() ? 1 : 0);
+            ps.setInt(17, load.getId());
             int rowsAffected = ps.executeUpdate();
             if (rowsAffected > 0) {
                 logger.info("Load updated successfully");
@@ -333,6 +358,48 @@ public class LoadDAO {
         return list;
     }
 
+    public List<Load> getByTrailer(int trailerId) {
+        logger.debug("Getting loads by trailer ID: {}", trailerId);
+        List<Load> list = new ArrayList<>();
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            String sql = "SELECT * FROM loads WHERE trailer_id = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setInt(1, trailerId);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                Load load = extractLoad(rs);
+                load.setDocuments(getDocumentsByLoadId(load.getId()));
+                list.add(load);
+            }
+            logger.info("Retrieved {} loads for trailer ID {}", list.size(), trailerId);
+        } catch (SQLException e) {
+            logger.error("Error getting loads by trailer: {}", e.getMessage(), e);
+            throw new DataAccessException("Error getting loads by trailer", e);
+        }
+        return list;
+    }
+
+    public List<Load> getByTrailerNumber(String trailerNumber) {
+        logger.debug("Getting loads by trailer number: {}", trailerNumber);
+        List<Load> list = new ArrayList<>();
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            String sql = "SELECT * FROM loads WHERE trailer_number = ?";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, trailerNumber);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                Load load = extractLoad(rs);
+                load.setDocuments(getDocumentsByLoadId(load.getId()));
+                list.add(load);
+            }
+            logger.info("Retrieved {} loads for trailer number {}", list.size(), trailerNumber);
+        } catch (SQLException e) {
+            logger.error("Error getting loads by trailer number: {}", e.getMessage(), e);
+            throw new DataAccessException("Error getting loads by trailer number", e);
+        }
+        return list;
+    }
+
     public List<Load> getByGrossAmountRange(double min, double max) {
         logger.debug("Getting loads by gross amount range - Min: ${}, Max: ${}", min, max);
         List<Load> list = new ArrayList<>();
@@ -376,9 +443,9 @@ public class LoadDAO {
         return list;
     }
 
-    public List<Load> search(String loadNum, String customer, Integer driverId, Load.Status status, String truckUnit, LocalDate startDate, LocalDate endDate) {
-        logger.debug("Searching loads - LoadNum: {}, Customer: {}, DriverId: {}, Status: {}, TruckUnit: {}, StartDate: {}, EndDate: {}", 
-            loadNum, customer, driverId, status, truckUnit, startDate, endDate);
+    public List<Load> search(String loadNum, String customer, Integer driverId, Integer trailerId, Load.Status status, String truckUnit, LocalDate startDate, LocalDate endDate) {
+        logger.debug("Searching loads - LoadNum: {}, Customer: {}, DriverId: {}, TrailerId: {}, Status: {}, TruckUnit: {}, StartDate: {}, EndDate: {}", 
+            loadNum, customer, driverId, trailerId, status, truckUnit, startDate, endDate);
         List<Load> list = new ArrayList<>();
         StringBuilder sql = new StringBuilder("SELECT * FROM loads WHERE 1=1");
         List<Object> params = new ArrayList<>();
@@ -394,6 +461,10 @@ public class LoadDAO {
         if (driverId != null) {
             sql.append(" AND driver_id = ?");
             params.add(driverId);
+        }
+        if (trailerId != null) {
+            sql.append(" AND trailer_id = ?");
+            params.add(trailerId);
         }
         if (status != null) {
             sql.append(" AND status = ?");
@@ -639,6 +710,18 @@ public class LoadDAO {
             truckUnitSnapshot = driver != null ? driver.getTruckUnit() : ""; 
         }
         
+        // Extract trailer information
+        int trailerId = 0;
+        String trailerNumber = "";
+        try { trailerId = rs.getInt("trailer_id"); } catch (SQLException ex) { trailerId = 0; }
+        try { trailerNumber = rs.getString("trailer_number"); } catch (SQLException ex) { trailerNumber = ""; }
+        
+        // Get trailer object if trailerId exists
+        Trailer trailer = null;
+        if (trailerId > 0) {
+            trailer = trailerDAO.findById(trailerId);
+        }
+        
         Load.Status status = Load.Status.valueOf(rs.getString("status"));
         double gross = rs.getDouble("gross_amount");
         String notes = rs.getString("notes");
@@ -655,7 +738,15 @@ public class LoadDAO {
         boolean hasRevisedRateConfirmation = false;
         try { hasRevisedRateConfirmation = rs.getInt("has_revised_rate_confirmation") == 1; } catch (SQLException ex) { hasRevisedRateConfirmation = false; }
         
-        return new Load(id, loadNumber, poNumber, customer, pickUp, drop, driver, truckUnitSnapshot, status, gross, notes, deliveryDate, reminder, hasLumper, hasRevisedRateConfirmation);
+        Load load = new Load(id, loadNumber, poNumber, customer, pickUp, drop, driver, truckUnitSnapshot, 
+                          status, gross, notes, deliveryDate, reminder, hasLumper, hasRevisedRateConfirmation);
+        
+        // Set trailer info
+        load.setTrailerId(trailerId);
+        load.setTrailerNumber(trailerNumber);
+        load.setTrailer(trailer);
+        
+        return load;
     }
 
     public void addCustomerIfNotExists(String customer) {

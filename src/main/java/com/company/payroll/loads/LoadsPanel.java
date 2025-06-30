@@ -29,6 +29,7 @@ import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.StringConverter;
 
 // Apache PDFBox imports
 import org.apache.pdfbox.io.MemoryUsageSetting;
@@ -46,14 +47,18 @@ import org.slf4j.LoggerFactory;
 // Application-specific imports
 import com.company.payroll.employees.Employee;
 import com.company.payroll.employees.EmployeeDAO;
+import com.company.payroll.trailers.Trailer;
+import com.company.payroll.trailers.TrailerDAO;
 
 public class LoadsPanel extends BorderPane {
     private static final Logger logger = LoggerFactory.getLogger(LoadsPanel.class);
     
     private final LoadDAO loadDAO = new LoadDAO();
     private final EmployeeDAO employeeDAO = new EmployeeDAO();
+    private final TrailerDAO trailerDAO = new TrailerDAO();
     private final ObservableList<Load> allLoads = FXCollections.observableArrayList();
     private final ObservableList<Employee> allDrivers = FXCollections.observableArrayList();
+    private final ObservableList<Trailer> allTrailers = FXCollections.observableArrayList();
     private final ObservableList<String> allCustomers = FXCollections.observableArrayList();
 
     private final List<StatusTab> statusTabs = new ArrayList<>();
@@ -138,6 +143,10 @@ public class LoadsPanel extends BorderPane {
         truckUnitField.setPromptText("Truck/Unit");
         truckUnitField.setPrefWidth(100);
         
+        TextField trailerNumberField = new TextField();
+        trailerNumberField.setPromptText("Trailer #");
+        trailerNumberField.setPrefWidth(100);
+        
         ComboBox<Employee> driverBox = new ComboBox<>(allDrivers);
         driverBox.setPromptText("Driver");
         driverBox.setPrefWidth(150);
@@ -156,6 +165,24 @@ public class LoadsPanel extends BorderPane {
             }
         });
         
+        ComboBox<Trailer> trailerBox = new ComboBox<>(allTrailers);
+        trailerBox.setPromptText("Trailer");
+        trailerBox.setPrefWidth(150);
+        trailerBox.setCellFactory(cb -> new ListCell<Trailer>() {
+            @Override
+            protected void updateItem(Trailer t, boolean empty) {
+                super.updateItem(t, empty);
+                setText((t == null || empty) ? "" : t.getTrailerNumber() + " - " + t.getType());
+            }
+        });
+        trailerBox.setButtonCell(new ListCell<Trailer>() {
+            @Override
+            protected void updateItem(Trailer t, boolean empty) {
+                super.updateItem(t, empty);
+                setText((t == null || empty) ? "" : t.getTrailerNumber() + " - " + t.getType());
+            }
+        });
+        
         ComboBox<String> customerBox = new ComboBox<>(allCustomers);
         customerBox.setPromptText("Customer");
         customerBox.setPrefWidth(150);
@@ -170,8 +197,8 @@ public class LoadsPanel extends BorderPane {
         
         Button clearSearchBtn = new Button("Clear Search");
 
-        HBox searchBox1 = new HBox(8, new Label("Search:"), loadNumField, truckUnitField, driverBox, customerBox);
-        HBox searchBox2 = new HBox(8, new Label("Date Range:"), startDatePicker, new Label("to"), endDatePicker, clearSearchBtn);
+        HBox searchBox1 = new HBox(8, new Label("Search:"), loadNumField, truckUnitField, trailerNumberField, driverBox);
+        HBox searchBox2 = new HBox(8, customerBox, new Label("Date Range:"), startDatePicker, new Label("to"), endDatePicker, clearSearchBtn);
         VBox searchContainer = new VBox(5, searchBox1, searchBox2);
         searchContainer.setPadding(new Insets(10));
         searchContainer.setStyle("-fx-background-color:#f7f9ff;");
@@ -215,9 +242,19 @@ public class LoadsPanel extends BorderPane {
                 pred = pred.and(l -> l.getTruckUnitSnapshot() != null && l.getTruckUnitSnapshot().toLowerCase().contains(truckUnit));
             }
             
+            String trailerNumber = trailerNumberField.getText().trim().toLowerCase();
+            if (!trailerNumber.isEmpty()) {
+                pred = pred.and(l -> l.getTrailerNumber() != null && l.getTrailerNumber().toLowerCase().contains(trailerNumber));
+            }
+            
             Employee driver = driverBox.getValue();
             if (driver != null) {
                 pred = pred.and(l -> l.getDriver() != null && l.getDriver().getId() == driver.getId());
+            }
+            
+            Trailer trailer = trailerBox.getValue();
+            if (trailer != null) {
+                pred = pred.and(l -> l.getTrailer() != null && l.getTrailer().getId() == trailer.getId());
             }
             
             String customer = customerBox.getValue();
@@ -240,7 +277,9 @@ public class LoadsPanel extends BorderPane {
         // Add listeners
         loadNumField.textProperty().addListener((obs, o, n) -> refilter.run());
         truckUnitField.textProperty().addListener((obs, o, n) -> refilter.run());
+        trailerNumberField.textProperty().addListener((obs, o, n) -> refilter.run());
         driverBox.valueProperty().addListener((obs, o, n) -> refilter.run());
+        trailerBox.valueProperty().addListener((obs, o, n) -> refilter.run());
         customerBox.valueProperty().addListener((obs, o, n) -> refilter.run());
         startDatePicker.valueProperty().addListener((obs, o, n) -> refilter.run());
         endDatePicker.valueProperty().addListener((obs, o, n) -> refilter.run());
@@ -249,7 +288,9 @@ public class LoadsPanel extends BorderPane {
             logger.info("Clearing search filters");
             loadNumField.clear();
             truckUnitField.clear();
+            trailerNumberField.clear();
             driverBox.setValue(null);
+            trailerBox.setValue(null);
             customerBox.setValue(null);
             startDatePicker.setValue(null);
             endDatePicker.setValue(null);
@@ -500,6 +541,10 @@ public class LoadsPanel extends BorderPane {
         TableColumn<Load, String> truckUnitCol = new TableColumn<>("Truck/Unit");
         truckUnitCol.setCellValueFactory(e -> new SimpleStringProperty(e.getValue().getTruckUnitSnapshot()));
         truckUnitCol.setPrefWidth(80);
+        
+        TableColumn<Load, String> trailerCol = new TableColumn<>("Trailer");
+        trailerCol.setCellValueFactory(e -> new SimpleStringProperty(e.getValue().getTrailerNumber()));
+        trailerCol.setPrefWidth(80);
 
         TableColumn<Load, String> statusCol = new TableColumn<>("Status");
         statusCol.setCellValueFactory(e -> new SimpleStringProperty(e.getValue().getStatus().toString()));
@@ -564,7 +609,8 @@ public class LoadsPanel extends BorderPane {
         ));
         deliveryDateCol.setPrefWidth(100);
 
-        table.getColumns().addAll(loadNumCol, poCol, customerCol, pickUpCol, dropCol, driverCol, truckUnitCol, statusCol, grossCol, reminderCol, deliveryDateCol);
+        table.getColumns().addAll(loadNumCol, poCol, customerCol, pickUpCol, dropCol, driverCol, 
+                                truckUnitCol, trailerCol, statusCol, grossCol, reminderCol, deliveryDateCol);
 
         // Add action columns if requested
         if (includeActionColumns) {
@@ -986,7 +1032,12 @@ public class LoadsPanel extends BorderPane {
 			contentStream.showText("Truck/Unit: " + load.getTruckUnitSnapshot());
 			contentStream.newLine();
 			
-			contentStream.showText("Trailer #: " + (load.getDriver() != null ? load.getDriver().getTrailerNumber() : "N/A"));
+			// Add trailer information to cover page
+			String trailerInfo = load.getTrailerNumber() != null && !load.getTrailerNumber().isEmpty() ? 
+				load.getTrailerNumber() : 
+				(load.getDriver() != null ? load.getDriver().getTrailerNumber() : "N/A");
+				
+			contentStream.showText("Trailer #: " + trailerInfo);
 			contentStream.newLine();
 			
 			contentStream.showText("Delivery Date: " + (load.getDeliveryDate() != null ? load.getDeliveryDate().toString() : "N/A"));
@@ -1199,6 +1250,44 @@ public class LoadsPanel extends BorderPane {
             }
         });
         
+        // Trailer selection
+        ComboBox<Trailer> trailerBox = new ComboBox<>(allTrailers);
+        trailerBox.setPromptText("Select Trailer");
+        trailerBox.setCellFactory(cb -> new ListCell<Trailer>() {
+            @Override
+            protected void updateItem(Trailer t, boolean empty) {
+                super.updateItem(t, empty);
+                setText((t == null || empty) ? "" : t.getTrailerNumber() + " - " + t.getType());
+            }
+        });
+        trailerBox.setButtonCell(new ListCell<Trailer>() {
+            @Override
+            protected void updateItem(Trailer t, boolean empty) {
+                super.updateItem(t, empty);
+                setText((t == null || empty) ? "" : t.getTrailerNumber() + " - " + t.getType());
+            }
+        });
+        
+        TextField trailerSearchField = new TextField();
+        trailerSearchField.setPromptText("Search by Trailer #");
+        
+        // Link trailer search to selection
+        trailerSearchField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.trim().isEmpty()) {
+                Trailer found = trailerDAO.findByTrailerNumber(newVal.trim());
+                if (found != null) {
+                    trailerBox.setValue(found);
+                }
+            }
+        });
+        
+        // Update trailer search field when trailer is selected
+        trailerBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                trailerSearchField.setText(newVal.getTrailerNumber());
+            }
+        });
+        
         ComboBox<Load.Status> statusBox = new ComboBox<>(FXCollections.observableArrayList(Load.Status.values()));
         TextField grossField = new TextField();
         TextArea notesField = new TextArea();
@@ -1216,6 +1305,8 @@ public class LoadsPanel extends BorderPane {
             customerBox.setValue(load.getCustomer());
             pickUpField.setText(load.getPickUpLocation());
             dropField.setText(load.getDropLocation());
+            
+            // Set driver
             Employee loadedDriver = load.getDriver();
             if (loadedDriver != null) {
                 Employee matching = allDrivers.stream()
@@ -1226,6 +1317,19 @@ public class LoadsPanel extends BorderPane {
             } else {
                 driverBox.setValue(null);
             }
+            
+            // Set trailer
+            Trailer loadedTrailer = load.getTrailer();
+            if (loadedTrailer != null) {
+                Trailer matching = allTrailers.stream()
+                        .filter(t -> t.getId() == loadedTrailer.getId())
+                        .findFirst()
+                        .orElse(null);
+                trailerBox.setValue(matching);
+            } else if (load.getTrailerNumber() != null && !load.getTrailerNumber().isEmpty()) {
+                trailerSearchField.setText(load.getTrailerNumber());
+            }
+            
             statusBox.setValue(load.getStatus());
             grossField.setText(String.valueOf(load.getGrossAmount()));
             notesField.setText(load.getNotes());
@@ -1253,6 +1357,8 @@ public class LoadsPanel extends BorderPane {
         grid.add(new Label("Drop Location:"), 0, r);grid.add(dropField, 1, r++);
         grid.add(new Label("Driver:"), 0, r);       grid.add(driverBox, 1, r++);
         grid.add(new Label("Find by Truck:"), 0, r);grid.add(truckUnitSearchField, 1, r++);
+        grid.add(new Label("Trailer:"), 0, r);      grid.add(trailerBox, 1, r++);
+        grid.add(new Label("Find by Trailer #:"), 0, r);grid.add(trailerSearchField, 1, r++);
         grid.add(new Label("Status:"), 0, r);       grid.add(statusBox, 1, r++);
         grid.add(new Label("Gross Amount:"), 0, r); grid.add(grossField, 1, r++);
         grid.add(new Label("Notes:"), 0, r);        grid.add(notesField, 1, r++);
@@ -1302,6 +1408,7 @@ public class LoadsPanel extends BorderPane {
                     String pickUp = pickUpField.getText().trim();
                     String drop = dropField.getText().trim();
                     Employee driver = driverBox.getValue();
+                    Trailer trailer = trailerBox.getValue();
                     Load.Status status = statusBox.getValue() != null ? statusBox.getValue() : Load.Status.BOOKED;
                     double gross = grossField.getText().isEmpty() ? 0 : Double.parseDouble(grossField.getText());
                     String notes = notesField.getText().trim();
@@ -1310,12 +1417,28 @@ public class LoadsPanel extends BorderPane {
                     boolean hasLumper = hasLumperCheck.isSelected();
                     boolean hasRevisedRate = hasRevisedRateCheck.isSelected();
                     
-                    // Capture truck unit at time of load creation/update
+					// Capture truck unit at time of load creation/update
                     String truckUnitSnapshot = driver != null ? driver.getTruckUnit() : "";
+                    
+                    // Get trailer info
+                    int trailerId = 0;
+                    String trailerNumber = "";
+                    if (trailer != null) {
+                        trailerId = trailer.getId();
+                        trailerNumber = trailer.getTrailerNumber();
+                    }
 
                     if (isAdd) {
                         logger.info("Adding new load: {}", loadNum);
-                        Load newLoad = new Load(0, loadNum, poNum, customer, pickUp, drop, driver, truckUnitSnapshot, status, gross, notes, deliveryDate, reminder, hasLumper, hasRevisedRate);
+                        Load newLoad = new Load(0, loadNum, poNum, customer, pickUp, drop, driver, 
+                                             truckUnitSnapshot, status, gross, notes, deliveryDate, 
+                                             reminder, hasLumper, hasRevisedRate);
+                        
+                        // Set trailer information
+                        newLoad.setTrailerId(trailerId);
+                        newLoad.setTrailerNumber(trailerNumber);
+                        newLoad.setTrailer(trailer);
+                        
                         int newId = loadDAO.add(newLoad);
                         newLoad.setId(newId);
                         logger.info("Load added successfully: {} (ID: {})", loadNum, newId);
@@ -1328,10 +1451,17 @@ public class LoadsPanel extends BorderPane {
                         load.setPickUpLocation(pickUp);
                         load.setDropLocation(drop);
                         load.setDriver(driver);
+                        
                         // Don't update truck unit snapshot on edit - preserve historical data
                         if (load.getTruckUnitSnapshot() == null || load.getTruckUnitSnapshot().isEmpty()) {
                             load.setTruckUnitSnapshot(truckUnitSnapshot);
                         }
+                        
+                        // Update trailer information
+                        load.setTrailerId(trailerId);
+                        load.setTrailerNumber(trailerNumber);
+                        load.setTrailer(trailer);
+                        
                         load.setStatus(status);
                         load.setGrossAmount(gross);
                         load.setNotes(notes);
@@ -1374,13 +1504,14 @@ public class LoadsPanel extends BorderPane {
         logger.debug("Reloading all data");
         allLoads.setAll(loadDAO.getAll());
         allDrivers.setAll(employeeDAO.getAll());
+        allTrailers.setAll(trailerDAO.findAll());
         allCustomers.setAll(loadDAO.getAllCustomers());
         for (StatusTab tab : statusTabs) {
             if (tab.filteredList != null)
                 tab.filteredList.setPredicate(tab.filteredList.getPredicate());
         }
-        logger.info("Data reload complete - Loads: {}, Drivers: {}, Customers: {}", 
-            allLoads.size(), allDrivers.size(), allCustomers.size());
+        logger.info("Data reload complete - Loads: {}, Drivers: {}, Trailers: {}, Customers: {}", 
+            allLoads.size(), allDrivers.size(), allTrailers.size(), allCustomers.size());
     }
 
     /**
@@ -1389,6 +1520,14 @@ public class LoadsPanel extends BorderPane {
     public void onEmployeeDataChanged(List<Employee> currentList) {
         logger.debug("Employee data changed, updating drivers list with {} employees", currentList.size());
         allDrivers.setAll(currentList);
+    }
+    
+    /**
+     * Call this method when trailer list changes.
+     */
+    public void onTrailerDataChanged(List<Trailer> currentList) {
+        logger.debug("Trailer data changed, updating trailers list with {} trailers", currentList.size());
+        allTrailers.setAll(currentList);
     }
 
     private boolean isDouble(String s) {
@@ -1419,6 +1558,7 @@ public class LoadsPanel extends BorderPane {
                         safe(l.getDropLocation()),
                         safe(l.getDriver() != null ? l.getDriver().getName() : ""),
                         safe(l.getTruckUnitSnapshot()),
+                        safe(l.getTrailerNumber()),
                         safe(l.getStatus().toString()),
                         String.valueOf(l.getGrossAmount()),
                         safe(l.getReminder()),

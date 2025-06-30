@@ -1,6 +1,8 @@
 package com.company.payroll.loads;
 
 import com.company.payroll.employees.EmployeesTab;
+import com.company.payroll.trailers.TrailersTab;
+import com.company.payroll.trailers.Trailer;
 import javafx.scene.control.Tab;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +15,9 @@ import java.util.function.Consumer;
  * LoadsTab is a wrapper Tab for displaying the LoadsPanel inside a TabPane.
  * It can be further extended to listen for employee changes and propagate them to the LoadsPanel if needed.
  */
-public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeListener, LoadsPanel.LoadDataChangeListener {
+public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeListener, 
+                                            TrailersTab.TrailerDataChangeListener, 
+                                            LoadsPanel.LoadDataChangeListener {
     private static final Logger logger = LoggerFactory.getLogger(LoadsTab.class);
     private final LoadsPanel loadsPanel;
     private Consumer<List<Load>> syncCallback;
@@ -25,12 +29,15 @@ public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeList
     
     private final List<LoadDataChangeListener> loadDataChangeListeners = new ArrayList<>();
 
-    public LoadsTab(EmployeesTab employeesTab) {
+    public LoadsTab(EmployeesTab employeesTab, TrailersTab trailersTab) {
         super("Loads");
         logger.info("Initializing LoadsTab");
         this.loadsPanel = new LoadsPanel();
         setContent(loadsPanel);
+        
+        // Register for employee and trailer updates
         employeesTab.addEmployeeDataChangeListener(this);
+        trailersTab.addTrailerDataChangeListener(this);
         
         // Register this tab as a listener for load data changes
         loadsPanel.addLoadDataChangeListener(this);
@@ -61,6 +68,12 @@ public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeList
     public void onEmployeeDataChanged(java.util.List<com.company.payroll.employees.Employee> currentList) {
         logger.debug("Employee data changed, updating LoadsPanel with {} employees", currentList.size());
         loadsPanel.onEmployeeDataChanged(currentList);
+    }
+    
+    @Override
+    public void onTrailerDataChanged(java.util.List<com.company.payroll.trailers.Trailer> currentList) {
+        logger.debug("Trailer data changed, updating LoadsPanel with {} trailers", currentList.size());
+        loadsPanel.onTrailerDataChanged(currentList);
     }
     
     @Override

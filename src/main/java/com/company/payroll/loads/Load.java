@@ -1,6 +1,7 @@
 package com.company.payroll.loads;
 
 import com.company.payroll.employees.Employee;
+import com.company.payroll.trailers.Trailer;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +17,12 @@ public class Load {
     private String dropLocation;
     private Employee driver;
     private String truckUnitSnapshot; // Snapshot of truck unit at time of load creation
+    
+    // Trailer relationship
+    private int trailerId;
+    private String trailerNumber;
+    private Trailer trailer;
+    
     private Status status;
     private double grossAmount;
     private String notes;
@@ -52,8 +59,24 @@ public class Load {
         this.hasRevisedRateConfirmation = hasRevisedRateConfirmation;
         this.documents = new ArrayList<>();
         
+        // Initialize trailer fields
+        this.trailerId = 0;
+        this.trailerNumber = "";
+        this.trailer = null;
+        
         // Parse locations if possible
         parseLocations();
+    }
+
+    // Constructor with trailer parameters
+    public Load(int id, String loadNumber, String poNumber, String customer, String pickUpLocation, String dropLocation,
+                Employee driver, String truckUnitSnapshot, int trailerId, String trailerNumber, Status status, 
+                double grossAmount, String notes, LocalDate deliveryDate, String reminder, boolean hasLumper, 
+                boolean hasRevisedRateConfirmation) {
+        this(id, loadNumber, poNumber, customer, pickUpLocation, dropLocation, driver, truckUnitSnapshot, 
+            status, grossAmount, notes, deliveryDate, reminder, hasLumper, hasRevisedRateConfirmation);
+        this.trailerId = trailerId;
+        this.trailerNumber = trailerNumber;
     }
 
     // Backwards compatible constructors
@@ -109,7 +132,7 @@ public class Load {
         this.driverRate = this.grossAmount * 0.75;
     }
 
-    // Getters and setters
+    // Getters and setters for existing fields
     public int getId() { return id; }
     public void setId(int id) { this.id = id; }
     public String getLoadNumber() { return loadNumber; }
@@ -152,6 +175,20 @@ public class Load {
     public void setHasRevisedRateConfirmation(boolean hasRevisedRateConfirmation) { this.hasRevisedRateConfirmation = hasRevisedRateConfirmation; }
     public List<LoadDocument> getDocuments() { return documents; }
     public void setDocuments(List<LoadDocument> documents) { this.documents = documents; }
+
+    // Getters and setters for trailer fields
+    public int getTrailerId() { return trailerId; }
+    public void setTrailerId(int trailerId) { this.trailerId = trailerId; }
+    public String getTrailerNumber() { return trailerNumber; }
+    public void setTrailerNumber(String trailerNumber) { this.trailerNumber = trailerNumber; }
+    public Trailer getTrailer() { return trailer; }
+    public void setTrailer(Trailer trailer) { 
+        this.trailer = trailer; 
+        if (trailer != null) {
+            this.trailerId = trailer.getId();
+            this.trailerNumber = trailer.getTrailerNumber();
+        }
+    }
 
     // NEW GETTERS AND SETTERS FOR MISSING METHODS
     public String getPickupCity() { 
