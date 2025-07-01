@@ -13,6 +13,9 @@ import com.company.payroll.trailers.TrailerStatus;
  * Model class representing a trailer in the fleet management system.
  */
 public class Trailer {
+    // System property to get current user
+    private static final String CURRENT_USER = System.getProperty("user.name", "mgubran1");
+    
     // Primary properties
     private final IntegerProperty id = new SimpleIntegerProperty();
     private final StringProperty trailerNumber = new SimpleStringProperty();
@@ -65,7 +68,7 @@ public class Trailer {
     
     // Tracking
     private final ObjectProperty<LocalDateTime> lastUpdated = new SimpleObjectProperty<>(LocalDateTime.now());
-    private final StringProperty updatedBy = new SimpleStringProperty("mgubran1");
+    private final StringProperty updatedBy = new SimpleStringProperty(CURRENT_USER);
     private final StringProperty notes = new SimpleStringProperty();
     
 
@@ -73,13 +76,17 @@ public class Trailer {
     // Constructors
     public Trailer() {
         // Default constructor
+        // Initialize with current user
+        this.updatedBy.set(CURRENT_USER);
     }
     
     public Trailer(String trailerNumber) {
+        this();
         this.trailerNumber.set(trailerNumber);
     }
     
     public Trailer(String trailerNumber, String vin, String make, String model, int year) {
+        this();
         this.trailerNumber.set(trailerNumber);
         this.vin.set(vin);
         this.make.set(make);
@@ -129,7 +136,9 @@ public class Trailer {
     
     public String getDisplayName() {
         StringBuilder sb = new StringBuilder();
-        sb.append(trailerNumber.get());
+        if (trailerNumber.get() != null) {
+            sb.append(trailerNumber.get());
+        }
         
         if (make.get() != null && !make.get().isEmpty()) {
             sb.append(" - ").append(make.get());
@@ -327,7 +336,7 @@ public class Trailer {
     
     public void setId(int id) {
         this.id.set(id);
-        updateLastModified();
+        // Don't update last modified when setting ID
     }
     
     public String getTrailerNumber() {
@@ -710,7 +719,7 @@ public class Trailer {
     // Helper methods
     private void updateLastModified() {
         lastUpdated.set(LocalDateTime.now());
-        updatedBy.set("mgubran1"); // Current user
+        updatedBy.set(CURRENT_USER);
     }
     
     @Override

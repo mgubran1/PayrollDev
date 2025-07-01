@@ -310,6 +310,7 @@ public class TrailersTab extends BorderPane {
         ComboBox<String> typeBox = new ComboBox<>(FXCollections.observableArrayList(
                 "Dry Van", "Reefer", "Flatbed", "Step Deck", "Double Drop", "Container", "Tanker", "Other"));
         ComboBox<TrailerStatus> statusBox = new ComboBox<>(FXCollections.observableArrayList(TrailerStatus.values()));
+        statusBox.setValue(TrailerStatus.ACTIVE); // Set default value for new trailers
         DatePicker regExpiryPicker = new DatePicker();
         DatePicker insExpiryPicker = new DatePicker();
         DatePicker inspExpiryPicker = new DatePicker();
@@ -422,7 +423,7 @@ public class TrailersTab extends BorderPane {
                     
                     try {
                         if (!lengthField.getText().trim().isEmpty()) {
-                            result.setLength(Integer.parseInt(lengthField.getText().trim()));
+                            result.setLength(Double.parseDouble(lengthField.getText().trim()));
                         }
                     } catch (NumberFormatException e) {
                         logger.warn("Invalid length format: {}", lengthField.getText());
@@ -430,14 +431,14 @@ public class TrailersTab extends BorderPane {
                     
                     try {
                         if (!capacityField.getText().trim().isEmpty()) {
-                            result.setCapacity(Integer.parseInt(capacityField.getText().trim()));
+                            result.setCapacity(Double.parseDouble(capacityField.getText().trim()));
                         }
                     } catch (NumberFormatException e) {
                         logger.warn("Invalid capacity format: {}", capacityField.getText());
                     }
                     
                     result.setType(typeBox.getValue());
-                    result.setStatus(statusBox.getValue());
+                    result.setStatus(statusBox.getValue() != null ? statusBox.getValue() : TrailerStatus.ACTIVE);
                     result.setLicensePlate(plateField.getText().trim());
                     result.setRegistrationExpiryDate(regExpiryPicker.getValue());
                     result.setInsuranceExpiryDate(insExpiryPicker.getValue());
