@@ -747,8 +747,10 @@ public class LoadsPanel extends BorderPane {
         ));
         deliveryDateCol.setPrefWidth(100);
 
-        table.getColumns().addAll(loadNumCol, poCol, customerCol, pickUpCol, dropCol, driverCol, 
-                                truckUnitCol, trailerCol, statusCol, grossCol, reminderCol, pickupDateCol, deliveryDateCol);
+        table.getColumns().addAll(
+                Arrays.asList(loadNumCol, poCol, customerCol, pickUpCol, dropCol,
+                        driverCol, truckUnitCol, trailerCol, statusCol, grossCol,
+                        reminderCol, pickupDateCol, deliveryDateCol));
 
         // Add action columns if requested
         if (includeActionColumns) {
@@ -813,7 +815,7 @@ public class LoadsPanel extends BorderPane {
                 }
             });
             
-            table.getColumns().addAll(lumperCol, docsCol);
+            table.getColumns().addAll(Arrays.asList(lumperCol, docsCol));
         }
 
         return table;

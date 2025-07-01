@@ -883,6 +883,15 @@ public class TrailersTab extends BorderPane {
         }
     }
 
+    /**
+     * Get a snapshot of the current list of trailers.
+     *
+     * @return list of trailers currently loaded in the tab
+     */
+    public List<Trailer> getCurrentTrailers() {
+        return new ArrayList<>(trailers);
+    }
+
     /** Notify listeners that trailer data has changed. */
     private void notifyDataChange() {
         for (Runnable r : dataChangeListeners) {
