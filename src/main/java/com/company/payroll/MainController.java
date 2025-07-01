@@ -113,6 +113,10 @@ public class MainController extends BorderPane {
             maintenanceTab.setGraphic(createEnhancedTabIcon("🔧", "#34495e"));
             logger.info("Maintenance tab created successfully");
 
+            // Keep unit selectors in sync when trucks or trailers change
+            trucksTabContent.addDataChangeListener(maintenanceTab::refreshUnitNumbers);
+            trailersTabContent.addDataChangeListener(maintenanceTab::refreshUnitNumbers);
+
             // Company Expenses tab
             logger.debug("Creating Company Expenses tab");
             CompanyExpensesTab companyExpensesTab = new CompanyExpensesTab();

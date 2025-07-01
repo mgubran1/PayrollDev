@@ -505,6 +505,8 @@ public class MaintenanceTab extends Tab {
     
     private void loadData() {
         logger.info("Loading maintenance data");
+
+        updateUnitNumberFilter();
         
         try {
             List<MaintenanceRecord> records = maintenanceDAO.findByDateRange(
@@ -614,6 +616,11 @@ public class MaintenanceTab extends Tab {
         } else {
             unitNumberFilter.setValue("All");
         }
+    }
+
+    /** Called by other tabs when trucks or trailers are modified. */
+    public void refreshUnitNumbers() {
+        updateUnitNumberFilter();
     }
     
     private void updateSummaryCards() {
@@ -1321,15 +1328,93 @@ public class MaintenanceTab extends Tab {
     }
     
     private void exportToExcel() {
-        // This would require Apache POI library
-        showAlert(Alert.AlertType.INFORMATION, "Export to Excel", 
-                 "Excel export requires additional libraries. Use CSV export instead.");
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Excel File");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Excel Files", "*.xlsx"));
+        fileChooser.setInitialFileName("maintenance_" + LocalDate.now() + ".xlsx");
+
+        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
+        if (file != null) {
+            try (org.apache.poi.xssf.usermodel.XSSFWorkbook wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+                org.apache.poi.ss.usermodel.Sheet sheet = wb.createSheet("Maintenance");
+                String[] headers = {"Date","Unit Type","Unit Number","Service Type","Mileage","Cost","Vendor","Invoice #","Notes"};
+                org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
+                for (int i = 0; i < headers.length; i++) {
+                    headerRow.createCell(i).setCellValue(headers[i]);
+                }
+
+                List<MaintenanceRecord> records = filteredRecords != null ? new ArrayList<>(filteredRecords) : new ArrayList<>();
+                int rowIdx = 1;
+                for (MaintenanceRecord r : records) {
+                    org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowIdx++);
+                    row.createCell(0).setCellValue(r.getDate().format(DATE_FORMAT));
+                    row.createCell(1).setCellValue(r.getVehicleType().toString());
+                    row.createCell(2).setCellValue(r.getVehicle());
+                    row.createCell(3).setCellValue(r.getServiceType());
+                    row.createCell(4).setCellValue(r.getMileage());
+                    row.createCell(5).setCellValue(r.getCost());
+                    row.createCell(6).setCellValue(r.getServiceProvider() != null ? r.getServiceProvider() : "");
+                    row.createCell(7).setCellValue(r.getReceiptNumber() != null ? r.getReceiptNumber() : "");
+                    row.createCell(8).setCellValue(r.getNotes() != null ? r.getNotes() : "");
+                }
+
+                for (int i = 0; i < headers.length; i++) {
+                    sheet.autoSizeColumn(i);
+                }
+
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
+                    wb.write(fos);
+                }
+
+                showAlert(Alert.AlertType.INFORMATION, "Export Successful", "Maintenance data exported to Excel successfully!");
+            } catch (Exception e) {
+                logger.error("Failed to export to Excel", e);
+                showAlert(Alert.AlertType.ERROR, "Export Failed", "Failed to export data: " + e.getMessage());
+            }
+        }
     }
-    
+
     private void exportToPDF() {
-        // This would require a PDF library like iText
-        showAlert(Alert.AlertType.INFORMATION, "Export to PDF", 
-                 "PDF export requires additional libraries. Use CSV export instead.");
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save PDF File");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
+        fileChooser.setInitialFileName("maintenance_" + LocalDate.now() + ".pdf");
+
+        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
+        if (file != null) {
+            try (org.apache.pdfbox.pdmodel.PDDocument doc = new org.apache.pdfbox.pdmodel.PDDocument()) {
+                org.apache.pdfbox.pdmodel.PDPage page = new org.apache.pdfbox.pdmodel.PDPage(org.apache.pdfbox.pdmodel.common.PDRectangle.LETTER);
+                doc.addPage(page);
+                try (org.apache.pdfbox.pdmodel.PDPageContentStream cs = new org.apache.pdfbox.pdmodel.PDPageContentStream(doc, page)) {
+                    cs.beginText();
+                    org.apache.pdfbox.pdmodel.font.PDType1Font font = new org.apache.pdfbox.pdmodel.font.PDType1Font(
+                            org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA);
+                    cs.setFont(font, 12);
+                    float leading = 14f;
+                    cs.newLineAtOffset(50, page.getMediaBox().getHeight() - 50);
+                    cs.showText("Date | Unit Type | Unit Number | Service Type | Cost");
+                    cs.newLineAtOffset(0, -leading);
+
+                    List<MaintenanceRecord> records = filteredRecords != null ? new ArrayList<>(filteredRecords) : new ArrayList<>();
+                    for (MaintenanceRecord r : records) {
+                        String line = String.format("%s  %s  %s  %s  %.2f",
+                                r.getDate().format(DATE_FORMAT),
+                                r.getVehicleType(),
+                                r.getVehicle(),
+                                r.getServiceType(),
+                                r.getCost());
+                        cs.showText(line);
+                        cs.newLineAtOffset(0, -leading);
+                    }
+                    cs.endText();
+                }
+                doc.save(file);
+                showAlert(Alert.AlertType.INFORMATION, "Export Successful", "Maintenance data exported to PDF successfully!");
+            } catch (Exception e) {
+                logger.error("Failed to export to PDF", e);
+                showAlert(Alert.AlertType.ERROR, "Export Failed", "Failed to export data: " + e.getMessage());
+            }
+        }
     }
     
     private void showAlert(Alert.AlertType type, String title, String content) {

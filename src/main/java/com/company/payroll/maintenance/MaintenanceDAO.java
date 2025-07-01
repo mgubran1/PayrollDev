@@ -189,9 +189,9 @@ public class MaintenanceDAO {
         
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            
-            setParameters(pstmt, record);
-            pstmt.setInt(44, record.getId());
+
+            setUpdateParameters(pstmt, record);
+            pstmt.setInt(43, record.getId());
             
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows == 0) {
@@ -419,6 +419,55 @@ public class MaintenanceDAO {
         pstmt.setString(41, record.getAttachedDocuments());
         pstmt.setString(42, record.getCreatedBy() != null ? record.getCreatedBy() : "mgubran1");
         pstmt.setString(43, record.getModifiedBy() != null ? record.getModifiedBy() : "mgubran1");
+    }
+
+    /**
+     * Set parameters for UPDATE statements. Excludes the created_by column to
+     * keep the parameter count in sync with the SQL statement.
+     */
+    private void setUpdateParameters(PreparedStatement pstmt, MaintenanceRecord record) throws SQLException {
+        pstmt.setString(1, record.getVehicleType() != null ? record.getVehicleType().name() : "TRUCK");
+        pstmt.setInt(2, record.getVehicleId());
+        pstmt.setString(3, record.getVehicle());
+        pstmt.setDate(4, Date.valueOf(record.getDate()));
+        pstmt.setString(5, record.getServiceType());
+        pstmt.setString(6, record.getDescription());
+        pstmt.setInt(7, record.getMileage());
+        pstmt.setDouble(8, record.getCost());
+        pstmt.setDouble(9, record.getLaborCost());
+        pstmt.setDouble(10, record.getPartsCost());
+        pstmt.setDouble(11, record.getTaxAmount());
+        pstmt.setString(12, record.getTechnician());
+        pstmt.setString(13, record.getStatus());
+        pstmt.setString(14, record.getPriority() != null ? record.getPriority().name() : "MEDIUM");
+        pstmt.setString(15, record.getNotes());
+        pstmt.setDate(16, record.getNextDue() != null ? Date.valueOf(record.getNextDue()) : null);
+        pstmt.setString(17, record.getReceiptNumber());
+        pstmt.setString(18, record.getReceiptPath());
+        pstmt.setString(19, record.getServiceProvider());
+        pstmt.setString(20, record.getProviderLocation());
+        pstmt.setString(21, record.getProviderPhone());
+        pstmt.setString(22, record.getWorkOrderNumber());
+        pstmt.setTimestamp(23, record.getScheduledStartTime() != null ? Timestamp.valueOf(record.getScheduledStartTime()) : null);
+        pstmt.setTimestamp(24, record.getActualStartTime() != null ? Timestamp.valueOf(record.getActualStartTime()) : null);
+        pstmt.setTimestamp(25, record.getCompletionTime() != null ? Timestamp.valueOf(record.getCompletionTime()) : null);
+        pstmt.setDouble(26, record.getLaborHours());
+        pstmt.setString(27, record.getPerformedBy());
+        pstmt.setString(28, record.getAuthorizedBy());
+        pstmt.setInt(29, record.getHoursAtService());
+        pstmt.setString(30, record.getPartsUsed());
+        pstmt.setString(31, record.getLaborDescription());
+        pstmt.setString(32, record.getAdditionalNotes());
+        pstmt.setString(33, record.getWarrantyInfo());
+        pstmt.setDate(34, record.getWarrantyExpiry() != null ? Date.valueOf(record.getWarrantyExpiry()) : null);
+        pstmt.setBoolean(35, record.isWarrantyClaim());
+        pstmt.setString(36, record.getDefectFound());
+        pstmt.setString(37, record.getCorrectiveAction());
+        pstmt.setString(38, record.getPreventiveAction());
+        pstmt.setInt(39, record.getDowntimeHours());
+        pstmt.setDouble(40, record.getDowntimeCost());
+        pstmt.setString(41, record.getAttachedDocuments());
+        pstmt.setString(42, record.getModifiedBy() != null ? record.getModifiedBy() : "mgubran1");
     }
     
     private MaintenanceRecord mapResultSetToMaintenanceRecord(ResultSet rs) throws SQLException {

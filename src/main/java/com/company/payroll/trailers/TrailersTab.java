@@ -38,6 +38,9 @@ public class TrailersTab extends BorderPane {
     private final ObservableList<Trailer> trailers = FXCollections.observableArrayList();
     private final TableView<Trailer> table = new TableView<>();
     private final Map<String, Employee> driverMap = new HashMap<>();
+
+    // Listeners notified when trailer data changes
+    private final List<Runnable> dataChangeListeners = new ArrayList<>();
     
     // Document storage path
     private final String docStoragePath = "trailer_documents";
@@ -196,6 +199,7 @@ public class TrailersTab extends BorderPane {
                         logger.info("User confirmed deletion of trailer: {}", selected.getTrailerNumber());
                         trailerDAO.delete(selected.getId());
                         loadData();
+                        notifyDataChange();
                     }
                 });
             }
@@ -457,6 +461,7 @@ public class TrailersTab extends BorderPane {
                 logger.info("Updated trailer: {}", result.getTrailerNumber());
             }
             loadData();
+            notifyDataChange();
         });
     }
     
@@ -864,9 +869,28 @@ public class TrailersTab extends BorderPane {
                     });
             }
         }
-        
+
         // Reload data to refresh the view
         loadData();
+        notifyDataChange();
+    }
+
+    /** Register a listener to be notified when trailer data changes. */
+    public void addDataChangeListener(Runnable listener) {
+        if (listener != null) {
+            dataChangeListeners.add(listener);
+        }
+    }
+
+    /** Notify listeners that trailer data has changed. */
+    private void notifyDataChange() {
+        for (Runnable r : dataChangeListeners) {
+            try {
+                r.run();
+            } catch (Exception ex) {
+                logger.warn("Trailer data change listener threw exception", ex);
+            }
+        }
     }
     
     private static class Desktop {
