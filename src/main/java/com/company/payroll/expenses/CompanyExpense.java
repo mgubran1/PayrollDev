@@ -1,10 +1,11 @@
 package com.company.payroll.expenses;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
- * Simple model representing a single company expense entry.
- * This matches the fields used by {@link CompanyExpensesTab}.
+ * Model representing a company expense entry in the fleet management system.
+ * Tracks all business expenses including fuel, insurance, permits, office supplies, etc.
  */
 public class CompanyExpense {
     private int id;
@@ -20,10 +21,19 @@ public class CompanyExpense {
     private String status;
     private String notes;
     private String employeeId;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+    private String approvedBy;
+    private LocalDate approvalDate;
 
+    // Default constructor
     public CompanyExpense() {
+        this.status = "Pending";
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
+    // Full constructor
     public CompanyExpense(int id,
                           LocalDate expenseDate,
                           String vendor,
@@ -36,7 +46,11 @@ public class CompanyExpense {
                           boolean recurring,
                           String status,
                           String notes,
-                          String employeeId) {
+                          String employeeId,
+                          LocalDateTime createdAt,
+                          LocalDateTime updatedAt,
+                          String approvedBy,
+                          LocalDate approvalDate) {
         this.id = id;
         this.expenseDate = expenseDate;
         this.vendor = vendor;
@@ -50,8 +64,13 @@ public class CompanyExpense {
         this.status = status;
         this.notes = notes;
         this.employeeId = employeeId;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+        this.approvedBy = approvedBy;
+        this.approvalDate = approvalDate;
     }
 
+    // Getters and setters
     public int getId() {
         return id;
     }
@@ -66,6 +85,7 @@ public class CompanyExpense {
 
     public void setExpenseDate(LocalDate expenseDate) {
         this.expenseDate = expenseDate;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public String getVendor() {
@@ -74,6 +94,7 @@ public class CompanyExpense {
 
     public void setVendor(String vendor) {
         this.vendor = vendor;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public String getCategory() {
@@ -82,6 +103,7 @@ public class CompanyExpense {
 
     public void setCategory(String category) {
         this.category = category;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public String getDepartment() {
@@ -90,6 +112,7 @@ public class CompanyExpense {
 
     public void setDepartment(String department) {
         this.department = department;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public String getDescription() {
@@ -98,6 +121,7 @@ public class CompanyExpense {
 
     public void setDescription(String description) {
         this.description = description;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public double getAmount() {
@@ -106,6 +130,7 @@ public class CompanyExpense {
 
     public void setAmount(double amount) {
         this.amount = amount;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public String getPaymentMethod() {
@@ -114,6 +139,7 @@ public class CompanyExpense {
 
     public void setPaymentMethod(String paymentMethod) {
         this.paymentMethod = paymentMethod;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public String getReceiptNumber() {
@@ -122,6 +148,7 @@ public class CompanyExpense {
 
     public void setReceiptNumber(String receiptNumber) {
         this.receiptNumber = receiptNumber;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public boolean isRecurring() {
@@ -130,6 +157,7 @@ public class CompanyExpense {
 
     public void setRecurring(boolean recurring) {
         this.recurring = recurring;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public String getStatus() {
@@ -138,6 +166,12 @@ public class CompanyExpense {
 
     public void setStatus(String status) {
         this.status = status;
+        this.updatedAt = LocalDateTime.now();
+        
+        // If approved, set approval info
+        if ("Approved".equals(status) && this.approvalDate == null) {
+            this.approvalDate = LocalDate.now();
+        }
     }
 
     public String getNotes() {
@@ -146,6 +180,7 @@ public class CompanyExpense {
 
     public void setNotes(String notes) {
         this.notes = notes;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public String getEmployeeId() {
@@ -154,5 +189,43 @@ public class CompanyExpense {
 
     public void setEmployeeId(String employeeId) {
         this.employeeId = employeeId;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public String getApprovedBy() {
+        return approvedBy;
+    }
+
+    public void setApprovedBy(String approvedBy) {
+        this.approvedBy = approvedBy;
+    }
+
+    public LocalDate getApprovalDate() {
+        return approvalDate;
+    }
+
+    public void setApprovalDate(LocalDate approvalDate) {
+        this.approvalDate = approvalDate;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("CompanyExpense[id=%d, date=%s, vendor=%s, category=%s, amount=%.2f, status=%s]",
+                id, expenseDate, vendor, category, amount, status);
     }
 }
