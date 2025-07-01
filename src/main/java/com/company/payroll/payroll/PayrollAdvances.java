@@ -434,9 +434,22 @@ public class PayrollAdvances implements Serializable {
     
     public BigDecimal getTotalRepaid(Employee employee) {
         if (employee == null) return BigDecimal.ZERO;
-        
+
         return entries.stream()
             .filter(e -> e.getEmployeeId() == employee.getId())
+            .filter(e -> e.getAdvanceType() == AdvanceType.REPAYMENT)
+            .map(e -> e.getAmount().abs())
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Convenience overload to get the total repaid for an employee by ID.
+     * This avoids having to fetch the {@link Employee} object when only the
+     * identifier is known.
+     */
+    public BigDecimal getTotalRepaid(int employeeId) {
+        return entries.stream()
+            .filter(e -> e.getEmployeeId() == employeeId)
             .filter(e -> e.getAdvanceType() == AdvanceType.REPAYMENT)
             .map(e -> e.getAmount().abs())
             .reduce(BigDecimal.ZERO, BigDecimal::add);
