@@ -38,6 +38,9 @@ public class TrucksTab extends BorderPane {
     private final ObservableList<Truck> trucks = FXCollections.observableArrayList();
     private final TableView<Truck> table = new TableView<>();
     private final Map<String, Employee> driverMap = new HashMap<>();
+
+    // Listeners notified when truck data changes
+    private final List<Runnable> dataChangeListeners = new ArrayList<>();
     
     // Document storage path
     private final String docStoragePath = "truck_documents";
@@ -198,6 +201,7 @@ public class TrucksTab extends BorderPane {
                         logger.info("User confirmed deletion of truck: {}", selected.getNumber());
                         truckDAO.delete(selected.getId());
                         loadData();
+                        notifyDataChange();
                     }
                 });
             }
@@ -448,6 +452,7 @@ public class TrucksTab extends BorderPane {
                 logger.info("Updated truck: {}", result.getNumber());
             }
             loadData();
+            notifyDataChange();
         });
     }
     
@@ -858,6 +863,25 @@ public class TrucksTab extends BorderPane {
         
         // Reload data to refresh the view
         loadData();
+        notifyDataChange();
+    }
+
+    /** Register a listener to be notified when truck data changes. */
+    public void addDataChangeListener(Runnable listener) {
+        if (listener != null) {
+            dataChangeListeners.add(listener);
+        }
+    }
+
+    /** Notify listeners that truck data has changed. */
+    private void notifyDataChange() {
+        for (Runnable r : dataChangeListeners) {
+            try {
+                r.run();
+            } catch (Exception ex) {
+                logger.warn("Truck data change listener threw exception", ex);
+            }
+        }
     }
     
     private static class Desktop {
