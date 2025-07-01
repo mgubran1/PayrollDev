@@ -6,9 +6,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 /**
- * Enhanced MaintenanceRecord model that maintains backward compatibility while adding
- * comprehensive maintenance tracking features. Matches the inner class structure
- * used in MaintenanceTab.
+ * Data model representing a single maintenance entry used by {@link MaintenanceTab}.
+ * <p>
+ * The record can reference either a {@link com.company.payroll.trucks.Truck} or a
+ * {@link com.company.payroll.trailers.Trailer} by storing the unit number and type.
+ * Additional fields are kept for future expansion, but only the properties
+ * required by {@code MaintenanceTab} are mandatory.
  */
 public class MaintenanceRecord {
     public enum VehicleType { TRUCK, TRAILER }
