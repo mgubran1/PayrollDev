@@ -1,1094 +1,1004 @@
 package com.company.payroll.payroll;
 
 import com.company.payroll.employees.Employee;
-import javafx.beans.property.SimpleDoubleProperty;
-import javafx.beans.property.SimpleIntegerProperty;
+import javafx.application.Platform;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Node;
-import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
-import javafx.stage.Modality;
-import javafx.stage.Stage;
-import javafx.util.Callback;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.util.StringConverter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.List;
+import java.util.Optional;
 
-public class CashAdvancePanel extends VBox {
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+public class CashAdvancePanel extends BorderPane {
+    private static final Logger logger = LoggerFactory.getLogger(CashAdvancePanel.class);
     
     private final PayrollAdvances payrollAdvances;
-    private final ComboBox<Employee> driverBox;
+    private final ComboBox<Employee> driverComboBox;
     private final DatePicker weekStartPicker;
-    private final ObservableList<PayrollAdvances.Advance> advancesRows = FXCollections.observableArrayList();
-    private final TableView<PayrollAdvances.Advance> advancesTable = new TableView<>(advancesRows);
-    private final ObservableList<PayrollAdvances.Advance> advancesHistoryRows = FXCollections.observableArrayList();
-    private final TableView<PayrollAdvances.Advance> advancesHistoryTable = new TableView<>(advancesHistoryRows);
+    private final ObservableList<PayrollAdvances.AdvanceEntry> advanceData = FXCollections.observableArrayList();
+    private TableView<PayrollAdvances.AdvanceEntry> advanceTable;
     
-    // Buttons
-    private final Button addAdvanceBtn = new Button("Add Cash Advance");
-    private final Button viewDetailsBtn = new Button("View Details");
-    private final Button changeStatusBtn = new Button("Change Status");
-    private final Button refreshAdvanceBtn = new Button("Refresh");
-    private final Button markPaidAdvanceBtn = new Button("Process This Week's Payment");
-    private final Button viewScheduleBtn = new Button("View/Edit Schedule");
-    private final Button addManualPaymentBtn = new Button("Add Manual Payment");
-    private final Button viewAdvanceHistoryBtn = new Button("View History");
-    private final Button viewSummaryBtn = new Button("View Summary");
-    private final Button viewAuditBtn = new Button("Audit Trail");
+    // UI Components for summary
+    private Label totalAdvancedLabel;
+    private Label totalRepaidLabel;
+    private Label currentBalanceLabel;
+    private Label activeAdvancesLabel;
+    private Label scheduledRepaymentLabel;
+    private Label overdueLabel;
+    private ProgressBar repaymentProgressBar;
     
-    private final Label cashAdvanceRedNote = new Label();
-    private final Label summaryLabel = new Label();
-
-    public CashAdvancePanel(PayrollAdvances payrollAdvances, ComboBox<Employee> driverBox, DatePicker weekStartPicker) {
+    // Settings components
+    private TextField maxAdvanceField;
+    private TextField weeklyLimitField;
+    private TextField maxWeeksField;
+    private CheckBox allowMultipleCheckBox;
+    private Button updateSettingsButton;
+    
+    public CashAdvancePanel(PayrollAdvances payrollAdvances, ComboBox<Employee> driverComboBox, DatePicker weekStartPicker) {
         this.payrollAdvances = payrollAdvances;
-        this.driverBox = driverBox;
+        this.driverComboBox = driverComboBox;
         this.weekStartPicker = weekStartPicker;
-
-        setSpacing(8);
-        setPadding(new Insets(8));
-
-        buildAdvancesTable();
-        buildAdvancesHistoryTable();
-
-        cashAdvanceRedNote.setWrapText(true);
-        cashAdvanceRedNote.setStyle("-fx-text-fill: red; -fx-font-size: 15px; -fx-font-weight: bold;");
-        cashAdvanceRedNote.setVisible(false);
         
-        summaryLabel.setStyle("-fx-font-size: 14px; -fx-padding: 5;");
-
-        HBox advBtnBox1 = new HBox(8, addAdvanceBtn, viewDetailsBtn, changeStatusBtn, markPaidAdvanceBtn, viewScheduleBtn);
-        HBox advBtnBox2 = new HBox(8, addManualPaymentBtn, viewAdvanceHistoryBtn, viewSummaryBtn, viewAuditBtn, refreshAdvanceBtn);
-        advBtnBox1.setAlignment(Pos.CENTER_LEFT);
-        advBtnBox2.setAlignment(Pos.CENTER_LEFT);
-
-        VBox buttonContainer = new VBox(5, advBtnBox1, advBtnBox2);
-
-        getChildren().addAll(buttonContainer, summaryLabel, cashAdvanceRedNote, advancesTable);
-
-        // Wire up events
-        addAdvanceBtn.setOnAction(e -> addAdvanceDialog());
-        viewDetailsBtn.setOnAction(e -> viewAdvanceDetails());
-        changeStatusBtn.setOnAction(e -> changeAdvanceStatus());
-        markPaidAdvanceBtn.setOnAction(e -> markAdvanceRepaymentPaid());
-        refreshAdvanceBtn.setOnAction(e -> updateAdvancesTable());
-        viewScheduleBtn.setOnAction(e -> viewEditScheduleDialog());
-        addManualPaymentBtn.setOnAction(e -> addManualPaymentDialog());
-        viewAdvanceHistoryBtn.setOnAction(e -> showAdvanceHistory());
-        viewSummaryBtn.setOnAction(e -> showEmployeeSummary());
-        viewAuditBtn.setOnAction(e -> showAuditTrail());
-        
-        advancesTable.getSelectionModel().selectedItemProperty().addListener((obs, oldSel, newSel) -> {
-            boolean hasSelection = newSel != null;
-            viewDetailsBtn.setDisable(!hasSelection);
-            changeStatusBtn.setDisable(!hasSelection);
-            viewScheduleBtn.setDisable(!hasSelection);
-            addManualPaymentBtn.setDisable(!hasSelection || newSel.getStatus() != PayrollAdvances.Advance.AdvanceStatus.ACTIVE);
-        });
-        
-        viewDetailsBtn.setDisable(true);
-        changeStatusBtn.setDisable(true);
-        viewScheduleBtn.setDisable(true);
-        addManualPaymentBtn.setDisable(true);
-
-        driverBox.valueProperty().addListener((obs, o, n) -> {
-            updateAdvancesTable();
-            updateSummary();
-        });
-
-        updateAdvancesTable();
-        updateSummary();
+        setupUI();
+        setupListeners();
+        updateAdvanceTable();
     }
-
-    private void buildAdvancesTable() {
-        advancesTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        advancesTable.setPrefHeight(300);
-        advancesTable.setStyle("-fx-background-color: #fff; -fx-font-size: 15px;");
-        advancesTable.setPlaceholder(new Label("No advances for this employee."));
-
-        TableColumn<PayrollAdvances.Advance, String> dateCol = new TableColumn<>("Date Given");
-        dateCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().getDateGiven().format(DATE_FORMAT)));
+    
+    private void setupUI() {
+        setPadding(new Insets(20));
+        setStyle("-fx-background-color: #f5f5f5;");
         
-        TableColumn<PayrollAdvances.Advance, Number> amountCol = new TableColumn<>("Amount");
-        amountCol.setCellValueFactory(cell -> new SimpleDoubleProperty(
-            cell.getValue().getTotalAmount().doubleValue()));
-        amountCol.setCellFactory(col -> new TableCell<PayrollAdvances.Advance, Number>() {
+        // Header
+        VBox headerBox = createHeaderSection();
+        
+        // Summary section
+        GridPane summaryGrid = createSummarySection();
+        
+        // Action buttons
+        HBox actionButtons = createActionButtons();
+        
+        // Table
+        advanceTable = createAdvanceTable();
+        VBox.setVgrow(advanceTable, Priority.ALWAYS);
+        
+        // Main layout
+        VBox mainLayout = new VBox(15);
+        mainLayout.getChildren().addAll(headerBox, summaryGrid, actionButtons, advanceTable);
+        
+        setCenter(mainLayout);
+    }
+    
+    private VBox createHeaderSection() {
+        VBox headerBox = new VBox(10);
+        
+        Label titleLabel = new Label("💰 Cash Advance Management");
+        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 20));
+        titleLabel.setTextFill(Color.web("#d32f2f"));
+        
+        HBox settingsBox = new HBox(15);
+        settingsBox.setAlignment(Pos.CENTER_LEFT);
+        settingsBox.setPadding(new Insets(10));
+        
+        Label settingsLabel = new Label("Employee Settings:");
+        settingsLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
+        
+        // Settings fields
+        maxAdvanceField = new TextField();
+        maxAdvanceField.setPrefWidth(100);
+        maxAdvanceField.setPromptText("Max Amount");
+        
+        weeklyLimitField = new TextField();
+        weeklyLimitField.setPrefWidth(100);
+        weeklyLimitField.setPromptText("Weekly Limit");
+        
+        maxWeeksField = new TextField();
+        maxWeeksField.setPrefWidth(80);
+        maxWeeksField.setPromptText("Max Weeks");
+        
+        allowMultipleCheckBox = new CheckBox("Allow Multiple");
+        
+        updateSettingsButton = new Button("Update Settings");
+        updateSettingsButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
+        updateSettingsButton.setOnAction(e -> updateEmployeeSettings());
+        
+        settingsBox.getChildren().addAll(
+            settingsLabel,
+            new Label("Max:"), maxAdvanceField,
+            new Label("Weekly:"), weeklyLimitField,
+            new Label("Weeks:"), maxWeeksField,
+            allowMultipleCheckBox,
+            updateSettingsButton
+        );
+        
+        headerBox.getChildren().addAll(titleLabel, settingsBox);
+        headerBox.setStyle("-fx-background-color: white; -fx-padding: 15; -fx-background-radius: 10;");
+        
+        return headerBox;
+    }
+    
+    private void updateEmployeeSettings() {
+        Employee selectedDriver = driverComboBox.getValue();
+        if (selectedDriver == null) {
+            showAlert(Alert.AlertType.WARNING, "No Driver Selected", "Please select a driver to update settings.");
+            return;
+        }
+        
+        try {
+            PayrollAdvances.AdvanceSettings settings = new PayrollAdvances.AdvanceSettings();
+            
+            if (!maxAdvanceField.getText().isEmpty()) {
+                settings.setMaxAdvanceAmount(new BigDecimal(maxAdvanceField.getText()));
+            }
+            if (!weeklyLimitField.getText().isEmpty()) {
+                settings.setWeeklyRepaymentLimit(new BigDecimal(weeklyLimitField.getText()));
+            }
+            if (!maxWeeksField.getText().isEmpty()) {
+                settings.setMaxRepaymentWeeks(Integer.parseInt(maxWeeksField.getText()));
+            }
+            settings.setAllowMultipleAdvances(allowMultipleCheckBox.isSelected());
+            
+            payrollAdvances.updateEmployeeSettings(selectedDriver, settings);
+            
+            showAlert(Alert.AlertType.INFORMATION, "Settings Updated", 
+                "Settings updated successfully for " + selectedDriver.getName());
+            
+        } catch (NumberFormatException e) {
+            showAlert(Alert.AlertType.ERROR, "Invalid Input", "Please enter valid numbers.");
+        }
+    }
+    
+    private GridPane createSummarySection() {
+        GridPane summaryGrid = new GridPane();
+        summaryGrid.setHgap(30);
+        summaryGrid.setVgap(10);
+        summaryGrid.setPadding(new Insets(20));
+        summaryGrid.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
+        
+        // Initialize labels
+        totalAdvancedLabel = createValueLabel("$0.00", Color.BLUE);
+        totalRepaidLabel = createValueLabel("$0.00", Color.GREEN);
+        currentBalanceLabel = createValueLabel("$0.00", Color.RED);
+        activeAdvancesLabel = createValueLabel("0", Color.ORANGE);
+        scheduledRepaymentLabel = createValueLabel("$0.00", Color.PURPLE);
+        overdueLabel = createValueLabel("None", Color.DARKRED);
+        
+        // Add to grid
+        summaryGrid.add(createFieldLabel("Total Advanced:"), 0, 0);
+        summaryGrid.add(totalAdvancedLabel, 1, 0);
+        
+        summaryGrid.add(createFieldLabel("Total Repaid:"), 2, 0);
+        summaryGrid.add(totalRepaidLabel, 3, 0);
+        
+        summaryGrid.add(createFieldLabel("Current Balance:"), 0, 1);
+        summaryGrid.add(currentBalanceLabel, 1, 1);
+        
+        summaryGrid.add(createFieldLabel("Active Advances:"), 2, 1);
+        summaryGrid.add(activeAdvancesLabel, 3, 1);
+        
+        // Repayment progress
+        VBox progressBox = new VBox(5);
+        Label progressLabel = new Label("Repayment Progress");
+        progressLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
+        
+        repaymentProgressBar = new ProgressBar(0);
+        repaymentProgressBar.setPrefWidth(200);
+        repaymentProgressBar.setPrefHeight(20);
+        
+        progressBox.getChildren().addAll(progressLabel, repaymentProgressBar);
+        
+        summaryGrid.add(progressBox, 0, 2, 2, 1);
+        
+        summaryGrid.add(createFieldLabel("This Week's Payment:"), 2, 2);
+        summaryGrid.add(scheduledRepaymentLabel, 3, 2);
+        
+        summaryGrid.add(createFieldLabel("Overdue Status:"), 0, 3);
+        summaryGrid.add(overdueLabel, 1, 3);
+        
+        return summaryGrid;
+    }
+    
+    private void updateSummaryDisplay() {
+        Employee selectedDriver = driverComboBox.getValue();
+        if (selectedDriver == null) {
+            clearSummaryDisplay();
+            return;
+        }
+        
+        Platform.runLater(() -> {
+            PayrollAdvances.AdvanceSettings settings = payrollAdvances.getEmployeeSettings(selectedDriver);
+            
+            // Update settings fields
+            maxAdvanceField.setText(settings.getMaxAdvanceAmount().toString());
+            weeklyLimitField.setText(settings.getWeeklyRepaymentLimit().toString());
+            maxWeeksField.setText(String.valueOf(settings.getMaxRepaymentWeeks()));
+            allowMultipleCheckBox.setSelected(settings.isAllowMultipleAdvances());
+            
+            // Calculate summary values
+            BigDecimal totalAdvanced = payrollAdvances.getTotalAdvanced(selectedDriver);
+            BigDecimal totalRepaid = payrollAdvances.getTotalRepaid(selectedDriver);
+            BigDecimal currentBalance = payrollAdvances.getCurrentBalance(selectedDriver);
+            int activeCount = payrollAdvances.getActiveAdvanceCount(selectedDriver);
+            
+            totalAdvancedLabel.setText(String.format("$%,.2f", totalAdvanced));
+            totalRepaidLabel.setText(String.format("$%,.2f", totalRepaid));
+            currentBalanceLabel.setText(String.format("$%,.2f", currentBalance));
+            activeAdvancesLabel.setText(String.valueOf(activeCount));
+            
+            // Update progress
+            double progress = totalAdvanced.compareTo(BigDecimal.ZERO) > 0 ? 
+                totalRepaid.divide(totalAdvanced, 2, RoundingMode.HALF_UP).doubleValue() : 0;
+            progress = Math.min(1.0, Math.max(0.0, progress));
+            repaymentProgressBar.setProgress(progress);
+            
+            // Check for this week's scheduled payment
+            LocalDate weekStart = weekStartPicker.getValue();
+            if (weekStart != null) {
+                BigDecimal weeklyAmount = payrollAdvances.getScheduledRepaymentForWeek(selectedDriver, weekStart);
+                scheduledRepaymentLabel.setText(String.format("$%,.2f", weeklyAmount));
+            }
+            
+            // Check overdue status
+            List<PayrollAdvances.AdvanceEntry> advances = payrollAdvances.getAdvancesForEmployee(selectedDriver);
+            long overdueCount = advances.stream()
+                .filter(a -> a.getStatus() == PayrollAdvances.AdvanceStatus.ACTIVE)
+                .filter(a -> {
+                    BigDecimal balance = payrollAdvances.getAdvanceBalance(a.getAdvanceId());
+                    return balance.compareTo(BigDecimal.ZERO) > 0 && 
+                           LocalDate.now().isAfter(a.getLastRepaymentDate());
+                })
+                .count();
+            
+            if (overdueCount > 0) {
+                overdueLabel.setText(overdueCount + " overdue");
+                overdueLabel.setTextFill(Color.RED);
+            } else {
+                overdueLabel.setText("None");
+                overdueLabel.setTextFill(Color.GREEN);
+            }
+        });
+    }
+    
+    private void clearSummaryDisplay() {
+        Platform.runLater(() -> {
+            totalAdvancedLabel.setText("$0.00");
+            totalRepaidLabel.setText("$0.00");
+            currentBalanceLabel.setText("$0.00");
+            activeAdvancesLabel.setText("0");
+            scheduledRepaymentLabel.setText("$0.00");
+            overdueLabel.setText("None");
+            repaymentProgressBar.setProgress(0);
+            
+            maxAdvanceField.clear();
+            weeklyLimitField.clear();
+            maxWeeksField.clear();
+            allowMultipleCheckBox.setSelected(false);
+        });
+    }
+    
+    private Label createFieldLabel(String text) {
+        Label label = new Label(text);
+        label.setFont(Font.font("System", FontWeight.BOLD, 12));
+        return label;
+    }
+    
+    private Label createValueLabel(String text, Color color) {
+        Label label = new Label(text);
+        label.setFont(Font.font("System", FontWeight.NORMAL, 12));
+        label.setTextFill(color);
+        return label;
+    }
+    
+    private HBox createActionButtons() {
+        HBox buttonBox = new HBox(10);
+        buttonBox.setAlignment(Pos.CENTER_LEFT);
+        buttonBox.setPadding(new Insets(10, 0, 10, 0));
+        
+        Button createAdvanceBtn = new Button("➕ New Advance");
+        createAdvanceBtn.setStyle("-fx-background-color: #d32f2f; -fx-text-fill: white; -fx-font-weight: bold;");
+        createAdvanceBtn.setOnAction(e -> showCreateAdvanceDialog());
+        
+        Button recordPaymentBtn = new Button("💵 Record Payment");
+        recordPaymentBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
+        recordPaymentBtn.setOnAction(e -> showRecordPaymentDialog());
+        
+        Button processWeeklyBtn = new Button("📅 Process Weekly");
+        processWeeklyBtn.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-weight: bold;");
+        processWeeklyBtn.setOnAction(e -> processWeeklyRepayments());
+        
+        Button viewDetailsBtn = new Button("📋 View Details");
+        viewDetailsBtn.setStyle("-fx-background-color: #ff9800; -fx-text-fill: white; -fx-font-weight: bold;");
+        viewDetailsBtn.setOnAction(e -> showAdvanceDetails());
+        
+        Button exportBtn = new Button("📊 Export");
+        exportBtn.setStyle("-fx-background-color: #9c27b0; -fx-text-fill: white; -fx-font-weight: bold;");
+        
+        Button refreshBtn = new Button("🔄 Refresh");
+        refreshBtn.setStyle("-fx-background-color: #9E9E9E; -fx-text-fill: white; -fx-font-weight: bold;");
+        refreshBtn.setOnAction(e -> updateAdvanceTable());
+        
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        
+        Label filterLabel = new Label("Filter:");
+        filterLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
+        
+        ComboBox<String> filterCombo = new ComboBox<>();
+        filterCombo.getItems().addAll("All", "Active Only", "Completed", "Overdue");
+        filterCombo.setValue("Active Only");
+        filterCombo.setOnAction(e -> updateAdvanceTable());
+        
+        buttonBox.getChildren().addAll(createAdvanceBtn, recordPaymentBtn, processWeeklyBtn, 
+            viewDetailsBtn, exportBtn, refreshBtn, spacer, filterLabel, filterCombo);
+        
+        return buttonBox;
+    }
+    
+    private TableView<PayrollAdvances.AdvanceEntry> createAdvanceTable() {
+        TableView<PayrollAdvances.AdvanceEntry> table = new TableView<>();
+        table.setItems(advanceData);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        
+        // Date column
+        TableColumn<PayrollAdvances.AdvanceEntry, LocalDate> dateCol = new TableColumn<>("Date");
+        dateCol.setCellValueFactory(new PropertyValueFactory<>("date"));
+        dateCol.setCellFactory(col -> new TableCell<>() {
             @Override
-            protected void updateItem(Number item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
+            protected void updateItem(LocalDate date, boolean empty) {
+                super.updateItem(date, empty);
+                if (empty || date == null) {
                     setText(null);
                 } else {
-                    setText(String.format("$%,.2f", item.doubleValue()));
+                    setText(date.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")));
                 }
             }
         });
+        dateCol.setPrefWidth(100);
         
-        TableColumn<PayrollAdvances.Advance, String> notesCol = new TableColumn<>("Reason/Notes");
-        notesCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().getNotes() == null ? "" : cell.getValue().getNotes()));
-        
-        TableColumn<PayrollAdvances.Advance, Number> weeksCol = new TableColumn<>("Weeks");
-        weeksCol.setCellValueFactory(cell -> new SimpleIntegerProperty(
-            cell.getValue().getWeeksToRepay()));
-        
-        TableColumn<PayrollAdvances.Advance, Number> remainingCol = new TableColumn<>("Remaining");
-        remainingCol.setCellValueFactory(cell -> new SimpleDoubleProperty(
-            cell.getValue().getRemainingBalance().doubleValue()));
-        remainingCol.setCellFactory(col -> new TableCell<PayrollAdvances.Advance, Number>() {
+        // Type column
+        TableColumn<PayrollAdvances.AdvanceEntry, String> typeCol = new TableColumn<>("Type");
+        typeCol.setCellValueFactory(entry -> new SimpleStringProperty(entry.getValue().getType()));
+        typeCol.setCellFactory(col -> new TableCell<>() {
             @Override
-            protected void updateItem(Number item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setText(null);
-                } else {
-                    setText(String.format("$%,.2f", item.doubleValue()));
-                }
-            }
-        });
-        
-        TableColumn<PayrollAdvances.Advance, String> statusCol = new TableColumn<>("Status");
-        statusCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().getStatus().getDisplayName()));
-        statusCol.setCellFactory(col -> new TableCell<PayrollAdvances.Advance, String>() {
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
+            protected void updateItem(String type, boolean empty) {
+                super.updateItem(type, empty);
+                if (empty || type == null) {
                     setText(null);
                     setStyle("");
                 } else {
-                    setText(item);
-                    PayrollAdvances.Advance advance = getTableRow().getItem();
-                    if (advance != null) {
-                        switch (advance.getStatus()) {
-                            case ACTIVE:
-                                if (advance.isOverdue()) {
-                                    setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
-                                } else {
-                                    setStyle("-fx-text-fill: blue; -fx-font-weight: bold;");
-                                }
-                                break;
-                            case COMPLETED:
-                                setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
-                                break;
-                            case DEFAULTED:
-                                setStyle("-fx-text-fill: darkred; -fx-font-weight: bold;");
-                                break;
-                            case FORGIVEN:
-                                setStyle("-fx-text-fill: orange; -fx-font-weight: bold;");
-                                break;
-                            case CANCELLED:
-                                setStyle("-fx-text-fill: gray; -fx-font-weight: bold;");
-                                break;
-                            default:
-                                setStyle("");
-                        }
+                    setText(type);
+                    if (type.equals("ADVANCE")) {
+                        setTextFill(Color.RED);
+                        setStyle("-fx-font-weight: bold;");
+                    } else if (type.equals("REPAYMENT")) {
+                        setTextFill(Color.GREEN);
+                        setStyle("-fx-font-weight: bold;");
+                    } else {
+                        setTextFill(Color.ORANGE);
+                        setStyle("-fx-font-weight: bold;");
                     }
                 }
             }
         });
+        typeCol.setPrefWidth(100);
         
-        TableColumn<PayrollAdvances.Advance, String> overdueCol = new TableColumn<>("Overdue");
-        overdueCol.setCellValueFactory(cell -> {
-            PayrollAdvances.Advance advance = cell.getValue();
-            if (advance.isOverdue()) {
-                long missedCount = advance.getMissedPaymentCount();
-                return new SimpleStringProperty(missedCount + " payment(s)");
-            }
-            return new SimpleStringProperty("");
-        });
-        overdueCol.setCellFactory(col -> new TableCell<PayrollAdvances.Advance, String>() {
+        // Amount column
+        TableColumn<PayrollAdvances.AdvanceEntry, BigDecimal> amountCol = new TableColumn<>("Amount");
+        amountCol.setCellValueFactory(new PropertyValueFactory<>("amount"));
+        amountCol.setCellFactory(col -> new TableCell<>() {
             @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null || item.isEmpty()) {
+            protected void updateItem(BigDecimal amount, boolean empty) {
+                super.updateItem(amount, empty);
+                if (empty || amount == null) {
+                    setText(null);
+                } else {
+                    setText(String.format("$%,.2f", amount.abs()));
+                    setAlignment(Pos.CENTER_RIGHT);
+                    if (amount.compareTo(BigDecimal.ZERO) < 0) {
+                        setTextFill(Color.GREEN);
+                    } else {
+                        setTextFill(Color.RED);
+                    }
+                }
+            }
+        });
+        amountCol.setPrefWidth(100);
+        
+        // Balance column
+        TableColumn<PayrollAdvances.AdvanceEntry, BigDecimal> balanceCol = new TableColumn<>("Balance");
+        balanceCol.setCellValueFactory(new PropertyValueFactory<>("balance"));
+        balanceCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(BigDecimal balance, boolean empty) {
+                super.updateItem(balance, empty);
+                if (empty || balance == null) {
+                    setText(null);
+                } else {
+                    setText(String.format("$%,.2f", balance));
+                    setAlignment(Pos.CENTER_RIGHT);
+                    setStyle("-fx-font-weight: bold;");
+                }
+            }
+        });
+        balanceCol.setPrefWidth(100);
+        
+        // Status column
+        TableColumn<PayrollAdvances.AdvanceEntry, String> statusCol = new TableColumn<>("Status");
+        statusCol.setCellValueFactory(entry -> new SimpleStringProperty(entry.getValue().getStatusDisplay()));
+        statusCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String status, boolean empty) {
+                super.updateItem(status, empty);
+                if (empty || status == null) {
                     setText(null);
                     setStyle("");
                 } else {
-                    setText(item);
-                    setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
+                    setText(status);
+                    switch (status) {
+                        case "ACTIVE":
+                            setTextFill(Color.BLUE);
+                            break;
+                        case "COMPLETED":
+                            setTextFill(Color.GREEN);
+                            break;
+                        case "DEFAULTED":
+                            setTextFill(Color.DARKRED);
+                            break;
+                        case "FORGIVEN":
+                            setTextFill(Color.ORANGE);
+                            break;
+                        case "CANCELLED":
+                            setTextFill(Color.GRAY);
+                            break;
+                    }
+                    setStyle("-fx-font-weight: bold;");
                 }
             }
         });
+        statusCol.setPrefWidth(100);
         
-        advancesTable.getColumns().addAll(dateCol, amountCol, notesCol, weeksCol, 
-            remainingCol, statusCol, overdueCol);
+        // Notes column
+        TableColumn<PayrollAdvances.AdvanceEntry, String> notesCol = new TableColumn<>("Notes");
+        notesCol.setCellValueFactory(entry -> new SimpleStringProperty(entry.getValue().getNotes()));
+        notesCol.setPrefWidth(200);
         
-        // Row styling
-        advancesTable.setRowFactory(tv -> new TableRow<PayrollAdvances.Advance>() {
-            @Override
-            protected void updateItem(PayrollAdvances.Advance item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setStyle("");
-                } else if (item.isOverdue()) {
-                    setStyle("-fx-background-color: #ffcccc;");
-                } else if (item.getStatus() == PayrollAdvances.Advance.AdvanceStatus.COMPLETED) {
-                    setStyle("-fx-background-color: #ccffcc;");
-                } else {
-                    setStyle("");
-                }
+        // Advance ID column (for advances)
+        TableColumn<PayrollAdvances.AdvanceEntry, String> advanceIdCol = new TableColumn<>("Advance ID");
+        advanceIdCol.setCellValueFactory(entry -> {
+            PayrollAdvances.AdvanceEntry e = entry.getValue();
+            if (e.getAdvanceType() == PayrollAdvances.AdvanceType.ADVANCE) {
+                return new SimpleStringProperty(e.getAdvanceId());
+            } else {
+                return new SimpleStringProperty(e.getParentAdvanceId());
             }
         });
-    }
-
-    private void buildAdvancesHistoryTable() {
-        advancesHistoryTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        advancesHistoryTable.setPrefHeight(400);
-        advancesHistoryTable.setStyle("-fx-background-color: #fff; -fx-font-size: 15px;");
-        advancesHistoryTable.setPlaceholder(new Label("No advance history for this employee."));
-
-        // Similar columns as main table but for history view
-        TableColumn<PayrollAdvances.Advance, String> dateCol = new TableColumn<>("Date Given");
-        dateCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().getDateGiven().format(DATE_FORMAT)));
+        advanceIdCol.setPrefWidth(120);
         
-        TableColumn<PayrollAdvances.Advance, Number> amountCol = new TableColumn<>("Amount");
-        amountCol.setCellValueFactory(cell -> new SimpleDoubleProperty(
-            cell.getValue().getTotalAmount().doubleValue()));
-        
-        TableColumn<PayrollAdvances.Advance, String> statusCol = new TableColumn<>("Status");
-        statusCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().getStatus().getDisplayName()));
-        
-        TableColumn<PayrollAdvances.Advance, Number> paidCol = new TableColumn<>("Total Paid");
-        paidCol.setCellValueFactory(cell -> new SimpleDoubleProperty(
-            cell.getValue().getTotalPaid().doubleValue()));
-        
-        TableColumn<PayrollAdvances.Advance, String> completedDateCol = new TableColumn<>("Completed Date");
-        completedDateCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().getCompletedDate() != null ? 
-            cell.getValue().getCompletedDate().format(DATE_FORMAT) : ""));
-        
-        advancesHistoryTable.getColumns().addAll(dateCol, amountCol, statusCol, paidCol, completedDateCol);
-    }
-
-	public void updateAdvancesTable() {
-		advancesRows.clear();
-		Employee selectedDriver = driverBox.getValue();
-		cashAdvanceRedNote.setVisible(false);
-		
-		if (selectedDriver != null) {
-			// Get only active advances for main view
-			List<PayrollAdvances.Advance> activeAdvances = payrollAdvances.getActiveAdvances(
-				String.valueOf(selectedDriver.getId()));
-			advancesRows.setAll(activeAdvances);
-			
-			LocalDate weekStart = weekStartPicker.getValue();
-			if (weekStart != null) {
-				List<String> notifications = payrollAdvances.getCompletedAdvanceNotifications(weekStart);
-				if (!notifications.isEmpty()) {
-					StringBuilder sb = new StringBuilder();
-					for (String note : notifications) {
-						sb.append(note).append("\n");
-					}
-					cashAdvanceRedNote.setText(sb.toString().trim());
-					cashAdvanceRedNote.setVisible(true);
-				}
-			}
-		}
-	}
-
-	public void updateAdvanceTable() {
-		updateAdvancesTable();
-	}
-
-    private void updateSummary() {
-        Employee selectedDriver = driverBox.getValue();
-        if (selectedDriver != null) {
-            PayrollAdvances.AdvanceSummary summary = payrollAdvances.getEmployeeSummary(
-                String.valueOf(selectedDriver.getId()));
+        // Actions column
+        TableColumn<PayrollAdvances.AdvanceEntry, Void> actionsCol = new TableColumn<>("Actions");
+        actionsCol.setCellFactory(col -> new TableCell<>() {
+            private final Button deleteBtn = new Button("Delete");
             
-            summaryLabel.setText(String.format(
-                "Summary - Total Advanced: $%,.2f | Total Paid: $%,.2f | Outstanding: $%,.2f | " +
-                "Active: %d | Completed: %d | Overdue: %d",
-                summary.totalAdvanced, summary.totalPaid, summary.totalOutstanding,
-                summary.activeCount, summary.completedCount, summary.overdueCount));
-        } else {
-            summaryLabel.setText("");
-        }
+            {
+                deleteBtn.setStyle("-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-size: 11px;");
+                deleteBtn.setOnAction(event -> {
+                    PayrollAdvances.AdvanceEntry entry = getTableView().getItems().get(getIndex());
+                    confirmAndDeleteEntry(entry);
+                });
+            }
+            
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    PayrollAdvances.AdvanceEntry entry = getTableView().getItems().get(getIndex());
+                    // Only allow deletion of non-advance entries or cancelled advances
+                    if (entry.getAdvanceType() != PayrollAdvances.AdvanceType.ADVANCE || 
+                        entry.getStatus() == PayrollAdvances.AdvanceStatus.CANCELLED) {
+                        setGraphic(deleteBtn);
+                    } else {
+                        setGraphic(null);
+                    }
+                    setAlignment(Pos.CENTER);
+                }
+            }
+        });
+        actionsCol.setPrefWidth(80);
+        
+        table.getColumns().addAll(dateCol, typeCol, amountCol, balanceCol, statusCol, 
+            advanceIdCol, notesCol, actionsCol);
+        
+        // Placeholder for empty table
+        Label placeholder = new Label("No cash advance entries found");
+        placeholder.setStyle("-fx-font-size: 14px; -fx-text-fill: gray;");
+        table.setPlaceholder(placeholder);
+        
+        return table;
     }
-
-    private void addAdvanceDialog() {
-        Employee selectedDriver = driverBox.getValue();
-        LocalDate weekStart = weekStartPicker.getValue();
-        if (selectedDriver == null || weekStart == null) {
-            showError("Select a driver and week to add an advance.");
+    
+    private void setupListeners() {
+        driverComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            updateAdvanceTable();
+            updateSummaryDisplay();
+        });
+        
+        weekStartPicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            updateSummaryDisplay();
+        });
+    }
+    
+    public void updateAdvanceTable() {
+        Employee selectedDriver = driverComboBox.getValue();
+        
+        advanceData.clear();
+        
+        if (selectedDriver != null) {
+            List<PayrollAdvances.AdvanceEntry> entries = payrollAdvances.getEntriesForEmployee(selectedDriver.getId());
+            advanceData.addAll(entries);
+        } else {
+            List<PayrollAdvances.AdvanceEntry> allEntries = payrollAdvances.getAllEntries();
+            advanceData.addAll(allEntries);
+        }
+        
+        updateSummaryDisplay();
+    }
+    
+    private void showCreateAdvanceDialog() {
+        Employee selectedDriver = driverComboBox.getValue();
+        if (selectedDriver == null) {
+            showAlert(Alert.AlertType.WARNING, "No Driver Selected", "Please select a driver first.");
             return;
         }
         
-        Dialog<AdvanceDialogResult> dialog = new Dialog<>();
-        dialog.setTitle("Add Cash Advance");
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setPadding(new Insets(20));
-        grid.setVgap(10); 
-        grid.setHgap(10);
-
-        TextField amtField = new TextField();
-        amtField.setPromptText("Amount (10.00 - 10000.00)");
-        
-        ComboBox<Integer> weeksBox = new ComboBox<>(FXCollections.observableArrayList());
-        for (int i = 1; i <= 52; i++) {
-            weeksBox.getItems().add(i);
+        LocalDate weekStart = weekStartPicker.getValue();
+        if (weekStart == null) {
+            weekStart = LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
         }
-        weeksBox.setValue(4); // Default 4 weeks
         
-        TextArea notesField = new TextArea();
-        notesField.setPromptText("Reason for advance / Notes");
-        notesField.setWrapText(true);
-        notesField.setPrefRowCount(3);
+        Dialog<AdvanceRequest> dialog = new Dialog<>();
+        dialog.setTitle("Create Cash Advance");
+        dialog.setHeaderText("Create advance for " + selectedDriver.getName());
+        
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+        
+        TextField amountField = new TextField();
+        amountField.setPromptText("Enter amount");
+        
+        Spinner<Integer> weeksSpinner = new Spinner<>(1, 52, 4);
+        
+        TextArea notesArea = new TextArea();
+        notesArea.setPromptText("Reason for advance");
+        notesArea.setPrefRowCount(3);
         
         TextField approvedByField = new TextField(System.getProperty("user.name", "Manager"));
-        approvedByField.setPromptText("Approved By");
         
-        DatePicker datePicker = new DatePicker(LocalDate.now());
+        // Show calculated weekly payment
+        Label weeklyPaymentLabel = new Label("Weekly payment: $0.00");
         
-        Label errorLabel = new Label();
-        errorLabel.setStyle("-fx-text-fill: red;");
-
-        int row = 0;
-        grid.add(new Label("Advance Amount:"), 0, row); 
-        grid.add(amtField, 1, row++);
-        grid.add(new Label("Date Given:"), 0, row); 
-        grid.add(datePicker, 1, row++);
-        grid.add(new Label("Weeks to Repay:"), 0, row); 
-        grid.add(weeksBox, 1, row++);
-        grid.add(new Label("Approved By:"), 0, row); 
-        grid.add(approvedByField, 1, row++);
-        grid.add(new Label("Notes/Reason:"), 0, row); 
-        grid.add(notesField, 1, row++);
-        grid.add(errorLabel, 0, row, 2, 1);
-
-        dialog.getDialogPane().setContent(grid);
-
-        Node okBtn = dialog.getDialogPane().lookupButton(ButtonType.OK);
-        
-        Runnable validate = () -> {
+        Runnable updateWeeklyPayment = () -> {
             try {
-                if (amtField.getText().trim().isEmpty()) {
-                    errorLabel.setText("Amount is required");
-                    okBtn.setDisable(true);
-                    return;
-                }
-                
-                BigDecimal amount = new BigDecimal(amtField.getText().trim());
-                if (amount.compareTo(new BigDecimal("10.00")) < 0 || 
-                    amount.compareTo(new BigDecimal("10000.00")) > 0) {
-                    errorLabel.setText("Amount must be between $10 and $10,000");
-                    okBtn.setDisable(true);
-                    return;
-                }
-                
-                if (approvedByField.getText().trim().isEmpty()) {
-                    errorLabel.setText("Approved By is required");
-                    okBtn.setDisable(true);
-                    return;
-                }
-                
-                errorLabel.setText("");
-                okBtn.setDisable(false);
-                
-            } catch (NumberFormatException e) {
-                errorLabel.setText("Invalid amount format");
-                okBtn.setDisable(true);
+                BigDecimal amount = new BigDecimal(amountField.getText());
+                int weeks = weeksSpinner.getValue();
+                BigDecimal weekly = amount.divide(BigDecimal.valueOf(weeks), 2, RoundingMode.UP);
+                weeklyPaymentLabel.setText(String.format("Weekly payment: $%,.2f", weekly));
+            } catch (Exception e) {
+                weeklyPaymentLabel.setText("Weekly payment: $0.00");
             }
         };
         
-        amtField.textProperty().addListener((obs, o, n) -> validate.run());
-        approvedByField.textProperty().addListener((obs, o, n) -> validate.run());
-        validate.run();
-
-        dialog.setResultConverter(btn -> {
-            if (btn == ButtonType.OK) {
-                BigDecimal amt = new BigDecimal(amtField.getText().trim());
-                int weeks = weeksBox.getValue();
-                String notes = notesField.getText().trim();
-                String approvedBy = approvedByField.getText().trim();
-                LocalDate dateGiven = datePicker.getValue();
-                return new AdvanceDialogResult(amt, weeks, notes, approvedBy, dateGiven);
-            }
-            return null;
-        });
-
-        Optional<AdvanceDialogResult> result = dialog.showAndWait();
-        if (result.isPresent()) {
-            AdvanceDialogResult res = result.get();
-            PayrollAdvances.AdvanceResult advResult = payrollAdvances.addAdvance(
-                String.valueOf(selectedDriver.getId()), 
-                res.amount, 
-                res.notes, 
-                res.dateGiven, 
-                res.weeks,
-                res.approvedBy
-            );
-            
-            if (advResult.isSuccess()) {
-                updateAdvancesTable();
-                updateSummary();
-                showInfo("Advance created successfully!");
-            } else {
-                showError(advResult.getMessage());
-            }
-        }
-    }
-
-    private void viewEditScheduleDialog() {
-        PayrollAdvances.Advance selected = advancesTable.getSelectionModel().getSelectedItem();
-        Employee selectedDriver = driverBox.getValue();
-        if (selected == null || selectedDriver == null) {
-            showError("Select a cash advance to view/edit schedule.");
-            return;
-        }
+        amountField.textProperty().addListener((obs, old, text) -> updateWeeklyPayment.run());
+        weeksSpinner.valueProperty().addListener((obs, old, val) -> updateWeeklyPayment.run());
         
-        Stage dialogStage = new Stage();
-        dialogStage.setTitle("View/Edit Repayment Schedule - " + selected.getId());
-        dialogStage.initModality(Modality.APPLICATION_MODAL);
-
-        VBox root = new VBox(10);
-        root.setPadding(new Insets(16));
-        
-        Label headerLabel = new Label(String.format(
-            "Advance Date: %s | Amount: $%,.2f | Status: %s",
-            selected.getDateGiven().format(DATE_FORMAT),
-            selected.getTotalAmount(),
-            selected.getStatus().getDisplayName()
-        ));
-        headerLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
-        
-        TableView<PayrollAdvances.Advance.Repayment> scheduleTable = new TableView<>();
-        ObservableList<PayrollAdvances.Advance.Repayment> schedRows = 
-            FXCollections.observableArrayList(selected.getRepayments());
-        scheduleTable.setItems(schedRows);
-
-        TableColumn<PayrollAdvances.Advance.Repayment, String> weekCol = new TableColumn<>("Week Start");
-        weekCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().getWeekStartDate().format(DATE_FORMAT)));
-        
-        TableColumn<PayrollAdvances.Advance.Repayment, Number> scheduledCol = new TableColumn<>("Scheduled");
-        scheduledCol.setCellValueFactory(cell -> new SimpleDoubleProperty(
-            cell.getValue().getScheduledAmount().doubleValue()));
-        
-        TableColumn<PayrollAdvances.Advance.Repayment, Number> paidAmtCol = new TableColumn<>("Paid");
-        paidAmtCol.setCellValueFactory(cell -> new SimpleDoubleProperty(
-            cell.getValue().getPaidAmount().doubleValue()));
-        
-        TableColumn<PayrollAdvances.Advance.Repayment, String> statusCol = new TableColumn<>("Status");
-        statusCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().isPaid() ? "Paid" : "Pending"));
-        
-        TableColumn<PayrollAdvances.Advance.Repayment, String> paidDateCol = new TableColumn<>("Paid Date");
-        paidDateCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().getPaidDate() != null ? 
-            cell.getValue().getPaidDate().format(DATE_FORMAT) : ""));
-        
-        TableColumn<PayrollAdvances.Advance.Repayment, String> noteCol = new TableColumn<>("Note");
-        noteCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().getNote() == null ? "" : cell.getValue().getNote()));
-        
-        scheduleTable.getColumns().addAll(weekCol, scheduledCol, paidAmtCol, statusCol, paidDateCol, noteCol);
-
-        Button editBtn = new Button("Edit Selected Repayment");
-        Button closeBtn = new Button("Close");
-        
-        HBox btnBox = new HBox(8, editBtn, closeBtn);
-        btnBox.setAlignment(Pos.CENTER_LEFT);
-
-        editBtn.setOnAction(e -> {
-            PayrollAdvances.Advance.Repayment rep = scheduleTable.getSelectionModel().getSelectedItem();
-            if (rep == null) {
-                showError("Select a scheduled repayment to edit.");
-                return;
-            }
-            
-            if (rep.isPaid()) {
-                showError("Cannot edit paid repayments.");
-                return;
-            }
-            
-            editRepaymentDialog(selected, rep, selectedDriver, dialogStage);
-        });
-        
-        closeBtn.setOnAction(e -> dialogStage.close());
-
-        root.getChildren().addAll(headerLabel, scheduleTable, btnBox);
-
-        Scene scene = new Scene(root, 800, 400);
-        dialogStage.setScene(scene);
-        dialogStage.showAndWait();
-    }
-
-    private void editRepaymentDialog(PayrollAdvances.Advance advance, 
-                                   PayrollAdvances.Advance.Repayment repayment,
-                                   Employee driver,
-                                   Stage parentStage) {
-        Dialog<EditRepaymentResult> dialog = new Dialog<>();
-        dialog.setTitle("Edit Repayment");
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-        
-        DatePicker weekDatePicker = new DatePicker(repayment.getWeekStartDate());
-        TextField amtEdit = new TextField(repayment.getScheduledAmount().toString());
-        TextField noteEdit = new TextField(repayment.getNote() == null ? "" : repayment.getNote());
-        
-        GridPane grid = new GridPane();
-        grid.setVgap(8); 
-        grid.setHgap(8); 
-        grid.setPadding(new Insets(12));
-        
-        grid.add(new Label("Week Start:"), 0, 0); 
-        grid.add(weekDatePicker, 1, 0);
-        grid.add(new Label("Amount:"), 0, 1); 
-        grid.add(amtEdit, 1, 1);
-        grid.add(new Label("Note:"), 0, 2); 
-        grid.add(noteEdit, 1, 2);
+        grid.add(new Label("Amount:"), 0, 0);
+        grid.add(amountField, 1, 0);
+        grid.add(new Label("Weeks to repay:"), 0, 1);
+        grid.add(weeksSpinner, 1, 1);
+        grid.add(weeklyPaymentLabel, 1, 2);
+        grid.add(new Label("Approved by:"), 0, 3);
+        grid.add(approvedByField, 1, 3);
+        grid.add(new Label("Notes:"), 0, 4);
+        grid.add(notesArea, 1, 4);
         
         dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         
-        dialog.setResultConverter(bt -> {
-            if (bt == ButtonType.OK) {
+        Platform.runLater(amountField::requestFocus);
+        
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == ButtonType.OK) {
                 try {
-                    LocalDate newDate = weekDatePicker.getValue();
-                    BigDecimal newAmount = new BigDecimal(amtEdit.getText().trim());
-                    String note = noteEdit.getText().trim();
-                    return new EditRepaymentResult(newDate, newAmount, note);
-                } catch (Exception e) {
+                    BigDecimal amount = new BigDecimal(amountField.getText());
+                    return new AdvanceRequest(amount, weeksSpinner.getValue(), 
+                        notesArea.getText(), approvedByField.getText());
+                } catch (NumberFormatException e) {
                     return null;
                 }
             }
             return null;
         });
         
-        Optional<EditRepaymentResult> result = dialog.showAndWait();
-        if (result.isPresent()) {
-            EditRepaymentResult res = result.get();
-            PayrollAdvances.OperationResult opResult = payrollAdvances.updateRepayment(
-                String.valueOf(driver.getId()),
-                advance.getId(),
-                repayment.getWeekStartDate(),
-                res.newWeekStartDate,
-                res.newAmount,
-                res.note,
-                System.getProperty("user.name", "Manager")
-            );
-            
-            if (opResult.isSuccess()) {
-                updateAdvancesTable();
-                parentStage.close();
-                showInfo("Repayment updated successfully");
+        Optional<AdvanceRequest> result = dialog.showAndWait();
+        LocalDate finalWeekStart = weekStart;
+        
+        result.ifPresent(request -> {
+            if (request.amount.compareTo(BigDecimal.ZERO) > 0) {
+                PayrollAdvances.AdvanceEntry entry = payrollAdvances.createAdvance(
+                    selectedDriver, finalWeekStart, request.amount, request.weeks,
+                    request.notes, request.approvedBy);
+                
+                if (entry != null) {
+                    updateAdvanceTable();
+                    showAlert(Alert.AlertType.INFORMATION, "Advance Created", 
+                        String.format("Created advance of $%,.2f for %s", 
+                            request.amount, selectedDriver.getName()));
+                } else {
+                    showAlert(Alert.AlertType.ERROR, "Creation Failed", 
+                        "Failed to create advance. Check settings and existing advances.");
+                }
             } else {
-                showError(opResult.getMessage());
+                showAlert(Alert.AlertType.ERROR, "Invalid Amount", "Amount must be greater than zero.");
             }
-        }
+        });
     }
-
-    private void addManualPaymentDialog() {
-        PayrollAdvances.Advance selected = advancesTable.getSelectionModel().getSelectedItem();
-        Employee selectedDriver = driverBox.getValue();
-        if (selected == null || selectedDriver == null) {
-            showError("Select a cash advance to add a manual payment.");
+    
+    private void showRecordPaymentDialog() {
+        Employee selectedDriver = driverComboBox.getValue();
+        if (selectedDriver == null) {
+            showAlert(Alert.AlertType.WARNING, "No Driver Selected", "Please select a driver first.");
             return;
         }
         
-        Dialog<ManualPaymentResult> dialog = new Dialog<>();
-        dialog.setTitle("Add Manual Repayment");
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        // Get active advances for dropdown
+        List<PayrollAdvances.AdvanceEntry> activeAdvances = payrollAdvances.getAdvancesForEmployee(selectedDriver)
+            .stream()
+            .filter(a -> a.getAdvanceType() == PayrollAdvances.AdvanceType.ADVANCE)
+            .filter(a -> a.getStatus() == PayrollAdvances.AdvanceStatus.ACTIVE)
+            .collect(java.util.stream.Collectors.toList());
         
-        DatePicker datePicker = new DatePicker(LocalDate.now());
-        TextField amtField = new TextField();
-        amtField.setPromptText("Amount");
+        if (activeAdvances.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Active Advances", "No active advances to repay.");
+            return;
+        }
         
-        ComboBox<PayrollAdvances.Advance.ManualRepayment.PaymentMethod> methodBox = 
-            new ComboBox<>(FXCollections.observableArrayList(
-                PayrollAdvances.Advance.ManualRepayment.PaymentMethod.values()));
-        methodBox.setValue(PayrollAdvances.Advance.ManualRepayment.PaymentMethod.CASH);
-        
-        TextField refField = new TextField();
-        refField.setPromptText("Reference Number (optional)");
-        
-        TextArea noteField = new TextArea();
-        noteField.setPromptText("Note/Reason");
-        noteField.setPrefRowCount(2);
-        
-        Label errorLabel = new Label();
-        errorLabel.setStyle("-fx-text-fill: red;");
+        Dialog<PaymentRequest> dialog = new Dialog<>();
+        dialog.setTitle("Record Payment");
+        dialog.setHeaderText("Record payment for " + selectedDriver.getName());
         
         GridPane grid = new GridPane();
-        grid.setVgap(8); 
-        grid.setHgap(8); 
-        grid.setPadding(new Insets(12));
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
         
-        int row = 0;
-        grid.add(new Label("Date:"), 0, row); 
-        grid.add(datePicker, 1, row++);
-        grid.add(new Label("Amount:"), 0, row); 
-        grid.add(amtField, 1, row++);
-        grid.add(new Label("Payment Method:"), 0, row); 
-        grid.add(methodBox, 1, row++);
-        grid.add(new Label("Reference #:"), 0, row); 
-        grid.add(refField, 1, row++);
-        grid.add(new Label("Note:"), 0, row); 
-        grid.add(noteField, 1, row++);
-        grid.add(errorLabel, 0, row, 2, 1);
-
-        dialog.getDialogPane().setContent(grid);
-
-        Node okBtn = dialog.getDialogPane().lookupButton(ButtonType.OK);
-        
-        Runnable validate = () -> {
-            try {
-                if (amtField.getText().trim().isEmpty()) {
-                    errorLabel.setText("Amount is required");
-                    okBtn.setDisable(true);
-                    return;
-                }
-                
-                BigDecimal amount = new BigDecimal(amtField.getText().trim());
-                if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-                    errorLabel.setText("Amount must be positive");
-                    okBtn.setDisable(true);
-                    return;
-                }
-                
-                errorLabel.setText("");
-                okBtn.setDisable(false);
-                
-            } catch (NumberFormatException e) {
-                errorLabel.setText("Invalid amount format");
-                okBtn.setDisable(true);
+        ComboBox<PayrollAdvances.AdvanceEntry> advanceCombo = new ComboBox<>();
+        advanceCombo.setItems(FXCollections.observableArrayList(activeAdvances));
+        advanceCombo.setConverter(new StringConverter<PayrollAdvances.AdvanceEntry>() {
+            @Override
+            public String toString(PayrollAdvances.AdvanceEntry entry) {
+                if (entry == null) return "";
+                BigDecimal balance = payrollAdvances.getAdvanceBalance(entry.getAdvanceId());
+                return String.format("%s - $%,.2f (Balance: $%,.2f)", 
+                    entry.getAdvanceId(), entry.getAmount(), balance);
             }
-        };
+            
+            @Override
+            public PayrollAdvances.AdvanceEntry fromString(String string) {
+                return null;
+            }
+        });
+        advanceCombo.getSelectionModel().selectFirst();
         
-        amtField.textProperty().addListener((obs, o, n) -> validate.run());
-        validate.run();
-
-        dialog.setResultConverter(bt -> {
-            if (bt == ButtonType.OK) {
-                LocalDate date = datePicker.getValue();
-                BigDecimal amount = new BigDecimal(amtField.getText().trim());
-                String note = noteField.getText().trim();
-                PayrollAdvances.Advance.ManualRepayment.PaymentMethod method = methodBox.getValue();
-                String reference = refField.getText().trim();
-                return new ManualPaymentResult(date, amount, note, method, reference);
+        TextField amountField = new TextField();
+        amountField.setPromptText("Payment amount");
+        
+        ComboBox<PayrollAdvances.PaymentMethod> methodCombo = new ComboBox<>();
+        methodCombo.setItems(FXCollections.observableArrayList(PayrollAdvances.PaymentMethod.values()));
+        methodCombo.setValue(PayrollAdvances.PaymentMethod.PAYROLL_DEDUCTION);
+        
+        TextField referenceField = new TextField();
+        referenceField.setPromptText("Reference number (optional)");
+        
+        TextArea notesArea = new TextArea();
+        notesArea.setPromptText("Payment notes");
+        notesArea.setPrefRowCount(2);
+        
+        TextField processedByField = new TextField(System.getProperty("user.name", "Manager"));
+        
+        grid.add(new Label("Advance:"), 0, 0);
+        grid.add(advanceCombo, 1, 0);
+        grid.add(new Label("Amount:"), 0, 1);
+        grid.add(amountField, 1, 1);
+        grid.add(new Label("Method:"), 0, 2);
+        grid.add(methodCombo, 1, 2);
+        grid.add(new Label("Reference:"), 0, 3);
+        grid.add(referenceField, 1, 3);
+        grid.add(new Label("Processed by:"), 0, 4);
+        grid.add(processedByField, 1, 4);
+        grid.add(new Label("Notes:"), 0, 5);
+        grid.add(notesArea, 1, 5);
+        
+        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        
+        Platform.runLater(amountField::requestFocus);
+        
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == ButtonType.OK) {
+                try {
+                    PayrollAdvances.AdvanceEntry advance = advanceCombo.getValue();
+                    if (advance == null) return null;
+                    
+                    BigDecimal amount = new BigDecimal(amountField.getText());
+                    return new PaymentRequest(advance.getAdvanceId(), amount, 
+                        methodCombo.getValue(), referenceField.getText(),
+                        notesArea.getText(), processedByField.getText());
+                } catch (NumberFormatException e) {
+                    return null;
+                }
             }
             return null;
         });
-
-        Optional<ManualPaymentResult> result = dialog.showAndWait();
-        if (result.isPresent()) {
-            ManualPaymentResult p = result.get();
-            PayrollAdvances.PaymentResult payResult = payrollAdvances.addManualRepayment(
-                String.valueOf(selectedDriver.getId()),
-                selected.getId(),
-                p.date,
-                p.amount,
-                p.note,
-                System.getProperty("user.name", "Manager"),
-                p.method,
-                p.reference
-            );
-            
-            if (payResult.isSuccess()) {
-                updateAdvancesTable();
-                updateSummary();
-                showInfo(payResult.getMessage());
+        
+        Optional<PaymentRequest> result = dialog.showAndWait();
+        
+        result.ifPresent(request -> {
+            if (request.amount.compareTo(BigDecimal.ZERO) > 0) {
+                LocalDate weekStart = weekStartPicker.getValue() != null ? 
+                    weekStartPicker.getValue() : LocalDate.now();
+                
+                PayrollAdvances.AdvanceEntry entry = payrollAdvances.recordRepayment(
+                    selectedDriver, weekStart, request.amount, request.advanceId,
+                    request.method, request.reference, request.notes, request.processedBy);
+                
+                if (entry != null) {
+                    updateAdvanceTable();
+                    showAlert(Alert.AlertType.INFORMATION, "Payment Recorded", 
+                        String.format("Recorded payment of $%,.2f", request.amount));
+                } else {
+                    showAlert(Alert.AlertType.ERROR, "Recording Failed", 
+                        "Failed to record payment.");
+                }
             } else {
-                showError(payResult.getMessage());
+                showAlert(Alert.AlertType.ERROR, "Invalid Amount", "Amount must be greater than zero.");
             }
-        }
+        });
     }
-
-    private void markAdvanceRepaymentPaid() {
-        Employee selectedDriver = driverBox.getValue();
+    
+    private void processWeeklyRepayments() {
+        Employee selectedDriver = driverComboBox.getValue();
         LocalDate weekStart = weekStartPicker.getValue();
+        
         if (selectedDriver == null || weekStart == null) {
-            showError("Select a driver and week to process payments.");
+            showAlert(Alert.AlertType.WARNING, "Missing Information", 
+                "Please select both a driver and week start date.");
             return;
         }
         
-        BigDecimal totalDue = payrollAdvances.getRepaymentAmountForWeek(
-            String.valueOf(selectedDriver.getId()), weekStart);
+        BigDecimal weeklyAmount = payrollAdvances.getScheduledRepaymentForWeek(selectedDriver, weekStart);
         
-        if (totalDue.compareTo(BigDecimal.ZERO) == 0) {
-            showInfo("No repayments due for this week.");
+        if (weeklyAmount.compareTo(BigDecimal.ZERO) == 0) {
+            showAlert(Alert.AlertType.INFORMATION, "No Payments Due", 
+                "No scheduled repayments for this week.");
             return;
         }
         
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Process Weekly Repayments");
-        confirm.setHeaderText("Process Scheduled Repayments");
+        confirm.setHeaderText("Confirm Weekly Deduction");
         confirm.setContentText(String.format(
-            "Process repayments for %s\nWeek of %s\nTotal Amount: $%,.2f\n\nContinue?",
-            selectedDriver.getName(),
-            weekStart.format(DATE_FORMAT),
-            totalDue
-        ));
+            "Process weekly repayment for %s?\nAmount: $%,.2f",
+            selectedDriver.getName(), weeklyAmount));
         
         Optional<ButtonType> result = confirm.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
-            PayrollAdvances.PaymentResult payResult = payrollAdvances.recordRepayment(
-                String.valueOf(selectedDriver.getId()),
-                weekStart,
-                totalDue,
-                System.getProperty("user.name", "Manager"),
-                "Weekly payroll deduction"
-            );
+            // Record repayments for all active advances
+            List<PayrollAdvances.AdvanceEntry> activeAdvances = payrollAdvances.getAdvancesForEmployee(selectedDriver)
+                .stream()
+                .filter(a -> a.getAdvanceType() == PayrollAdvances.AdvanceType.ADVANCE)
+                .filter(a -> a.getStatus() == PayrollAdvances.AdvanceStatus.ACTIVE)
+                .collect(java.util.stream.Collectors.toList());
             
-            if (payResult.isSuccess()) {
-                updateAdvancesTable();
-                updateSummary();
-                showInfo(payResult.getMessage());
-            } else {
-                showError(payResult.getMessage());
+            int processed = 0;
+            for (PayrollAdvances.AdvanceEntry advance : activeAdvances) {
+                BigDecimal advanceWeekly = advance.getWeeklyRepaymentAmount();
+                if (advanceWeekly != null && advanceWeekly.compareTo(BigDecimal.ZERO) > 0) {
+                    PayrollAdvances.AdvanceEntry payment = payrollAdvances.recordRepayment(
+                        selectedDriver, weekStart, advanceWeekly, advance.getAdvanceId(),
+                        PayrollAdvances.PaymentMethod.PAYROLL_DEDUCTION, 
+                        "WEEK-" + weekStart.format(DateTimeFormatter.ofPattern("MMdd")),
+                        "Weekly payroll deduction", System.getProperty("user.name", "System"));
+                    
+                    if (payment != null) {
+                        processed++;
+                    }
+                }
+            }
+            
+            if (processed > 0) {
+                updateAdvanceTable();
+                showAlert(Alert.AlertType.INFORMATION, "Payments Processed", 
+                    String.format("Processed %d weekly repayment(s) totaling $%,.2f", 
+                        processed, weeklyAmount));
             }
         }
     }
-
-    private void viewAdvanceDetails() {
-        PayrollAdvances.Advance selected = advancesTable.getSelectionModel().getSelectedItem();
-        if (selected == null) return;
+    
+    private void showAdvanceDetails() {
+        PayrollAdvances.AdvanceEntry selected = advanceTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select an entry to view details.");
+            return;
+        }
         
+        if (selected.getAdvanceType() != PayrollAdvances.AdvanceType.ADVANCE) {
+            showAlert(Alert.AlertType.INFORMATION, "Entry Details", 
+                String.format("%s\nAmount: $%,.2f\nDate: %s\nNotes: %s",
+                    selected.getType(),
+                    selected.getAmount().abs(),
+                    selected.getDate().format(DateTimeFormatter.ofPattern("MM/dd/yyyy")),
+                    selected.getNotes()));
+            return;
+        }
+        
+        // Show advance details with repayment history
         Stage detailStage = new Stage();
-        detailStage.setTitle("Advance Details - " + selected.getId());
-        detailStage.initModality(Modality.APPLICATION_MODAL);
+        detailStage.setTitle("Advance Details - " + selected.getAdvanceId());
+        detailStage.initModality(javafx.stage.Modality.APPLICATION_MODAL);
         
         VBox root = new VBox(10);
-        root.setPadding(new Insets(16));
+        root.setPadding(new Insets(15));
         
-        TextArea detailsArea = new TextArea();
-        detailsArea.setEditable(false);
-        detailsArea.setPrefRowCount(20);
+        // Summary section
+        GridPane summaryGrid = new GridPane();
+        summaryGrid.setHgap(15);
+        summaryGrid.setVgap(5);
         
-        StringBuilder details = new StringBuilder();
-        details.append("ADVANCE DETAILS\n");
-        details.append("===============\n\n");
-        details.append("ID: ").append(selected.getId()).append("\n");
-        details.append("Status: ").append(selected.getStatus().getDisplayName()).append("\n");
-        details.append("Date Given: ").append(selected.getDateGiven().format(DATE_FORMAT)).append("\n");
-        details.append("Amount: $").append(String.format("%,.2f", selected.getTotalAmount())).append("\n");
-        details.append("Approved By: ").append(selected.getApprovedBy()).append("\n");
-        details.append("Notes: ").append(selected.getNotes()).append("\n");
-        details.append("Weeks to Repay: ").append(selected.getWeeksToRepay()).append("\n");
-        details.append("Total Paid: $").append(String.format("%,.2f", selected.getTotalPaid())).append("\n");
-        details.append("Remaining Balance: $").append(String.format("%,.2f", selected.getRemainingBalance())).append("\n");
+        int row = 0;
+        summaryGrid.add(new Label("Advance ID:"), 0, row);
+        summaryGrid.add(new Label(selected.getAdvanceId()), 1, row++);
         
-        if (selected.isOverdue()) {
-            details.append("OVERDUE: ").append(selected.getMissedPaymentCount()).append(" missed payment(s)\n");
+        summaryGrid.add(new Label("Date:"), 0, row);
+        summaryGrid.add(new Label(selected.getDate().format(DateTimeFormatter.ofPattern("MM/dd/yyyy"))), 1, row++);
+        
+        summaryGrid.add(new Label("Amount:"), 0, row);
+        summaryGrid.add(new Label(String.format("$%,.2f", selected.getAmount())), 1, row++);
+        
+        summaryGrid.add(new Label("Status:"), 0, row);
+        Label statusLabel = new Label(selected.getStatusDisplay());
+        if (selected.getStatus() == PayrollAdvances.AdvanceStatus.ACTIVE) {
+            statusLabel.setTextFill(Color.BLUE);
+        } else if (selected.getStatus() == PayrollAdvances.AdvanceStatus.COMPLETED) {
+            statusLabel.setTextFill(Color.GREEN);
         }
+        summaryGrid.add(statusLabel, 1, row++);
         
-        if (selected.getCompletedDate() != null) {
-            details.append("Completed Date: ").append(selected.getCompletedDate().format(DATE_FORMAT)).append("\n");
-        }
+        BigDecimal balance = payrollAdvances.getAdvanceBalance(selected.getAdvanceId());
+        summaryGrid.add(new Label("Balance:"), 0, row);
+        summaryGrid.add(new Label(String.format("$%,.2f", balance)), 1, row++);
         
-        details.append("\nSTATUS HISTORY\n");
-        details.append("--------------\n");
-        for (PayrollAdvances.Advance.StatusChange change : selected.getStatusHistory()) {
-            details.append(change.timestamp.format(DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")))
-                   .append(" - ")
-                   .append(change.fromStatus == null ? "Created" : change.fromStatus.getDisplayName())
-                   .append(" -> ")
-                   .append(change.toStatus.getDisplayName())
-                   .append(" (").append(change.reason).append(")")
-                   .append(" by ").append(change.changedBy)
-                   .append("\n");
-        }
+        summaryGrid.add(new Label("Weekly Payment:"), 0, row);
+        summaryGrid.add(new Label(String.format("$%,.2f", selected.getWeeklyRepaymentAmount())), 1, row++);
         
-        if (!selected.getManualRepayments().isEmpty()) {
-            details.append("\nMANUAL PAYMENTS\n");
-            details.append("---------------\n");
-            for (PayrollAdvances.Advance.ManualRepayment manual : selected.getManualRepayments()) {
-                details.append(manual.getDate().format(DATE_FORMAT))
-                       .append(" - $").append(String.format("%,.2f", manual.getAmount()))
-                       .append(" via ").append(manual.getPaymentMethod().getDisplayName())
-                       .append(manual.getReferenceNumber().isEmpty() ? "" : " (Ref: " + manual.getReferenceNumber() + ")")
-                       .append(" - ").append(manual.getNote())
-                       .append("\n");
-            }
-        }
+        summaryGrid.add(new Label("Notes:"), 0, row);
+        summaryGrid.add(new Label(selected.getNotes()), 1, row++);
         
-        detailsArea.setText(details.toString());
+        // Repayment history table
+        TableView<PayrollAdvances.AdvanceEntry> repaymentTable = new TableView<>();
+        List<PayrollAdvances.AdvanceEntry> repayments = payrollAdvances.getRepaymentsForAdvance(selected.getAdvanceId());
+        repaymentTable.setItems(FXCollections.observableArrayList(repayments));
+        
+        TableColumn<PayrollAdvances.AdvanceEntry, String> dateCol = new TableColumn<>("Date");
+        dateCol.setCellValueFactory(entry -> new SimpleStringProperty(
+            entry.getValue().getDate().format(DateTimeFormatter.ofPattern("MM/dd/yyyy"))));
+        
+        TableColumn<PayrollAdvances.AdvanceEntry, String> amountCol = new TableColumn<>("Amount");
+        amountCol.setCellValueFactory(entry -> new SimpleStringProperty(
+            String.format("$%,.2f", entry.getValue().getAmount().abs())));
+        
+        TableColumn<PayrollAdvances.AdvanceEntry, String> methodCol = new TableColumn<>("Method");
+        methodCol.setCellValueFactory(entry -> new SimpleStringProperty(
+            entry.getValue().getPaymentMethod() != null ? 
+            entry.getValue().getPaymentMethod().toString() : ""));
+        
+        TableColumn<PayrollAdvances.AdvanceEntry, String> refCol = new TableColumn<>("Reference");
+        refCol.setCellValueFactory(entry -> new SimpleStringProperty(
+            entry.getValue().getReferenceNumber() != null ? 
+            entry.getValue().getReferenceNumber() : ""));
+        
+        repaymentTable.getColumns().addAll(dateCol, amountCol, methodCol, refCol);
+        repaymentTable.setPrefHeight(200);
         
         Button closeBtn = new Button("Close");
         closeBtn.setOnAction(e -> detailStage.close());
         
-        root.getChildren().addAll(detailsArea, closeBtn);
+        root.getChildren().addAll(
+            new Label("Advance Details"),
+            new Separator(),
+            summaryGrid,
+            new Label("Repayment History"),
+            repaymentTable,
+            closeBtn
+        );
         
         Scene scene = new Scene(root, 600, 500);
         detailStage.setScene(scene);
-        detailStage.showAndWait();
+        detailStage.show();
     }
-
-    private void changeAdvanceStatus() {
-        PayrollAdvances.Advance selected = advancesTable.getSelectionModel().getSelectedItem();
-        Employee selectedDriver = driverBox.getValue();
-        if (selected == null || selectedDriver == null) return;
+    
+    private void confirmAndDeleteEntry(PayrollAdvances.AdvanceEntry entry) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Confirm Delete");
+        confirm.setHeaderText("Delete Entry");
+        confirm.setContentText(String.format("Delete %s entry of $%,.2f on %s?",
+            entry.getType(), entry.getAmount().abs(),
+            entry.getDate().format(DateTimeFormatter.ofPattern("MM/dd/yyyy"))));
         
-        Dialog<StatusChangeResult> dialog = new Dialog<>();
-        dialog.setTitle("Change Advance Status");
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-        
-        ComboBox<PayrollAdvances.Advance.AdvanceStatus> statusBox = new ComboBox<>(
-            FXCollections.observableArrayList(PayrollAdvances.Advance.AdvanceStatus.values())
-        );
-        statusBox.setValue(selected.getStatus());
-        
-        TextArea reasonField = new TextArea();
-        reasonField.setPromptText("Reason for status change");
-        reasonField.setPrefRowCount(3);
-        
-        GridPane grid = new GridPane();
-        grid.setVgap(8);
-        grid.setHgap(8);
-        grid.setPadding(new Insets(12));
-        
-        grid.add(new Label("New Status:"), 0, 0);
-        grid.add(statusBox, 1, 0);
-        grid.add(new Label("Reason:"), 0, 1);
-        grid.add(reasonField, 1, 1);
-        
-        dialog.getDialogPane().setContent(grid);
-        
-        Node okBtn = dialog.getDialogPane().lookupButton(ButtonType.OK);
-        okBtn.setDisable(true);
-        
-        Runnable validate = () -> {
-            boolean valid = statusBox.getValue() != selected.getStatus() && 
-                          !reasonField.getText().trim().isEmpty();
-            okBtn.setDisable(!valid);
-        };
-        
-        statusBox.valueProperty().addListener((obs, o, n) -> validate.run());
-        reasonField.textProperty().addListener((obs, o, n) -> validate.run());
-        
-        dialog.setResultConverter(bt -> {
-            if (bt == ButtonType.OK) {
-                return new StatusChangeResult(statusBox.getValue(), reasonField.getText().trim());
-            }
-            return null;
-        });
-        
-        Optional<StatusChangeResult> result = dialog.showAndWait();
-        if (result.isPresent()) {
-            StatusChangeResult res = result.get();
-            PayrollAdvances.OperationResult opResult = payrollAdvances.changeAdvanceStatus(
-                String.valueOf(selectedDriver.getId()),
-                selected.getId(),
-                res.newStatus,
-                res.reason,
-                System.getProperty("user.name", "Manager")
-            );
-            
-            if (opResult.isSuccess()) {
-                updateAdvancesTable();
-                updateSummary();
-                showInfo("Status changed successfully");
-            } else {
-                showError(opResult.getMessage());
-            }
+        Optional<ButtonType> result = confirm.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            payrollAdvances.deleteEntry(entry.getId());
+            updateAdvanceTable();
+            showAlert(Alert.AlertType.INFORMATION, "Entry Deleted", "The entry has been deleted.");
         }
     }
-
-    private void showAdvanceHistory() {
-        Employee selectedDriver = driverBox.getValue();
-        if (selectedDriver == null) {
-            showError("Select a driver to view history.");
-            return;
-        }
-        
-        Stage historyStage = new Stage();
-        historyStage.setTitle("Advance History - " + selectedDriver.getName());
-        historyStage.initModality(Modality.APPLICATION_MODAL);
-        
-        VBox root = new VBox(10);
-        root.setPadding(new Insets(16));
-        
-        List<PayrollAdvances.Advance> allAdvances = payrollAdvances.getAllAdvances(
-            String.valueOf(selectedDriver.getId()));
-        advancesHistoryRows.setAll(allAdvances);
-        
-        Label summaryLabel = new Label(String.format(
-            "Total Advances: %d | Total Amount: $%,.2f",
-            allAdvances.size(),
-            allAdvances.stream()
-                .mapToDouble(a -> a.getTotalAmount().doubleValue())
-                .sum()
-        ));
-        summaryLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
-        
-        Button closeBtn = new Button("Close");
-        closeBtn.setOnAction(e -> historyStage.close());
-        
-        root.getChildren().addAll(summaryLabel, advancesHistoryTable, closeBtn);
-        
-        Scene scene = new Scene(root, 800, 600);
-        historyStage.setScene(scene);
-        historyStage.showAndWait();
-    }
-
-    private void showEmployeeSummary() {
-        Employee selectedDriver = driverBox.getValue();
-        if (selectedDriver == null) {
-            showError("Select a driver to view summary.");
-            return;
-        }
-        
-        PayrollAdvances.AdvanceSummary summary = payrollAdvances.getEmployeeSummary(
-            String.valueOf(selectedDriver.getId()));
-        
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Employee Advance Summary");
-        alert.setHeaderText(selectedDriver.getName() + " - Cash Advance Summary");
-        
-        String content = String.format(
-            "Total Advanced: $%,.2f\n" +
-            "Total Paid: $%,.2f\n" +
-            "Outstanding Balance: $%,.2f\n\n" +
-            "Active Advances: %d\n" +
-            "Completed Advances: %d\n" +
-            "Overdue Advances: %d",
-            summary.totalAdvanced,
-            summary.totalPaid,
-            summary.totalOutstanding,
-            summary.activeCount,
-            summary.completedCount,
-            summary.overdueCount
-        );
-        
+    
+    private void showAlert(Alert.AlertType type, String title, String content) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
         alert.setContentText(content);
         alert.showAndWait();
     }
-
-    private void showAuditTrail() {
-        Employee selectedDriver = driverBox.getValue();
-        
-        Stage auditStage = new Stage();
-        auditStage.setTitle("Audit Trail" + (selectedDriver != null ? " - " + selectedDriver.getName() : ""));
-        auditStage.initModality(Modality.APPLICATION_MODAL);
-        
-        VBox root = new VBox(10);
-        root.setPadding(new Insets(16));
-        
-        TableView<PayrollAdvances.AuditEntry> auditTable = new TableView<>();
-        
-        TableColumn<PayrollAdvances.AuditEntry, String> timestampCol = new TableColumn<>("Timestamp");
-        timestampCol.setCellValueFactory(cell -> new SimpleStringProperty(
-            cell.getValue().timestamp.format(DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm:ss"))));
-        
-        TableColumn<PayrollAdvances.AuditEntry, String> actionCol = new TableColumn<>("Action");
-        actionCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().action));
-        
-        TableColumn<PayrollAdvances.AuditEntry, String> employeeCol = new TableColumn<>("Employee");
-        employeeCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().employeeId));
-        
-        TableColumn<PayrollAdvances.AuditEntry, String> detailsCol = new TableColumn<>("Details");
-        detailsCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().details));
-        
-        TableColumn<PayrollAdvances.AuditEntry, String> performedByCol = new TableColumn<>("Performed By");
-        performedByCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().performedBy));
-        
-        auditTable.getColumns().addAll(timestampCol, actionCol, employeeCol, detailsCol, performedByCol);
-        
-        List<PayrollAdvances.AuditEntry> auditEntries = payrollAdvances.getAuditTrail(
-            selectedDriver != null ? String.valueOf(selectedDriver.getId()) : null,
-            LocalDate.now().minusMonths(6),
-            LocalDate.now()
-        );
-        
-        auditTable.setItems(FXCollections.observableArrayList(auditEntries));
-        
-        Button closeBtn = new Button("Close");
-        closeBtn.setOnAction(e -> auditStage.close());
-        
-        root.getChildren().addAll(auditTable, closeBtn);
-        
-        Scene scene = new Scene(root, 900, 600);
-        auditStage.setScene(scene);
-        auditStage.showAndWait();
-    }
-
-    public void updateAdvancesHistoryTable() {
-        // This method is called from outside but we handle history differently now
-        updateAdvancesTable();
-        updateSummary();
-    }
-
-    private void showInfo(String msg) {
-        Alert a = new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK);
-        a.setHeaderText(null);
-        a.showAndWait();
-    }
     
-    private void showError(String msg) {
-        Alert a = new Alert(Alert.AlertType.ERROR, msg, ButtonType.OK);
-        a.setHeaderText("Error");
-        a.showAndWait();
-    }
-
-    // Dialog result classes
-    private static class AdvanceDialogResult {
+    // Helper classes for dialogs
+    private static class AdvanceRequest {
         final BigDecimal amount;
         final int weeks;
         final String notes;
         final String approvedBy;
-        final LocalDate dateGiven;
         
-        AdvanceDialogResult(BigDecimal amount, int weeks, String notes, String approvedBy, LocalDate dateGiven) {
+        AdvanceRequest(BigDecimal amount, int weeks, String notes, String approvedBy) {
             this.amount = amount;
             this.weeks = weeks;
             this.notes = notes;
             this.approvedBy = approvedBy;
-            this.dateGiven = dateGiven;
         }
     }
     
-    private static class EditRepaymentResult {
-        final LocalDate newWeekStartDate;
-        final BigDecimal newAmount;
-        final String note;
-        
-        EditRepaymentResult(LocalDate newWeekStartDate, BigDecimal newAmount, String note) {
-            this.newWeekStartDate = newWeekStartDate;
-            this.newAmount = newAmount;
-            this.note = note;
-        }
-    }
-    
-    private static class ManualPaymentResult {
-        final LocalDate date;
+    private static class PaymentRequest {
+        final String advanceId;
         final BigDecimal amount;
-        final String note;
-        final PayrollAdvances.Advance.ManualRepayment.PaymentMethod method;
+        final PayrollAdvances.PaymentMethod method;
         final String reference;
+        final String notes;
+        final String processedBy;
         
-        ManualPaymentResult(LocalDate date, BigDecimal amount, String note, 
-                          PayrollAdvances.Advance.ManualRepayment.PaymentMethod method, 
-                          String reference) {
-            this.date = date;
+        PaymentRequest(String advanceId, BigDecimal amount, PayrollAdvances.PaymentMethod method,
+                      String reference, String notes, String processedBy) {
+            this.advanceId = advanceId;
             this.amount = amount;
-            this.note = note;
             this.method = method;
             this.reference = reference;
-        }
-    }
-    
-    private static class StatusChangeResult {
-        final PayrollAdvances.Advance.AdvanceStatus newStatus;
-        final String reason;
-        
-        StatusChangeResult(PayrollAdvances.Advance.AdvanceStatus newStatus, String reason) {
-            this.newStatus = newStatus;
-            this.reason = reason;
+            this.notes = notes;
+            this.processedBy = processedBy;
         }
     }
 }

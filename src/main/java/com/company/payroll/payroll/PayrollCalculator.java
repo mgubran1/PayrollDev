@@ -146,22 +146,34 @@ public class PayrollCalculator {
         double recurringFees = payrollRecurring.totalDeductionsForDriverWeek(driver.getId(), start);
         logger.debug("Driver {} - Recurring fees: ${}", driver.getName(), recurringFees);
         
-        // Cash Advances
-        String driverId = String.valueOf(driver.getId());
-        BigDecimal advancesGivenBD = payrollAdvances.getAdvancesGivenForWeek(driverId, start);
+        // Cash Advances - Updated to use new PayrollAdvances system
+        BigDecimal advancesGivenBD = BigDecimal.ZERO;
+        BigDecimal advanceRepaymentsBD = BigDecimal.ZERO;
+        
+        // Get advances given this week
+        List<PayrollAdvances.AdvanceEntry> weeklyAdvances = payrollAdvances.getEntriesForEmployee(driver.getId()).stream()
+            .filter(e -> e.getAdvanceType() == PayrollAdvances.AdvanceType.ADVANCE)
+            .filter(e -> !e.getDate().isBefore(start) && !e.getDate().isAfter(end))
+            .collect(Collectors.toList());
+        
+        advancesGivenBD = weeklyAdvances.stream()
+            .map(PayrollAdvances.AdvanceEntry::getAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
         double advancesGiven = advancesGivenBD.doubleValue();
         logger.debug("Driver {} - Advances given this week: ${}", driver.getName(), advancesGiven);
         
         // Calculate advance repayments
-        BigDecimal outstandingBalance = payrollAdvances.getOutstandingBalance(driverId);
-        BigDecimal advanceRepaymentsBD = BigDecimal.ZERO;
+        BigDecimal scheduledRepaymentBD = payrollAdvances.getScheduledRepaymentForWeek(driver, start);
         
-        if (outstandingBalance.compareTo(BigDecimal.ZERO) > 0) {
-            // Check for scheduled repayment
-            advanceRepaymentsBD = payrollAdvances.getRepaymentAmountForWeek(driverId, start);
+        if (scheduledRepaymentBD.compareTo(BigDecimal.ZERO) > 0) {
+            advanceRepaymentsBD = scheduledRepaymentBD;
+            logger.info("Scheduled advance repayment for driver {}: ${}", driver.getName(), advanceRepaymentsBD);
+        } else {
+            // Check if auto-repayment should be calculated
+            BigDecimal outstandingBalance = payrollAdvances.getCurrentBalance(driver);
             
-            // Auto-calculate if no scheduled repayment
-            if (advanceRepaymentsBD.compareTo(BigDecimal.ZERO) == 0 && grossAfterFuel > 500) {
+            if (outstandingBalance.compareTo(BigDecimal.ZERO) > 0 && grossAfterFuel > 500) {
                 advanceRepaymentsBD = calculateAutoRepayment(
                     BigDecimal.valueOf(gross), 
                     BigDecimal.valueOf(grossAfterFuel), 
@@ -253,66 +265,65 @@ public class PayrollCalculator {
     /**
      * Calculate escrow deposit amount
      */
-	 
-	private BigDecimal calculateEscrowDeposit(Employee driver, LocalDate weekStart, BigDecimal gross,
-											BigDecimal grossAfterFuel, BigDecimal recurringFees,
-											BigDecimal advanceRepayments, BigDecimal otherDeductions,
-											BigDecimal reimbursements) {
-		BigDecimal remainingToTarget = payrollEscrow.getRemainingToTarget(driver);
-		
-		// Check if escrow is already fully funded
-		if (remainingToTarget.compareTo(BigDecimal.ZERO) <= 0) {
-			logger.debug("Driver {} - Escrow already fully funded", driver.getName());
-			return BigDecimal.ZERO;
-		}
-		
-		// Check for manual weekly deposit first
-		BigDecimal manualEscrowDeposit = payrollEscrow.getWeeklyAmount(driver, weekStart);
-		
-		// If manual deposit exists, use it
-		if (manualEscrowDeposit.compareTo(BigDecimal.ZERO) > 0) {
-			logger.info("Manual escrow deposit for driver {}: ${} (Remaining to target: ${})", 
-				driver.getName(), manualEscrowDeposit, remainingToTarget);
-			return manualEscrowDeposit;
-		}
-		
-		// Calculate suggested amount for informational purposes only (not applied)
-		if (gross.compareTo(BigDecimal.ZERO) > 0) {
-			// Calculate potential net before escrow
-			BigDecimal potentialNetBeforeEscrow = grossAfterFuel
-				.subtract(recurringFees.abs())
-				.subtract(advanceRepayments.abs())
-				.subtract(otherDeductions.abs())
-				.add(reimbursements.abs());
-			
-			if (potentialNetBeforeEscrow.compareTo(ESCROW_MIN_NET_PAY) > 0) {
-				// Calculate suggested amount (complete in ~6 weeks)
-				BigDecimal weeklyTarget = remainingToTarget.divide(
-					new BigDecimal(ESCROW_WEEKS_TARGET), 2, RoundingMode.CEILING);
-				BigDecimal maxEscrow = weeklyTarget.min(MAX_ESCROW_DEPOSIT);
-				
-				// Ensure driver keeps at least $500
-				BigDecimal affordableEscrow = potentialNetBeforeEscrow.subtract(ESCROW_MIN_NET_PAY);
-				affordableEscrow = affordableEscrow.max(BigDecimal.ZERO);
-				
-				BigDecimal suggestedEscrow = maxEscrow.min(affordableEscrow);
-				
-				if (suggestedEscrow.compareTo(MIN_ESCROW_DEPOSIT) >= 0) {
-					suggestedEscrow = suggestedEscrow.setScale(2, RoundingMode.HALF_UP);
-					logger.info("SUGGESTED escrow deposit for driver {} would be: ${} (NOT APPLIED - manual entry required)", 
-						driver.getName(), suggestedEscrow);
-					
-					// Optionally, you could store this suggestion for display in the UI
-					// For example, add a method to PayrollEscrow to store suggestions:
-					// payrollEscrow.storeSuggestedAmount(driver, weekStart, suggestedEscrow);
-				}
-			}
-		}
-		
-		// Return zero - no automatic escrow deduction without manual entry
-		logger.debug("No manual escrow deposit found for driver {} - returning $0.00", driver.getName());
-		return BigDecimal.ZERO;
-	}
+    private BigDecimal calculateEscrowDeposit(Employee driver, LocalDate weekStart, BigDecimal gross,
+                                            BigDecimal grossAfterFuel, BigDecimal recurringFees,
+                                            BigDecimal advanceRepayments, BigDecimal otherDeductions,
+                                            BigDecimal reimbursements) {
+        BigDecimal remainingToTarget = payrollEscrow.getRemainingToTarget(driver);
+        
+        // Check if escrow is already fully funded
+        if (remainingToTarget.compareTo(BigDecimal.ZERO) <= 0) {
+            logger.debug("Driver {} - Escrow already fully funded", driver.getName());
+            return BigDecimal.ZERO;
+        }
+        
+        // Check for manual weekly deposit first
+        BigDecimal manualEscrowDeposit = payrollEscrow.getWeeklyAmount(driver, weekStart);
+        
+        // If manual deposit exists, use it
+        if (manualEscrowDeposit.compareTo(BigDecimal.ZERO) > 0) {
+            logger.info("Manual escrow deposit for driver {}: ${} (Remaining to target: ${})", 
+                driver.getName(), manualEscrowDeposit, remainingToTarget);
+            return manualEscrowDeposit;
+        }
+        
+        // Calculate suggested amount for informational purposes only (not applied)
+        if (gross.compareTo(BigDecimal.ZERO) > 0) {
+            // Calculate potential net before escrow
+            BigDecimal potentialNetBeforeEscrow = grossAfterFuel
+                .subtract(recurringFees.abs())
+                .subtract(advanceRepayments.abs())
+                .subtract(otherDeductions.abs())
+                .add(reimbursements.abs());
+            
+            if (potentialNetBeforeEscrow.compareTo(ESCROW_MIN_NET_PAY) > 0) {
+                // Calculate suggested amount (complete in ~6 weeks)
+                BigDecimal weeklyTarget = remainingToTarget.divide(
+                    new BigDecimal(ESCROW_WEEKS_TARGET), 2, RoundingMode.CEILING);
+                BigDecimal maxEscrow = weeklyTarget.min(MAX_ESCROW_DEPOSIT);
+                
+                // Ensure driver keeps at least $500
+                BigDecimal affordableEscrow = potentialNetBeforeEscrow.subtract(ESCROW_MIN_NET_PAY);
+                affordableEscrow = affordableEscrow.max(BigDecimal.ZERO);
+                
+                BigDecimal suggestedEscrow = maxEscrow.min(affordableEscrow);
+                
+                if (suggestedEscrow.compareTo(MIN_ESCROW_DEPOSIT) >= 0) {
+                    suggestedEscrow = suggestedEscrow.setScale(2, RoundingMode.HALF_UP);
+                    logger.info("SUGGESTED escrow deposit for driver {} would be: ${} (NOT APPLIED - manual entry required)", 
+                        driver.getName(), suggestedEscrow);
+                    
+                    // Optionally, you could store this suggestion for display in the UI
+                    // For example, add a method to PayrollEscrow to store suggestions:
+                    // payrollEscrow.storeSuggestedAmount(driver, weekStart, suggestedEscrow);
+                }
+            }
+        }
+        
+        // Return zero - no automatic escrow deduction without manual entry
+        logger.debug("No manual escrow deposit found for driver {} - returning $0.00", driver.getName());
+        return BigDecimal.ZERO;
+    }
     
     /**
      * Create an error row for failed calculations
