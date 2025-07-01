@@ -444,19 +444,96 @@ public class LoadsPanel extends BorderPane {
     private StatusTab makeCustomerSettingsTab() {
         logger.debug("Creating Customer Settings tab");
         StatusTab statusTab = new StatusTab();
+        
+        // Main content split pane
+        SplitPane splitPane = new SplitPane();
+        splitPane.setDividerPositions(0.3);
+        
+        // Left side - Customer list
+        VBox leftPane = new VBox(10);
+        leftPane.setPadding(new Insets(10));
+        
+        Label customerLabel = new Label("Customer List:");
         ListView<String> customerList = new ListView<>(allCustomers);
         customerList.setPrefHeight(300);
-
+        
         TextField newCustomerField = new TextField();
         newCustomerField.setPromptText("Add new customer...");
-        Button addBtn = new Button("Add");
-        Button deleteBtn = new Button("Delete Selected");
-
-        HBox inputBox = new HBox(10, newCustomerField, addBtn, deleteBtn);
-        inputBox.setAlignment(Pos.CENTER_LEFT);
-        inputBox.setPadding(new Insets(10));
-
-        addBtn.setOnAction(e -> {
+        Button addCustomerBtn = new Button("Add");
+        Button deleteCustomerBtn = new Button("Delete Selected");
+        
+        HBox customerInputBox = new HBox(10, newCustomerField, addCustomerBtn, deleteCustomerBtn);
+        customerInputBox.setAlignment(Pos.CENTER_LEFT);
+        
+        leftPane.getChildren().addAll(customerLabel, customerList, customerInputBox);
+        
+        // Right side - Customer locations
+        VBox rightPane = new VBox(10);
+        rightPane.setPadding(new Insets(10));
+        
+        Label locationsLabel = new Label("Customer Locations:");
+        
+        TabPane locationTabs = new TabPane();
+        locationTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        
+        // Pickup locations tab
+        Tab pickupTab = new Tab("Pick Up Locations");
+        VBox pickupContent = new VBox(10);
+        pickupContent.setPadding(new Insets(10));
+        
+        ListView<String> pickupList = new ListView<>();
+        pickupList.setPrefHeight(200);
+        
+        TextField newPickupField = new TextField();
+        newPickupField.setPromptText("Add new pickup location...");
+        Button addPickupBtn = new Button("Add");
+        Button deletePickupBtn = new Button("Delete Selected");
+        
+        HBox pickupInputBox = new HBox(10, newPickupField, addPickupBtn, deletePickupBtn);
+        pickupContent.getChildren().addAll(pickupList, pickupInputBox);
+        pickupTab.setContent(pickupContent);
+        
+        // Drop locations tab
+        Tab dropTab = new Tab("Drop Locations");
+        VBox dropContent = new VBox(10);
+        dropContent.setPadding(new Insets(10));
+        
+        ListView<String> dropList = new ListView<>();
+        dropList.setPrefHeight(200);
+        
+        TextField newDropField = new TextField();
+        newDropField.setPromptText("Add new drop location...");
+        Button addDropBtn = new Button("Add");
+        Button deleteDropBtn = new Button("Delete Selected");
+        
+        HBox dropInputBox = new HBox(10, newDropField, addDropBtn, deleteDropBtn);
+        dropContent.getChildren().addAll(dropList, dropInputBox);
+        dropTab.setContent(dropContent);
+        
+        locationTabs.getTabs().addAll(pickupTab, dropTab);
+        
+        rightPane.getChildren().addAll(locationsLabel, locationTabs);
+        rightPane.setDisable(true); // Initially disabled until customer selected
+        
+        splitPane.getItems().addAll(leftPane, rightPane);
+        
+        // Customer selection handler
+        customerList.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                rightPane.setDisable(false);
+                // Load locations for selected customer
+                Map<String, List<String>> locations = loadDAO.getAllCustomerLocations(newVal);
+                pickupList.setItems(FXCollections.observableArrayList(locations.getOrDefault("PICKUP", new ArrayList<>())));
+                dropList.setItems(FXCollections.observableArrayList(locations.getOrDefault("DROP", new ArrayList<>())));
+            } else {
+                rightPane.setDisable(true);
+                pickupList.setItems(FXCollections.emptyObservableList());
+                dropList.setItems(FXCollections.emptyObservableList());
+            }
+        });
+        
+        // Customer management handlers
+        addCustomerBtn.setOnAction(e -> {
             String name = newCustomerField.getText().trim();
             if (name.isEmpty()) {
                 logger.warn("Attempted to add empty customer name");
@@ -482,7 +559,7 @@ public class LoadsPanel extends BorderPane {
             }
         });
 
-        deleteBtn.setOnAction(e -> {
+        deleteCustomerBtn.setOnAction(e -> {
             String selected = customerList.getSelectionModel().getSelectedItem();
             if (selected == null || selected.trim().isEmpty()) {
                 logger.warn("No customer selected for deletion");
@@ -490,7 +567,9 @@ public class LoadsPanel extends BorderPane {
                 return;
             }
             logger.info("Delete customer button clicked for: {}", selected);
-            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "Delete customer \"" + selected + "\"?", ButtonType.YES, ButtonType.NO);
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, 
+                "Delete customer \"" + selected + "\"?\nThis will also delete all associated locations.", 
+                ButtonType.YES, ButtonType.NO);
             confirm.setHeaderText("Confirm Delete");
             confirm.showAndWait().ifPresent(resp -> {
                 if (resp == ButtonType.YES) {
@@ -500,10 +579,63 @@ public class LoadsPanel extends BorderPane {
                 }
             });
         });
+        
+        // Location management handlers
+        addPickupBtn.setOnAction(e -> {
+            String customer = customerList.getSelectionModel().getSelectedItem();
+            String location = newPickupField.getText().trim();
+            if (customer == null || location.isEmpty()) {
+                showError("Please select a customer and enter a location.");
+                return;
+            }
+            loadDAO.addCustomerLocationIfNotExists(customer, "PICKUP", location);
+            newPickupField.clear();
+            // Refresh locations
+            Map<String, List<String>> locations = loadDAO.getAllCustomerLocations(customer);
+            pickupList.setItems(FXCollections.observableArrayList(locations.getOrDefault("PICKUP", new ArrayList<>())));
+        });
+        
+        deletePickupBtn.setOnAction(e -> {
+            String customer = customerList.getSelectionModel().getSelectedItem();
+            String location = pickupList.getSelectionModel().getSelectedItem();
+            if (customer == null || location == null) {
+                showError("Please select a location to delete.");
+                return;
+            }
+            loadDAO.deleteCustomerLocation(customer, "PICKUP", location);
+            // Refresh locations
+            Map<String, List<String>> locations = loadDAO.getAllCustomerLocations(customer);
+            pickupList.setItems(FXCollections.observableArrayList(locations.getOrDefault("PICKUP", new ArrayList<>())));
+        });
+        
+        addDropBtn.setOnAction(e -> {
+            String customer = customerList.getSelectionModel().getSelectedItem();
+            String location = newDropField.getText().trim();
+            if (customer == null || location.isEmpty()) {
+                showError("Please select a customer and enter a location.");
+                return;
+            }
+            loadDAO.addCustomerLocationIfNotExists(customer, "DROP", location);
+            newDropField.clear();
+            // Refresh locations
+            Map<String, List<String>> locations = loadDAO.getAllCustomerLocations(customer);
+            dropList.setItems(FXCollections.observableArrayList(locations.getOrDefault("DROP", new ArrayList<>())));
+        });
+        
+        deleteDropBtn.setOnAction(e -> {
+            String customer = customerList.getSelectionModel().getSelectedItem();
+            String location = dropList.getSelectionModel().getSelectedItem();
+            if (customer == null || location == null) {
+                showError("Please select a location to delete.");
+                return;
+            }
+            loadDAO.deleteCustomerLocation(customer, "DROP", location);
+            // Refresh locations
+            Map<String, List<String>> locations = loadDAO.getAllCustomerLocations(customer);
+            dropList.setItems(FXCollections.observableArrayList(locations.getOrDefault("DROP", new ArrayList<>())));
+        });
 
-        VBox vbox = new VBox(new Label("Customer List:"), customerList, inputBox);
-        vbox.setPadding(new Insets(10));
-        statusTab.tab = new Tab("Customer Settings", vbox);
+        statusTab.tab = new Tab("Customer Settings", splitPane);
         return statusTab;
     }
 
@@ -603,6 +735,12 @@ public class LoadsPanel extends BorderPane {
         });
         reminderCol.setPrefWidth(200);
 
+        TableColumn<Load, String> pickupDateCol = new TableColumn<>("Pick Up Date");
+        pickupDateCol.setCellValueFactory(e -> new SimpleStringProperty(
+                e.getValue().getPickUpDate() != null ? e.getValue().getPickUpDate().toString() : ""
+        ));
+        pickupDateCol.setPrefWidth(100);
+
         TableColumn<Load, String> deliveryDateCol = new TableColumn<>("Delivery Date");
         deliveryDateCol.setCellValueFactory(e -> new SimpleStringProperty(
                 e.getValue().getDeliveryDate() != null ? e.getValue().getDeliveryDate().toString() : ""
@@ -610,7 +748,7 @@ public class LoadsPanel extends BorderPane {
         deliveryDateCol.setPrefWidth(100);
 
         table.getColumns().addAll(loadNumCol, poCol, customerCol, pickUpCol, dropCol, driverCol, 
-                                truckUnitCol, trailerCol, statusCol, grossCol, reminderCol, deliveryDateCol);
+                                truckUnitCol, trailerCol, statusCol, grossCol, reminderCol, pickupDateCol, deliveryDateCol);
 
         // Add action columns if requested
         if (includeActionColumns) {
@@ -1040,6 +1178,9 @@ public class LoadsPanel extends BorderPane {
 			contentStream.showText("Trailer #: " + trailerInfo);
 			contentStream.newLine();
 			
+			contentStream.showText("Pick Up Date: " + (load.getPickUpDate() != null ? load.getPickUpDate().toString() : "N/A"));
+			contentStream.newLine();
+			
 			contentStream.showText("Delivery Date: " + (load.getDeliveryDate() != null ? load.getDeliveryDate().toString() : "N/A"));
 			contentStream.newLine();
 			
@@ -1210,8 +1351,27 @@ public class LoadsPanel extends BorderPane {
         TextField poField = new TextField();
         ComboBox<String> customerBox = new ComboBox<>(allCustomers);
         customerBox.setEditable(true);
-        TextField pickUpField = new TextField();
-        TextField dropField = new TextField();
+        
+        // Enhanced location fields with autocomplete
+        ComboBox<String> pickUpField = new ComboBox<>();
+        pickUpField.setEditable(true);
+        pickUpField.setPrefWidth(300);
+        
+        ComboBox<String> dropField = new ComboBox<>();
+        dropField.setEditable(true);
+        dropField.setPrefWidth(300);
+        
+        // Update location lists when customer is selected
+        customerBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.isEmpty()) {
+                Map<String, List<String>> locations = loadDAO.getAllCustomerLocations(newVal);
+                pickUpField.setItems(FXCollections.observableArrayList(locations.getOrDefault("PICKUP", new ArrayList<>())));
+                dropField.setItems(FXCollections.observableArrayList(locations.getOrDefault("DROP", new ArrayList<>())));
+            } else {
+                pickUpField.setItems(FXCollections.emptyObservableList());
+                dropField.setItems(FXCollections.emptyObservableList());
+            }
+        });
         
         // Enhanced driver/truck selection
         ComboBox<Employee> driverBox = new ComboBox<>(allDrivers);
@@ -1250,14 +1410,14 @@ public class LoadsPanel extends BorderPane {
             }
         });
         
-        // Trailer selection
+        // Trailer selection - now automatically populated from driver's trailer
         ComboBox<Trailer> trailerBox = new ComboBox<>(allTrailers);
         trailerBox.setPromptText("Select Trailer");
         trailerBox.setCellFactory(cb -> new ListCell<Trailer>() {
             @Override
             protected void updateItem(Trailer t, boolean empty) {
                 super.updateItem(t, empty);
-                setText((t == null || empty) ? "" : t.getTrailerNumber() + " - " + t.getType());
+                                setText((t == null || empty) ? "" : t.getTrailerNumber() + " - " + t.getType());
             }
         });
         trailerBox.setButtonCell(new ListCell<Trailer>() {
@@ -1288,9 +1448,22 @@ public class LoadsPanel extends BorderPane {
             }
         });
         
+        // Auto-populate trailer from driver's trailer number
+        driverBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && newVal.getTrailerNumber() != null && !newVal.getTrailerNumber().isEmpty()) {
+                trailerSearchField.setText(newVal.getTrailerNumber());
+                // Try to find and select the trailer
+                Trailer driverTrailer = trailerDAO.findByTrailerNumber(newVal.getTrailerNumber());
+                if (driverTrailer != null) {
+                    trailerBox.setValue(driverTrailer);
+                }
+            }
+        });
+        
         ComboBox<Load.Status> statusBox = new ComboBox<>(FXCollections.observableArrayList(Load.Status.values()));
         TextField grossField = new TextField();
         TextArea notesField = new TextArea();
+        DatePicker pickUpDatePicker = new DatePicker();  // NEW
         DatePicker deliveryDatePicker = new DatePicker();
         TextField reminderField = new TextField();
         CheckBox hasLumperCheck = new CheckBox("Has Lumper");
@@ -1303,8 +1476,8 @@ public class LoadsPanel extends BorderPane {
             loadNumField.setText(load.getLoadNumber());
             poField.setText(load.getPONumber());
             customerBox.setValue(load.getCustomer());
-            pickUpField.setText(load.getPickUpLocation());
-            dropField.setText(load.getDropLocation());
+            pickUpField.setValue(load.getPickUpLocation());
+            dropField.setValue(load.getDropLocation());
             
             // Set driver
             Employee loadedDriver = load.getDriver();
@@ -1333,6 +1506,9 @@ public class LoadsPanel extends BorderPane {
             statusBox.setValue(load.getStatus());
             grossField.setText(String.valueOf(load.getGrossAmount()));
             notesField.setText(load.getNotes());
+            if (load.getPickUpDate() != null) {
+                pickUpDatePicker.setValue(load.getPickUpDate());
+            }
             if (load.getDeliveryDate() != null) {
                 deliveryDatePicker.setValue(load.getDeliveryDate());
             }
@@ -1362,6 +1538,7 @@ public class LoadsPanel extends BorderPane {
         grid.add(new Label("Status:"), 0, r);       grid.add(statusBox, 1, r++);
         grid.add(new Label("Gross Amount:"), 0, r); grid.add(grossField, 1, r++);
         grid.add(new Label("Notes:"), 0, r);        grid.add(notesField, 1, r++);
+        grid.add(new Label("Pick Up Date:"), 0, r); grid.add(pickUpDatePicker, 1, r++);  // NEW
         grid.add(new Label("Delivery Date:"), 0, r);grid.add(deliveryDatePicker, 1, r++);
         grid.add(new Label("Reminder:"), 0, r);     grid.add(reminderField, 1, r++);
         grid.add(hasLumperCheck, 1, r++);
@@ -1405,13 +1582,14 @@ public class LoadsPanel extends BorderPane {
                     String loadNum = loadNumField.getText().trim();
                     String poNum = poField.getText().trim();
                     String customer = customerBox.getValue() != null ? customerBox.getValue().trim() : "";
-                    String pickUp = pickUpField.getText().trim();
-                    String drop = dropField.getText().trim();
+                    String pickUp = pickUpField.getValue() != null ? pickUpField.getValue() : "";
+                    String drop = dropField.getValue() != null ? dropField.getValue() : "";
                     Employee driver = driverBox.getValue();
                     Trailer trailer = trailerBox.getValue();
                     Load.Status status = statusBox.getValue() != null ? statusBox.getValue() : Load.Status.BOOKED;
                     double gross = grossField.getText().isEmpty() ? 0 : Double.parseDouble(grossField.getText());
                     String notes = notesField.getText().trim();
+                    LocalDate pickUpDate = pickUpDatePicker.getValue();  // NEW
                     LocalDate deliveryDate = deliveryDatePicker.getValue();
                     String reminder = reminderField.getText().trim();
                     boolean hasLumper = hasLumperCheck.isSelected();
@@ -1431,7 +1609,7 @@ public class LoadsPanel extends BorderPane {
                     if (isAdd) {
                         logger.info("Adding new load: {}", loadNum);
                         Load newLoad = new Load(0, loadNum, poNum, customer, pickUp, drop, driver, 
-                                             truckUnitSnapshot, status, gross, notes, deliveryDate, 
+                                             truckUnitSnapshot, status, gross, notes, pickUpDate, deliveryDate, 
                                              reminder, hasLumper, hasRevisedRate);
                         
                         // Set trailer information
@@ -1465,6 +1643,7 @@ public class LoadsPanel extends BorderPane {
                         load.setStatus(status);
                         load.setGrossAmount(gross);
                         load.setNotes(notes);
+                        load.setPickUpDate(pickUpDate);  // NEW
                         load.setDeliveryDate(deliveryDate);
                         load.setReminder(reminder);
                         load.setHasLumper(hasLumper);
@@ -1562,6 +1741,7 @@ public class LoadsPanel extends BorderPane {
                         safe(l.getStatus().toString()),
                         String.valueOf(l.getGrossAmount()),
                         safe(l.getReminder()),
+                        safe(l.getPickUpDate() != null ? l.getPickUpDate().toString() : ""),
                         safe(l.getDeliveryDate() != null ? l.getDeliveryDate().toString() : "")
                 );
                 bw.write(row); bw.newLine();

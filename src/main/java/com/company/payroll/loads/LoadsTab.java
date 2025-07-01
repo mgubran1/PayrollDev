@@ -16,6 +16,7 @@ import java.util.function.Consumer;
  * It can be further extended to listen for employee changes and propagate them to the LoadsPanel if needed.
  */
 public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeListener,
+                                            TrailersTab.TrailerDataChangeListener,
                                             LoadsPanel.LoadDataChangeListener {
     private static final Logger logger = LoggerFactory.getLogger(LoadsTab.class);
     private final LoadsPanel loadsPanel;
@@ -36,6 +37,9 @@ public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeList
         
         // Register for employee updates
         employeesTab.addEmployeeDataChangeListener(this);
+        
+        // Register for trailer updates
+        trailersTab.addTrailerDataChangeListener(this);
         
         // Register this tab as a listener for load data changes
         loadsPanel.addLoadDataChangeListener(this);
@@ -68,6 +72,11 @@ public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeList
         loadsPanel.onEmployeeDataChanged(currentList);
     }
     
+    @Override
+    public void onTrailerDataChanged(List<Trailer> currentList) {
+        logger.debug("Trailer data changed, updating LoadsPanel with {} trailers", currentList.size());
+        loadsPanel.onTrailerDataChanged(currentList);
+    }
     
     @Override
     public void onLoadDataChanged() {

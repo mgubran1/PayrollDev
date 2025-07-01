@@ -72,6 +72,14 @@ public class LoadDAO {
             } catch (SQLException ignore) {
                 logger.debug("trailer_number column already exists");
             }
+            
+            // Add pickup_date column
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN pickup_date DATE");
+                logger.info("Added pickup_date column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("pickup_date column already exists");
+            }
         } catch (SQLException ignore) {}
         
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
@@ -90,6 +98,7 @@ public class LoadDAO {
                     status TEXT,
                     gross_amount REAL,
                     notes TEXT,
+                    pickup_date DATE,
                     delivery_date DATE,
                     reminder TEXT,
                     has_lumper INTEGER DEFAULT 0,
@@ -109,6 +118,19 @@ public class LoadDAO {
             """;
             conn.createStatement().execute(sqlCustomer);
             logger.info("Customers table initialized successfully");
+            
+            String sqlLocations = """
+                CREATE TABLE IF NOT EXISTS customer_locations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    customer_id INTEGER,
+                    location_type TEXT,
+                    address TEXT NOT NULL,
+                    FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+                    UNIQUE(customer_id, location_type, address)
+                );
+            """;
+            conn.createStatement().execute(sqlLocations);
+            logger.info("Customer locations table initialized successfully");
             
             String sqlDocuments = """
                 CREATE TABLE IF NOT EXISTS load_documents (
@@ -155,9 +177,9 @@ public class LoadDAO {
             load.getGrossAmount());
         String sql = """
             INSERT INTO loads (load_number, po_number, customer, pick_up_location, drop_location, 
-            driver_id, truck_unit_snapshot, trailer_id, trailer_number, status, gross_amount, notes, delivery_date, 
-            reminder, has_lumper, has_revised_rate_confirmation) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            driver_id, truck_unit_snapshot, trailer_id, trailer_number, status, gross_amount, notes, 
+            pickup_date, delivery_date, reminder, has_lumper, has_revised_rate_confirmation) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -173,13 +195,17 @@ public class LoadDAO {
             ps.setString(10, load.getStatus().name());
             ps.setDouble(11, load.getGrossAmount());
             ps.setString(12, load.getNotes());
-            if (load.getDeliveryDate() != null)
-                ps.setDate(13, java.sql.Date.valueOf(load.getDeliveryDate()));
+            if (load.getPickUpDate() != null)
+                ps.setDate(13, java.sql.Date.valueOf(load.getPickUpDate()));
             else
                 ps.setNull(13, java.sql.Types.DATE);
-            ps.setString(14, load.getReminder());
-            ps.setInt(15, load.isHasLumper() ? 1 : 0);
-            ps.setInt(16, load.isHasRevisedRateConfirmation() ? 1 : 0);
+            if (load.getDeliveryDate() != null)
+                ps.setDate(14, java.sql.Date.valueOf(load.getDeliveryDate()));
+            else
+                ps.setNull(14, java.sql.Types.DATE);
+            ps.setString(15, load.getReminder());
+            ps.setInt(16, load.isHasLumper() ? 1 : 0);
+            ps.setInt(17, load.isHasRevisedRateConfirmation() ? 1 : 0);
             ps.executeUpdate();
             ResultSet keys = ps.getGeneratedKeys();
             if (keys.next()) {
@@ -188,6 +214,13 @@ public class LoadDAO {
                 // Save customer if not exists
                 if (load.getCustomer() != null && !load.getCustomer().trim().isEmpty()) {
                     addCustomerIfNotExists(load.getCustomer().trim());
+                    // Save locations
+                    if (load.getPickUpLocation() != null && !load.getPickUpLocation().trim().isEmpty()) {
+                        addCustomerLocationIfNotExists(load.getCustomer().trim(), "PICKUP", load.getPickUpLocation().trim());
+                    }
+                    if (load.getDropLocation() != null && !load.getDropLocation().trim().isEmpty()) {
+                        addCustomerLocationIfNotExists(load.getCustomer().trim(), "DROP", load.getDropLocation().trim());
+                    }
                 }
                 return id;
             }
@@ -208,7 +241,7 @@ public class LoadDAO {
         String sql = """
             UPDATE loads SET load_number=?, po_number=?, customer=?, pick_up_location=?, 
             drop_location=?, driver_id=?, truck_unit_snapshot=?, trailer_id=?, trailer_number=?, status=?, gross_amount=?, 
-            notes=?, delivery_date=?, reminder=?, has_lumper=?, has_revised_rate_confirmation=? 
+            notes=?, pickup_date=?, delivery_date=?, reminder=?, has_lumper=?, has_revised_rate_confirmation=? 
             WHERE id=?
         """;
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
@@ -225,20 +258,31 @@ public class LoadDAO {
             ps.setString(10, load.getStatus().name());
             ps.setDouble(11, load.getGrossAmount());
             ps.setString(12, load.getNotes());
-            if (load.getDeliveryDate() != null)
-                ps.setDate(13, java.sql.Date.valueOf(load.getDeliveryDate()));
+            if (load.getPickUpDate() != null)
+                ps.setDate(13, java.sql.Date.valueOf(load.getPickUpDate()));
             else
                 ps.setNull(13, java.sql.Types.DATE);
-            ps.setString(14, load.getReminder());
-            ps.setInt(15, load.isHasLumper() ? 1 : 0);
-            ps.setInt(16, load.isHasRevisedRateConfirmation() ? 1 : 0);
-            ps.setInt(17, load.getId());
+            if (load.getDeliveryDate() != null)
+                ps.setDate(14, java.sql.Date.valueOf(load.getDeliveryDate()));
+            else
+                ps.setNull(14, java.sql.Types.DATE);
+            ps.setString(15, load.getReminder());
+            ps.setInt(16, load.isHasLumper() ? 1 : 0);
+            ps.setInt(17, load.isHasRevisedRateConfirmation() ? 1 : 0);
+            ps.setInt(18, load.getId());
             int rowsAffected = ps.executeUpdate();
             if (rowsAffected > 0) {
                 logger.info("Load updated successfully");
                 // Save customer if not exists
                 if (load.getCustomer() != null && !load.getCustomer().trim().isEmpty()) {
                     addCustomerIfNotExists(load.getCustomer().trim());
+                    // Save locations
+                    if (load.getPickUpLocation() != null && !load.getPickUpLocation().trim().isEmpty()) {
+                        addCustomerLocationIfNotExists(load.getCustomer().trim(), "PICKUP", load.getPickUpLocation().trim());
+                    }
+                    if (load.getDropLocation() != null && !load.getDropLocation().trim().isEmpty()) {
+                        addCustomerLocationIfNotExists(load.getCustomer().trim(), "DROP", load.getDropLocation().trim());
+                    }
                 }
             } else {
                 logger.warn("No load found with ID: {}", load.getId());
@@ -725,6 +769,15 @@ public class LoadDAO {
         Load.Status status = Load.Status.valueOf(rs.getString("status"));
         double gross = rs.getDouble("gross_amount");
         String notes = rs.getString("notes");
+        
+        LocalDate pickUpDate = null;
+        try {
+            java.sql.Date sqlPickupDate = rs.getDate("pickup_date");
+            if (sqlPickupDate != null) pickUpDate = sqlPickupDate.toLocalDate();
+        } catch (SQLException ex) {
+            pickUpDate = null;
+        }
+        
         LocalDate deliveryDate = null;
         java.sql.Date sqlDate = rs.getDate("delivery_date");
         if (sqlDate != null) deliveryDate = sqlDate.toLocalDate();
@@ -739,7 +792,7 @@ public class LoadDAO {
         try { hasRevisedRateConfirmation = rs.getInt("has_revised_rate_confirmation") == 1; } catch (SQLException ex) { hasRevisedRateConfirmation = false; }
         
         Load load = new Load(id, loadNumber, poNumber, customer, pickUp, drop, driver, truckUnitSnapshot, 
-                          status, gross, notes, deliveryDate, reminder, hasLumper, hasRevisedRateConfirmation);
+                          status, gross, notes, pickUpDate, deliveryDate, reminder, hasLumper, hasRevisedRateConfirmation);
         
         // Set trailer info
         load.setTrailerId(trailerId);
@@ -797,5 +850,115 @@ public class LoadDAO {
         } catch (SQLException e) {
             logger.error("Error deleting customer: {}", e.getMessage(), e);
         }
+    }
+    
+    // NEW METHODS FOR CUSTOMER LOCATIONS
+    public void addCustomerLocationIfNotExists(String customerName, String locationType, String address) {
+        if (customerName == null || customerName.trim().isEmpty() || address == null || address.trim().isEmpty()) return;
+        logger.debug("Adding customer location if not exists: {} - {} - {}", customerName, locationType, address);
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            // Get customer ID
+            String getCustomerSql = "SELECT id FROM customers WHERE name = ?";
+            PreparedStatement ps = conn.prepareStatement(getCustomerSql);
+            ps.setString(1, customerName.trim());
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                int customerId = rs.getInt("id");
+                
+                // Insert location
+                String sql = "INSERT OR IGNORE INTO customer_locations (customer_id, location_type, address) VALUES (?, ?, ?)";
+                ps = conn.prepareStatement(sql);
+                ps.setInt(1, customerId);
+                ps.setString(2, locationType);
+                ps.setString(3, address.trim());
+                int rowsAffected = ps.executeUpdate();
+                if (rowsAffected > 0) {
+                    logger.info("Added new customer location: {} - {} - {}", customerName, locationType, address);
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Error saving customer location: {}", e.getMessage(), e);
+        }
+    }
+    
+    public List<String> getCustomerLocations(String customerName, String locationType) {
+        logger.debug("Fetching customer locations for: {} - {}", customerName, locationType);
+        List<String> locations = new ArrayList<>();
+        if (customerName == null || customerName.trim().isEmpty()) return locations;
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            String sql = """
+                SELECT cl.address FROM customer_locations cl
+                INNER JOIN customers c ON cl.customer_id = c.id
+                WHERE c.name = ? AND cl.location_type = ?
+                ORDER BY cl.address COLLATE NOCASE
+            """;
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, customerName.trim());
+            ps.setString(2, locationType);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                locations.add(rs.getString("address"));
+            }
+            logger.info("Retrieved {} locations for customer {} type {}", locations.size(), customerName, locationType);
+        } catch (SQLException e) {
+            logger.error("Error getting customer locations: {}", e.getMessage(), e);
+        }
+        return locations;
+    }
+    
+    public void deleteCustomerLocation(String customerName, String locationType, String address) {
+        if (customerName == null || customerName.trim().isEmpty() || address == null || address.trim().isEmpty()) return;
+        logger.info("Deleting customer location: {} - {} - {}", customerName, locationType, address);
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            String sql = """
+                DELETE FROM customer_locations 
+                WHERE customer_id = (SELECT id FROM customers WHERE name = ?)
+                AND location_type = ?
+                AND address = ?
+            """;
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, customerName.trim());
+            ps.setString(2, locationType);
+            ps.setString(3, address.trim());
+            int rowsAffected = ps.executeUpdate();
+            if (rowsAffected > 0) {
+                logger.info("Customer location deleted successfully");
+            } else {
+                logger.warn("Customer location not found");
+            }
+        } catch (SQLException e) {
+            logger.error("Error deleting customer location: {}", e.getMessage(), e);
+        }
+    }
+    
+    public Map<String, List<String>> getAllCustomerLocations(String customerName) {
+        logger.debug("Fetching all locations for customer: {}", customerName);
+        Map<String, List<String>> locationMap = new HashMap<>();
+        if (customerName == null || customerName.trim().isEmpty()) return locationMap;
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            String sql = """
+                SELECT cl.location_type, cl.address FROM customer_locations cl
+                INNER JOIN customers c ON cl.customer_id = c.id
+                WHERE c.name = ?
+                ORDER BY cl.location_type, cl.address COLLATE NOCASE
+            """;
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, customerName.trim());
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                String locationType = rs.getString("location_type");
+                String address = rs.getString("address");
+                locationMap.computeIfAbsent(locationType, k -> new ArrayList<>()).add(address);
+            }
+            logger.info("Retrieved locations for customer {}: pickup={}, drop={}", 
+                customerName, 
+                locationMap.getOrDefault("PICKUP", new ArrayList<>()).size(),
+                locationMap.getOrDefault("DROP", new ArrayList<>()).size());
+        } catch (SQLException e) {
+            logger.error("Error getting all customer locations: {}", e.getMessage(), e);
+        }
+        return locationMap;
     }
 }
