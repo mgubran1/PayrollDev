@@ -271,25 +271,25 @@ public class PayrollSummaryTable extends VBox {
 
         // Monetary columns with consistent formatting
         TableColumn<PayrollCalculator.PayrollRow, Number> grossCol = 
-            createMonetaryColumn("Gross Pay", "gross", false, POSITIVE_COLOR, "💰");
+            createMonetaryColumn("Gross Pay", p -> new SimpleDoubleProperty(p.getValue().gross), false, POSITIVE_COLOR, "💰");
         TableColumn<PayrollCalculator.PayrollRow, Number> serviceFeeCol = 
-            createMonetaryColumn("Service Fee", "serviceFee", true, NEGATIVE_COLOR, null);
+            createMonetaryColumn("Service Fee", p -> new SimpleDoubleProperty(p.getValue().serviceFee), true, NEGATIVE_COLOR, null);
         TableColumn<PayrollCalculator.PayrollRow, Number> grossAfterServiceFeeCol = 
-            createMonetaryColumn("After Service", "grossAfterServiceFee", false, NEUTRAL_COLOR, null);
+            createMonetaryColumn("After Service", p -> new SimpleDoubleProperty(p.getValue().grossAfterServiceFee), false, NEUTRAL_COLOR, null);
         TableColumn<PayrollCalculator.PayrollRow, Number> companyPayCol = 
-            createMonetaryColumn("Company Pay", "companyPay", false, PRIMARY_COLOR, "🏢");
+            createMonetaryColumn("Company Pay", p -> new SimpleDoubleProperty(p.getValue().companyPay), false, PRIMARY_COLOR, "🏢");
         TableColumn<PayrollCalculator.PayrollRow, Number> driverPayCol = 
-            createMonetaryColumn("Driver Pay", "driverPay", false, POSITIVE_COLOR, null);
+            createMonetaryColumn("Driver Pay", p -> new SimpleDoubleProperty(p.getValue().driverPay), false, POSITIVE_COLOR, null);
         TableColumn<PayrollCalculator.PayrollRow, Number> fuelCol = 
-            createMonetaryColumn("Fuel", "fuel", true, NEGATIVE_COLOR, "⛽");
+            createMonetaryColumn("Fuel", p -> new SimpleDoubleProperty(p.getValue().fuel), true, NEGATIVE_COLOR, "⛽");
         TableColumn<PayrollCalculator.PayrollRow, Number> grossAfterFuelCol = 
-            createMonetaryColumn("After Fuel", "grossAfterFuel", false, NEUTRAL_COLOR, null);
+            createMonetaryColumn("After Fuel", p -> new SimpleDoubleProperty(p.getValue().grossAfterFuel), false, NEUTRAL_COLOR, null);
         TableColumn<PayrollCalculator.PayrollRow, Number> recurringFeesCol = 
-            createMonetaryColumn("Recurring", "recurringFees", true, NEGATIVE_COLOR, "🔄");
+            createMonetaryColumn("Recurring", p -> new SimpleDoubleProperty(p.getValue().recurringFees), true, NEGATIVE_COLOR, "🔄");
         TableColumn<PayrollCalculator.PayrollRow, Number> advancesGivenCol = 
-            createMonetaryColumn("Advances Given", "advancesGiven", false, WARNING_COLOR, "💵");
+            createMonetaryColumn("Advances Given", p -> new SimpleDoubleProperty(p.getValue().advancesGiven), false, WARNING_COLOR, "💵");
         TableColumn<PayrollCalculator.PayrollRow, Number> advanceRepaymentsCol = 
-            createMonetaryColumn("Repayments", "advanceRepayments", true, NEGATIVE_COLOR, null);
+            createMonetaryColumn("Repayments", p -> new SimpleDoubleProperty(p.getValue().advanceRepayments), true, NEGATIVE_COLOR, null);
         
         // Escrow Deposits column with special styling
         TableColumn<PayrollCalculator.PayrollRow, Number> escrowDepositsCol = new TableColumn<>("Escrow");
@@ -338,13 +338,13 @@ public class PayrollSummaryTable extends VBox {
         
         // Other deductions column
         TableColumn<PayrollCalculator.PayrollRow, Number> otherDeductionsCol = 
-            createMonetaryColumn("Other Deductions", "otherDeductions", true, NEGATIVE_COLOR, "📉");
+            createMonetaryColumn("Other Deductions", p -> new SimpleDoubleProperty(p.getValue().otherDeductions), true, NEGATIVE_COLOR, "📉");
         otherDeductionsCol.setPrefWidth(130);
         otherDeductionsCol.setMinWidth(120);
 
         // Reimbursements column with special styling
         TableColumn<PayrollCalculator.PayrollRow, Number> reimbursementsCol = 
-            createMonetaryColumn("Reimbursements", "reimbursements", false, REIMBURSEMENT_COLOR, "💸");
+            createMonetaryColumn("Reimbursements", p -> new SimpleDoubleProperty(p.getValue().reimbursements), false, REIMBURSEMENT_COLOR, "💸");
         reimbursementsCol.setPrefWidth(130);
         reimbursementsCol.setMinWidth(120);
 
@@ -436,20 +436,13 @@ public class PayrollSummaryTable extends VBox {
      * Creates a monetary column with enhanced formatting and optional icon
      */
     private TableColumn<PayrollCalculator.PayrollRow, Number> createMonetaryColumn(
-            String title, String property, boolean isDeduction, Color accentColor, String icon) {
+            String title, Callback<TableColumn.CellDataFeatures<PayrollCalculator.PayrollRow, Number>, javafx.beans.value.ObservableValue<Number>> valueFactory, 
+            boolean isDeduction, Color accentColor, String icon) {
         
         TableColumn<PayrollCalculator.PayrollRow, Number> column = new TableColumn<>(title);
         
-        // Use reflection to get the property value
-        column.setCellValueFactory(cell -> {
-            try {
-                java.lang.reflect.Field field = PayrollCalculator.PayrollRow.class.getField(property);
-                double value = field.getDouble(cell.getValue());
-                return new SimpleDoubleProperty(value);
-            } catch (Exception e) {
-                return new SimpleDoubleProperty(0.0);
-            }
-        });
+        // Use the provided value factory instead of reflection
+        column.setCellValueFactory(valueFactory);
         
         column.setCellFactory(col -> new TableCell<>() {
             @Override
@@ -485,20 +478,20 @@ public class PayrollSummaryTable extends VBox {
         });
         
         // Set column widths based on content
-        switch (property) {
-            case "gross":
-            case "grossAfterServiceFee":
-            case "grossAfterFuel":
+        switch (title) {
+            case "Gross Pay":
+            case "After Service":
+            case "After Fuel":
                 column.setPrefWidth(120);
                 column.setMinWidth(110);
                 break;
-            case "serviceFee":
-            case "fuel":
+            case "Service Fee":
+            case "Fuel":
                 column.setPrefWidth(100);
                 column.setMinWidth(90);
                 break;
-            case "companyPay":
-            case "driverPay":
+            case "Company Pay":
+            case "Driver Pay":
                 column.setPrefWidth(110);
                 column.setMinWidth(100);
                 break;
@@ -789,7 +782,7 @@ public class PayrollSummaryTable extends VBox {
             this(0, 0, 0, 0, 0, 0, 0);
         }
         
-                public PayrollSummaryStats(int driverCount, double totalGross, double totalNet, 
+        public PayrollSummaryStats(int driverCount, double totalGross, double totalNet, 
                                   double totalDeductions, double totalReimbursements, 
                                   int totalLoads, int driversWithNegativePay) {
             this.driverCount = driverCount;
