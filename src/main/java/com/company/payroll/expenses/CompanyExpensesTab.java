@@ -1,92 +1,120 @@
 package com.company.payroll.expenses;
 
-import javafx.scene.control.*;
-import javafx.scene.layout.*;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.geometry.Orientation;
 import javafx.scene.chart.*;
+import javafx.scene.control.*;
+import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.scene.effect.DropShadow;
-import javafx.beans.property.*;
-import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.control.cell.TextFieldTableCell;
-import javafx.scene.control.cell.CheckBoxTableCell;
-import javafx.util.StringConverter;
-import javafx.animation.*;
-import javafx.util.Duration;
-import javafx.geometry.Orientation;
-import javafx.geometry.Side;
+import javafx.stage.FileChooser;
+import javafx.util.Callback;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.text.NumberFormat;
 import java.util.*;
 import java.util.stream.Collectors;
-import com.company.payroll.expenses.CompanyExpenseDAO;
-import javafx.stage.FileChooser;
-import java.io.File;
-import javafx.concurrent.Task;
-import javafx.scene.control.Alert.AlertType;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
-import javafx.scene.Node;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.MouseButton;
 
+/**
+ * Enhanced Company Expenses Tab for tracking all business expenses in the trucking fleet management system
+ */
 public class CompanyExpensesTab extends Tab {
-    private TableView<CompanyExpense> expenseTable;
-    private ComboBox<String> categoryComboBox;
-    private ComboBox<String> vendorComboBox;
-    private ComboBox<String> periodComboBox;
-    private DatePicker startDatePicker;
-    private DatePicker endDatePicker;
-    private TextField searchField;
-    
-    private Label totalExpensesLabel;
-    private Label monthlyAverageLabel;
-    private Label largestExpenseLabel;
-    private Label pendingApprovalLabel;
-    
-    private PieChart categoryChart;
-    private LineChart<String, Number> trendChart;
-    private BarChart<String, Number> vendorChart;
-    private AreaChart<String, Number> comparisonChart;
-    
-    private ProgressIndicator loadingIndicator;
+    private static final Logger logger = LoggerFactory.getLogger(CompanyExpensesTab.class);
     private static final NumberFormat CURRENCY_FORMAT = NumberFormat.getCurrencyInstance();
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+    private static final String CURRENT_USER = System.getProperty("user.name", "mgubran1");
     
-    private ObservableList<String> expenseCategories = FXCollections.observableArrayList(
-        "Fuel", "Maintenance", "Insurance", "Office Supplies", "Utilities",
-        "Marketing", "Payroll", "Equipment", "Rent", "Professional Services",
-        "Travel", "Software", "Hardware", "Other"
-    );
-
+    // Data access object
     private final CompanyExpenseDAO expenseDAO = new CompanyExpenseDAO();
+    
+    // UI Components
+    private TableView<CompanyExpense> expenseTable;
+    private TextField searchField;
+    private ComboBox<String> categoryFilter;
+    private ComboBox<String> departmentFilter;
+    private ComboBox<String> paymentMethodFilter;
+    private DatePicker startDatePicker;
+    private DatePicker endDatePicker;
+    
+    // Summary labels
+    private Label totalExpensesLabel;
+    private Label totalRecordsLabel;
+    private Label avgExpenseLabel;
+    private Label operatingExpensesLabel;
+    private Label administrativeExpensesLabel;
+    
+    // Charts
+    private PieChart expenseByCategoryChart;
+    private BarChart<String, Number> monthlyTrendChart;
+    private PieChart paymentMethodChart;
+    private LineChart<String, Number> yearOverYearChart;
+    
+    // Data
+    private ObservableList<CompanyExpense> allExpenses = FXCollections.observableArrayList();
+    private FilteredList<CompanyExpense> filteredExpenses;
+    
+    // Document storage path
+    private final String docStoragePath = "expense_documents";
+    
+    // Expense categories specific to trucking business
+    private final ObservableList<String> expenseCategories = FXCollections.observableArrayList(
+        "Fuel", "Insurance", "Permits & Licenses", "Office Supplies", "Utilities",
+        "Marketing & Advertising", "Professional Services", "Equipment Purchase",
+        "Rent/Lease", "Employee Benefits", "Training & Certification", 
+        "Communications", "Software & Technology", "Travel & Lodging",
+        "Meals & Entertainment", "Bank Fees", "Taxes", "Other"
+    );
+    
+    // Departments
+    private final ObservableList<String> departments = FXCollections.observableArrayList(
+        "Operations", "Administration", "Finance", "Human Resources", 
+        "Safety & Compliance", "Dispatch", "Marketing", "IT"
+    );
+    
+    // Payment methods
+    private final ObservableList<String> paymentMethods = FXCollections.observableArrayList(
+        "Company Credit Card", "Company Debit Card", "Check", "Cash", 
+        "ACH Transfer", "Wire Transfer", "Fuel Card", "Other"
+    );
     
     public CompanyExpensesTab() {
         setText("Company Expenses");
         setClosable(false);
         
-        // Set tab icon
+        logger.info("Initializing CompanyExpensesTab");
+        
+        // Create document directory if it doesn't exist
         try {
-            ImageView tabIcon = new ImageView(new Image(getClass().getResourceAsStream("/icons/expenses.png")));
-            tabIcon.setFitHeight(16);
-            tabIcon.setFitWidth(16);
-            setGraphic(tabIcon);
+            Files.createDirectories(Paths.get(docStoragePath));
         } catch (Exception e) {
-            // Icon not found
+            logger.error("Failed to create document directory", e);
         }
         
-        VBox mainContent = new VBox(15);
-        mainContent.setPadding(new Insets(20));
-        mainContent.setStyle("-fx-background-color: #f8f9fa;");
+        VBox mainContent = new VBox(10);
+        mainContent.setPadding(new Insets(15));
+        mainContent.setStyle("-fx-background-color: #f5f5f5;");
         
         // Header
-        VBox header = createHeader();
+        HBox header = createHeader();
         
         // Control Panel
         VBox controlPanel = createControlPanel();
@@ -94,137 +122,141 @@ public class CompanyExpensesTab extends Tab {
         // Summary Cards
         HBox summaryCards = createSummaryCards();
         
-        // Main Content with TabPane
-        TabPane contentTabs = createContentTabs();
+        // Content TabPane
+        TabPane contentTabPane = createContentTabPane();
         
-        // Loading Indicator
-        loadingIndicator = new ProgressIndicator();
-        loadingIndicator.setVisible(false);
-        StackPane loadingPane = new StackPane(loadingIndicator);
-        loadingPane.setAlignment(Pos.CENTER);
-        
-        mainContent.getChildren().addAll(header, controlPanel, summaryCards, contentTabs, loadingPane);
+        mainContent.getChildren().addAll(header, controlPanel, summaryCards, contentTabPane);
         
         ScrollPane scrollPane = new ScrollPane(mainContent);
         scrollPane.setFitToWidth(true);
         setContent(scrollPane);
         
         // Initialize data
-        initializeData();
-        loadExpenseData();
+        loadData();
     }
     
-    private VBox createHeader() {
-        VBox header = new VBox(10);
-        header.setPadding(new Insets(25));
-        header.setAlignment(Pos.CENTER);
-        header.setStyle("-fx-background-color: linear-gradient(to right, #e74c3c, #c0392b); " +
-                       "-fx-background-radius: 10;");
+    private HBox createHeader() {
+        HBox header = new HBox(20);
+        header.setPadding(new Insets(15));
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setStyle("-fx-background-color: #34495e; -fx-background-radius: 5;");
         
-        Label titleLabel = new Label("Company Expense Tracker");
-        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+        Label titleLabel = new Label("Company Expense Management");
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
         titleLabel.setTextFill(Color.WHITE);
         
-        Label subtitleLabel = new Label("Monitor and control your business expenses");
-        subtitleLabel.setFont(Font.font("Arial", 16));
-        subtitleLabel.setTextFill(Color.WHITE);
-        subtitleLabel.setOpacity(0.9);
+        Label subtitleLabel = new Label("Track and manage all business expenses for your trucking company");
+        subtitleLabel.setFont(Font.font("Arial", 14));
+        subtitleLabel.setTextFill(Color.LIGHTGRAY);
         
-        header.getChildren().addAll(titleLabel, subtitleLabel);
+        VBox titleBox = new VBox(5, titleLabel, subtitleLabel);
         
-        DropShadow shadow = new DropShadow();
-        shadow.setOffsetY(5);
-        shadow.setColor(Color.color(0, 0, 0, 0.3));
-        header.setEffect(shadow);
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        
+        // Total expenses display
+        Label totalLabel = new Label("Total Company Expenses:");
+        totalLabel.setFont(Font.font("Arial", 14));
+        totalLabel.setTextFill(Color.WHITE);
+        
+        totalExpensesLabel = new Label("$0.00");
+        totalExpensesLabel.setFont(Font.font("Arial", FontWeight.BOLD, 28));
+        totalExpensesLabel.setTextFill(Color.LIGHTGREEN);
+        
+        VBox totalBox = new VBox(5, totalLabel, totalExpensesLabel);
+        totalBox.setAlignment(Pos.CENTER_RIGHT);
+        
+        header.getChildren().addAll(titleBox, spacer, totalBox);
         
         return header;
     }
     
     private VBox createControlPanel() {
-        VBox controlPanel = new VBox(15);
-        controlPanel.setPadding(new Insets(20));
-        controlPanel.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
+        VBox controlPanel = new VBox(10);
+        controlPanel.setPadding(new Insets(15));
+        controlPanel.setStyle("-fx-background-color: white; -fx-background-radius: 5;");
         
         // Search and Filter Row
         HBox searchRow = new HBox(15);
         searchRow.setAlignment(Pos.CENTER_LEFT);
         
-        // Search Field
         searchField = new TextField();
-        searchField.setPromptText("Search expenses...");
-        searchField.setPrefWidth(300);
-        searchField.setStyle("-fx-background-radius: 20;");
+        searchField.setPromptText("Search by vendor, description, invoice...");
+        searchField.setPrefWidth(250);
         
-        // Category Filter
-        Label categoryLabel = new Label("Category:");
-        categoryLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        categoryComboBox = new ComboBox<>();
-        categoryComboBox.getItems().add("All Categories");
-        categoryComboBox.getItems().addAll(expenseCategories);
-        categoryComboBox.setValue("All Categories");
-        categoryComboBox.setPrefWidth(150);
+        categoryFilter = new ComboBox<>();
+        categoryFilter.getItems().add("All Categories");
+        categoryFilter.getItems().addAll(expenseCategories);
+        categoryFilter.setValue("All Categories");
+        categoryFilter.setPrefWidth(150);
         
-        // Vendor Filter
-        Label vendorLabel = new Label("Vendor:");
-        vendorLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        vendorComboBox = new ComboBox<>();
-        vendorComboBox.setPromptText("All Vendors");
-        vendorComboBox.setPrefWidth(150);
+        departmentFilter = new ComboBox<>();
+        departmentFilter.getItems().add("All Departments");
+        departmentFilter.getItems().addAll(departments);
+        departmentFilter.setValue("All Departments");
+        departmentFilter.setPrefWidth(150);
         
-        searchRow.getChildren().addAll(searchField, new Separator(Orientation.VERTICAL),
-                                      categoryLabel, categoryComboBox,
-                                      vendorLabel, vendorComboBox);
+        paymentMethodFilter = new ComboBox<>();
+        paymentMethodFilter.getItems().add("All Payment Methods");
+        paymentMethodFilter.getItems().addAll(paymentMethods);
+        paymentMethodFilter.setValue("All Payment Methods");
+        paymentMethodFilter.setPrefWidth(160);
         
-        // Date Range Row
-        HBox dateRow = new HBox(15);
-        dateRow.setAlignment(Pos.CENTER_LEFT);
+        searchRow.getChildren().addAll(
+            new Label("Search:"), searchField,
+            new Separator(Orientation.VERTICAL),
+            new Label("Category:"), categoryFilter,
+            new Label("Department:"), departmentFilter,
+            new Label("Payment:"), paymentMethodFilter
+        );
         
-        Label periodLabel = new Label("Period:");
-        periodLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        periodComboBox = new ComboBox<>();
-        periodComboBox.getItems().addAll("This Month", "Last Month", "This Quarter", 
-                                       "Last Quarter", "This Year", "Custom Range");
-        periodComboBox.setValue("This Month");
-        periodComboBox.setPrefWidth(150);
+        // Date Range and Actions Row
+        HBox actionRow = new HBox(15);
+        actionRow.setAlignment(Pos.CENTER_LEFT);
         
-        startDatePicker = new DatePicker(LocalDate.now().withDayOfMonth(1));
+        startDatePicker = new DatePicker(LocalDate.now().minusMonths(1));
         endDatePicker = new DatePicker(LocalDate.now());
-        HBox dateRange = new HBox(5);
-        dateRange.getChildren().addAll(new Label("From:"), startDatePicker, 
-                                     new Label("To:"), endDatePicker);
-        dateRange.setVisible(false);
         
-        periodComboBox.setOnAction(e -> {
-            dateRange.setVisible("Custom Range".equals(periodComboBox.getValue()));
-            updateDateRange();
-        });
+        Button refreshButton = new Button("Refresh");
+        refreshButton.setStyle("-fx-base: #3498db;");
+        refreshButton.setOnAction(e -> loadData());
         
-        dateRow.getChildren().addAll(periodLabel, periodComboBox, dateRange);
-        
-        // Action Buttons Row
-        HBox buttonRow = new HBox(10);
-        buttonRow.setAlignment(Pos.CENTER_RIGHT);
-        
-        Button refreshButton = createStyledButton("Refresh", "#3498db", "refresh-icon.png");
-        refreshButton.setOnAction(e -> loadExpenseData());
-        
-        Button addExpenseButton = createStyledButton("Add Expense", "#27ae60", "add-icon.png");
+        Button addExpenseButton = new Button("Add Expense");
+        addExpenseButton.setStyle("-fx-base: #27ae60;");
         addExpenseButton.setOnAction(e -> showAddExpenseDialog());
         
-        Button importButton = createStyledButton("Import", "#f39c12", "import-icon.png");
-        importButton.setOnAction(e -> importExpenses());
+        Button documentManagerButton = new Button("Document Manager");
+        documentManagerButton.setStyle("-fx-base: #9b59b6;");
+        documentManagerButton.setOnAction(e -> showDocumentManager());
         
-        Button exportButton = createStyledButton("Export", "#9b59b6", "export-icon.png");
+        Button generateReportButton = new Button("Generate Report");
+        generateReportButton.setStyle("-fx-base: #e74c3c;");
+        generateReportButton.setOnAction(e -> generateReport());
+        
+        Button exportButton = new Button("Export");
+        exportButton.setStyle("-fx-base: #f39c12;");
         exportButton.setOnAction(e -> showExportMenu(exportButton));
         
-        buttonRow.getChildren().addAll(refreshButton, addExpenseButton, importButton, exportButton);
+        Button budgetComparisonButton = new Button("Budget Analysis");
+        budgetComparisonButton.setStyle("-fx-base: #1abc9c;");
+        budgetComparisonButton.setOnAction(e -> showBudgetComparison());
         
-        controlPanel.getChildren().addAll(searchRow, dateRow, new Separator(), buttonRow);
+        actionRow.getChildren().addAll(
+            new Label("Date Range:"), startDatePicker, new Label("to"), endDatePicker,
+            new Separator(Orientation.VERTICAL),
+            refreshButton, addExpenseButton, documentManagerButton,
+            generateReportButton, exportButton, budgetComparisonButton
+        );
         
-        DropShadow shadow = new DropShadow();
-        shadow.setOffsetY(3);
-        shadow.setColor(Color.color(0, 0, 0, 0.1));
-        controlPanel.setEffect(shadow);
+        controlPanel.getChildren().addAll(searchRow, new Separator(), actionRow);
+        
+        // Add listeners for filtering
+        searchField.textProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        categoryFilter.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        departmentFilter.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        paymentMethodFilter.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        endDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
         
         return controlPanel;
     }
@@ -234,133 +266,107 @@ public class CompanyExpensesTab extends Tab {
         summaryCards.setPadding(new Insets(10));
         summaryCards.setAlignment(Pos.CENTER);
         
-        VBox totalCard = createSummaryCard("Total Expenses", "$0.00", "#e74c3c", "total-icon.png");
-        totalExpensesLabel = (Label) totalCard.lookup(".value-label");
+        VBox totalRecordsCard = createSummaryCard("Total Records", "0", "#3498db");
+        totalRecordsLabel = (Label) totalRecordsCard.lookup(".value-label");
         
-        VBox avgCard = createSummaryCard("Monthly Average", "$0.00", "#3498db", "average-icon.png");
-        monthlyAverageLabel = (Label) avgCard.lookup(".value-label");
+        VBox avgExpenseCard = createSummaryCard("Average Expense", "$0.00", "#27ae60");
+        avgExpenseLabel = (Label) avgExpenseCard.lookup(".value-label");
         
-        VBox largestCard = createSummaryCard("Largest Expense", "$0.00", "#f39c12", "largest-icon.png");
-        largestExpenseLabel = (Label) largestCard.lookup(".value-label");
+        VBox operatingCard = createSummaryCard("Operating Expenses", "$0.00", "#e74c3c");
+        operatingExpensesLabel = (Label) operatingCard.lookup(".value-label");
         
-        VBox pendingCard = createSummaryCard("Pending Approval", "0", "#9b59b6", "pending-icon.png");
-        pendingApprovalLabel = (Label) pendingCard.lookup(".value-label");
+        VBox administrativeCard = createSummaryCard("Administrative", "$0.00", "#f39c12");
+        administrativeExpensesLabel = (Label) administrativeCard.lookup(".value-label");
         
-        summaryCards.getChildren().addAll(totalCard, avgCard, largestCard, pendingCard);
+        summaryCards.getChildren().addAll(totalRecordsCard, avgExpenseCard, operatingCard, administrativeCard);
         
         return summaryCards;
     }
     
-    private VBox createSummaryCard(String title, String value, String color, String iconPath) {
+    private VBox createSummaryCard(String title, String value, String color) {
         VBox card = new VBox(10);
-        card.getStyleClass().add("summary-card");
-        card.setPadding(new Insets(20));
+        card.setPadding(new Insets(15));
         card.setAlignment(Pos.CENTER);
-        card.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
-        card.setPrefWidth(250);
-        card.setPrefHeight(120);
-        
-        HBox header = new HBox(10);
-        header.setAlignment(Pos.CENTER);
-        
-        try {
-            ImageView icon = new ImageView(new Image(getClass().getResourceAsStream("/icons/" + iconPath)));
-            icon.setFitHeight(30);
-            icon.setFitWidth(30);
-            header.getChildren().add(icon);
-        } catch (Exception e) {
-            // Icon not found
-        }
+        card.setStyle("-fx-background-color: white; -fx-background-radius: 5;");
+        card.setPrefWidth(200);
+        card.setPrefHeight(100);
         
         Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("Arial", 14));
+        titleLabel.setFont(Font.font("Arial", 12));
         titleLabel.setTextFill(Color.GRAY);
-        header.getChildren().add(titleLabel);
         
         Label valueLabel = new Label(value);
         valueLabel.getStyleClass().add("value-label");
-        valueLabel.setFont(Font.font("Arial", FontWeight.BOLD, 28));
+        valueLabel.setFont(Font.font("Arial", FontWeight.BOLD, 20));
         valueLabel.setTextFill(Color.web(color));
         
-        // Progress indicator for pending approvals
-        if (title.contains("Pending")) {
-            ProgressBar progressBar = new ProgressBar(0.3);
-            progressBar.setPrefWidth(200);
-            progressBar.setStyle("-fx-accent: " + color);
-            card.getChildren().addAll(header, valueLabel, progressBar);
-        } else {
-            card.getChildren().addAll(header, valueLabel);
-        }
-        
-        // Add hover effect
-        addCardHoverEffect(card);
-        
-        DropShadow shadow = new DropShadow();
-        shadow.setOffsetY(3);
-        shadow.setColor(Color.color(0, 0, 0, 0.1));
-        card.setEffect(shadow);
+        card.getChildren().addAll(titleLabel, valueLabel);
         
         return card;
     }
     
-    private TabPane createContentTabs() {
+    private TabPane createContentTabPane() {
         TabPane tabPane = new TabPane();
-        tabPane.setStyle("-fx-background-color: white;");
+        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         
-        Tab expensesTab = new Tab("Expense List");
-        expensesTab.setClosable(false);
-        expensesTab.setContent(createExpenseTableSection());
+        // Expense History Tab
+        Tab historyTab = new Tab("Expense History");
+        historyTab.setContent(createHistorySection());
         
+        // Analytics Tab
         Tab analyticsTab = new Tab("Analytics");
-        analyticsTab.setClosable(false);
         analyticsTab.setContent(createAnalyticsSection());
         
-        Tab budgetTab = new Tab("Budget");
-        budgetTab.setClosable(false);
-        budgetTab.setContent(createBudgetSection());
+        // Vendors Tab
+        Tab vendorsTab = new Tab("Vendors");
+        vendorsTab.setContent(createVendorsSection());
         
-        Tab approvalTab = new Tab("Approvals");
-        approvalTab.setClosable(false);
-        approvalTab.setContent(createApprovalSection());
-        
-        tabPane.getTabs().addAll(expensesTab, analyticsTab, budgetTab, approvalTab);
+        tabPane.getTabs().addAll(historyTab, analyticsTab, vendorsTab);
         
         return tabPane;
     }
     
-    private VBox createExpenseTableSection() {
-        VBox tableSection = new VBox(15);
-        tableSection.setPadding(new Insets(15));
+    private VBox createHistorySection() {
+        VBox historySection = new VBox(10);
+        historySection.setPadding(new Insets(10));
         
-        // Table Controls
+        // Table controls
         HBox tableControls = new HBox(10);
         tableControls.setAlignment(Pos.CENTER_RIGHT);
         
-        CheckBox selectAllCheckBox = new CheckBox("Select All");
-        Button deleteButton = new Button("Delete Selected");
-        deleteButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white;");
-        deleteButton.setDisable(true);
+        CheckBox recurringCheckBox = new CheckBox("Show Recurring Only");
+        recurringCheckBox.setOnAction(e -> applyFilters());
         
-        Button approveButton = new Button("Approve Selected");
-        approveButton.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white;");
-        approveButton.setDisable(true);
+        Button uploadDocButton = new Button("Upload Receipt");
+        uploadDocButton.setStyle("-fx-base: #3498db;");
+        uploadDocButton.setOnAction(e -> uploadDocument());
         
-        tableControls.getChildren().addAll(selectAllCheckBox, deleteButton, approveButton);
+        Button printDocButton = new Button("Print Receipt");
+        printDocButton.setStyle("-fx-base: #27ae60;");
+        printDocButton.setOnAction(e -> printSelectedDocument());
+        
+        Button editButton = new Button("Edit");
+        editButton.setStyle("-fx-base: #f39c12;");
+        editButton.setOnAction(e -> editSelectedExpense());
+        
+        Button deleteButton = new Button("Delete");
+        deleteButton.setStyle("-fx-base: #e74c3c;");
+        deleteButton.setOnAction(e -> deleteSelectedExpense());
+        
+        Button approveButton = new Button("Approve");
+        approveButton.setStyle("-fx-base: #1abc9c;");
+        approveButton.setOnAction(e -> approveSelectedExpense());
+        
+        tableControls.getChildren().addAll(recurringCheckBox, new Separator(Orientation.VERTICAL),
+                                          uploadDocButton, printDocButton, editButton, deleteButton, approveButton);
         
         // Expense Table
         expenseTable = new TableView<>();
         expenseTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        expenseTable.setPrefHeight(500);
-        expenseTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-        
-        // Checkbox column
-        TableColumn<CompanyExpense, Boolean> selectCol = new TableColumn<>();
-        selectCol.setCellValueFactory(new PropertyValueFactory<>("selected"));
-        selectCol.setCellFactory(column -> new CheckBoxTableCell<>());
-        selectCol.setMaxWidth(50);
+        expenseTable.setPrefHeight(400);
         
         TableColumn<CompanyExpense, LocalDate> dateCol = new TableColumn<>("Date");
-        dateCol.setCellValueFactory(new PropertyValueFactory<>("date"));
+        dateCol.setCellValueFactory(new PropertyValueFactory<>("expenseDate"));
         dateCol.setCellFactory(column -> new TableCell<CompanyExpense, LocalDate>() {
             @Override
             protected void updateItem(LocalDate date, boolean empty) {
@@ -372,10 +378,11 @@ public class CompanyExpensesTab extends Tab {
                 }
             }
         });
+        dateCol.setPrefWidth(100);
         
         TableColumn<CompanyExpense, String> vendorCol = new TableColumn<>("Vendor");
         vendorCol.setCellValueFactory(new PropertyValueFactory<>("vendor"));
-        vendorCol.setMinWidth(150);
+        vendorCol.setPrefWidth(150);
         
         TableColumn<CompanyExpense, String> categoryCol = new TableColumn<>("Category");
         categoryCol.setCellValueFactory(new PropertyValueFactory<>("category"));
@@ -385,19 +392,29 @@ public class CompanyExpensesTab extends Tab {
                 super.updateItem(category, empty);
                 if (empty || category == null) {
                     setText(null);
-                    setGraphic(null);
+                    setStyle("");
                 } else {
-                    Label label = new Label(category);
-                    label.setPadding(new Insets(5, 10, 5, 10));
-                    label.setStyle(getCategoryStyle(category));
-                    setGraphic(label);
+                    setText(category);
+                    // Color code by category
+                    if (category.contains("Fuel")) {
+                        setStyle("-fx-background-color: #ffe6e6;");
+                    } else if (category.contains("Insurance") || category.contains("Permits")) {
+                        setStyle("-fx-background-color: #e6f3ff;");
+                    } else if (category.contains("Office") || category.contains("Administrative")) {
+                        setStyle("-fx-background-color: #fffbe6;");
+                    }
                 }
             }
         });
+        categoryCol.setPrefWidth(140);
+        
+        TableColumn<CompanyExpense, String> departmentCol = new TableColumn<>("Department");
+        departmentCol.setCellValueFactory(new PropertyValueFactory<>("department"));
+        departmentCol.setPrefWidth(120);
         
         TableColumn<CompanyExpense, String> descriptionCol = new TableColumn<>("Description");
         descriptionCol.setCellValueFactory(new PropertyValueFactory<>("description"));
-        descriptionCol.setMinWidth(200);
+        descriptionCol.setPrefWidth(200);
         
         TableColumn<CompanyExpense, Double> amountCol = new TableColumn<>("Amount");
         amountCol.setCellValueFactory(new PropertyValueFactory<>("amount"));
@@ -413,6 +430,15 @@ public class CompanyExpensesTab extends Tab {
                 }
             }
         });
+        amountCol.setPrefWidth(100);
+        
+        TableColumn<CompanyExpense, String> paymentMethodCol = new TableColumn<>("Payment Method");
+        paymentMethodCol.setCellValueFactory(new PropertyValueFactory<>("paymentMethod"));
+        paymentMethodCol.setPrefWidth(140);
+        
+        TableColumn<CompanyExpense, String> receiptCol = new TableColumn<>("Receipt #");
+        receiptCol.setCellValueFactory(new PropertyValueFactory<>("receiptNumber"));
+        receiptCol.setPrefWidth(100);
         
         TableColumn<CompanyExpense, String> statusCol = new TableColumn<>("Status");
         statusCol.setCellValueFactory(new PropertyValueFactory<>("status"));
@@ -425,38 +451,46 @@ public class CompanyExpensesTab extends Tab {
                     setGraphic(null);
                 } else {
                     Label statusLabel = new Label(status);
-                    statusLabel.setPadding(new Insets(5, 10, 5, 10));
+                    statusLabel.setPadding(new Insets(2, 8, 2, 8));
                     statusLabel.setStyle(getStatusStyle(status));
                     setGraphic(statusLabel);
                 }
             }
         });
+        statusCol.setPrefWidth(100);
         
-        TableColumn<CompanyExpense, String> receiptCol = new TableColumn<>("Receipt");
-        receiptCol.setCellValueFactory(new PropertyValueFactory<>("hasReceipt"));
-        receiptCol.setCellFactory(column -> new TableCell<CompanyExpense, String>() {
+        TableColumn<CompanyExpense, Boolean> recurringCol = new TableColumn<>("Recurring");
+        recurringCol.setCellValueFactory(new PropertyValueFactory<>("recurring"));
+        recurringCol.setCellFactory(column -> new TableCell<CompanyExpense, Boolean>() {
             @Override
-            protected void updateItem(String hasReceipt, boolean empty) {
-                super.updateItem(hasReceipt, empty);
-                if (empty) {
-                    setGraphic(null);
+            protected void updateItem(Boolean recurring, boolean empty) {
+                super.updateItem(recurring, empty);
+                if (empty || recurring == null) {
+                    setText(null);
                 } else {
-                    Button viewButton = new Button("View");
-                    viewButton.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; " +
-                                      "-fx-font-size: 11px; -fx-padding: 2 8 2 8;");
-                    viewButton.setOnAction(e -> viewReceipt());
-                    setGraphic(viewButton);
+                    setText(recurring ? "Yes" : "No");
+                    if (recurring) {
+                        setStyle("-fx-font-weight: bold; -fx-text-fill: #3498db;");
+                    }
                 }
             }
         });
+        recurringCol.setPrefWidth(80);
         
-        expenseTable.getColumns().addAll(selectCol, dateCol, vendorCol, categoryCol, 
-                                       descriptionCol, amountCol, statusCol, receiptCol);
+        expenseTable.getColumns().addAll(dateCol, vendorCol, categoryCol, departmentCol,
+                                       descriptionCol, amountCol, paymentMethodCol, 
+                                       receiptCol, statusCol, recurringCol);
         
-        // Enable inline editing
-        expenseTable.setEditable(true);
-        vendorCol.setCellFactory(TextFieldTableCell.forTableColumn());
-        descriptionCol.setCellFactory(TextFieldTableCell.forTableColumn());
+        // Double-click to edit
+        expenseTable.setRowFactory(tv -> {
+            TableRow<CompanyExpense> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && !row.isEmpty()) {
+                    showEditExpenseDialog(row.getItem());
+                }
+            });
+            return row;
+        });
         
         // Context menu
         ContextMenu contextMenu = new ContextMenu();
@@ -464,100 +498,101 @@ public class CompanyExpensesTab extends Tab {
         MenuItem duplicateItem = new MenuItem("Duplicate");
         MenuItem deleteItem = new MenuItem("Delete");
         MenuItem viewReceiptItem = new MenuItem("View Receipt");
-        MenuItem attachReceiptItem = new MenuItem("Attach Receipt");
+        MenuItem approveItem = new MenuItem("Approve/Reject");
+        
+        editItem.setOnAction(e -> editSelectedExpense());
+        duplicateItem.setOnAction(e -> duplicateSelectedExpense());
+        deleteItem.setOnAction(e -> deleteSelectedExpense());
+        viewReceiptItem.setOnAction(e -> viewSelectedReceipt());
+        approveItem.setOnAction(e -> approveSelectedExpense());
+        
         contextMenu.getItems().addAll(editItem, duplicateItem, deleteItem,
-                                    new SeparatorMenuItem(), viewReceiptItem, attachReceiptItem);
+                                    new SeparatorMenuItem(), viewReceiptItem, approveItem);
         expenseTable.setContextMenu(contextMenu);
         
-        // Keyboard shortcuts
-        expenseTable.setOnKeyPressed(event -> {
-            if (event.getCode() == KeyCode.DELETE) {
-                deleteSelectedExpenses();
-            } else if (event.isControlDown() && event.getCode() == KeyCode.N) {
-                showAddExpenseDialog();
-            }
-        });
+        historySection.getChildren().addAll(tableControls, expenseTable);
         
-        tableSection.getChildren().addAll(tableControls, expenseTable);
-        
-        return tableSection;
+        return historySection;
     }
     
     private VBox createAnalyticsSection() {
         VBox analyticsSection = new VBox(20);
         analyticsSection.setPadding(new Insets(20));
         
-        // Charts Grid
         GridPane chartsGrid = new GridPane();
         chartsGrid.setHgap(20);
         chartsGrid.setVgap(20);
         
-        // Category Breakdown Chart
+        // Expense by Category Chart
         VBox categoryChartBox = new VBox(10);
-        Label categoryLabel = new Label("Expense by Category");
-        categoryLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        Label categoryLabel = new Label("Expenses by Category");
+        categoryLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         
-        categoryChart = new PieChart();
-        categoryChart.setTitle("Category Distribution");
-        categoryChart.setPrefHeight(350);
-        categoryChart.setAnimated(true);
-        categoryChart.setLabelsVisible(true);
+        expenseByCategoryChart = new PieChart();
+        expenseByCategoryChart.setTitle("Category Distribution");
+        expenseByCategoryChart.setPrefHeight(300);
+        expenseByCategoryChart.setAnimated(true);
         
-        categoryChartBox.getChildren().addAll(categoryLabel, categoryChart);
+        categoryChartBox.getChildren().addAll(categoryLabel, expenseByCategoryChart);
         
-        // Trend Chart
-        VBox trendChartBox = new VBox(10);
-        Label trendLabel = new Label("Monthly Expense Trend");
-        trendLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        // Monthly Trend Chart
+        VBox monthlyChartBox = new VBox(10);
+        Label monthlyLabel = new Label("Monthly Expense Trend");
+        monthlyLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         
         CategoryAxis xAxis = new CategoryAxis();
         NumberAxis yAxis = new NumberAxis();
         yAxis.setLabel("Amount ($)");
         
-        trendChart = new LineChart<>(xAxis, yAxis);
-        trendChart.setTitle("12-Month Trend");
-        trendChart.setPrefHeight(350);
-        trendChart.setCreateSymbols(true);
-        trendChart.setAnimated(true);
+        monthlyTrendChart = new BarChart<>(xAxis, yAxis);
+        monthlyTrendChart.setTitle("12-Month Trend");
+        monthlyTrendChart.setPrefHeight(300);
+        monthlyTrendChart.setAnimated(true);
+        monthlyTrendChart.setLegendVisible(false);
         
-        trendChartBox.getChildren().addAll(trendLabel, trendChart);
+        monthlyChartBox.getChildren().addAll(monthlyLabel, monthlyTrendChart);
         
-        // Vendor Chart
-        VBox vendorChartBox = new VBox(10);
-        Label vendorLabel = new Label("Top Vendors");
-        vendorLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        // Payment Method Chart
+        VBox paymentChartBox = new VBox(10);
+        Label paymentLabel = new Label("Payment Method Distribution");
+        paymentLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         
-        CategoryAxis vendorXAxis = new CategoryAxis();
-        NumberAxis vendorYAxis = new NumberAxis();
-        vendorChart = new BarChart<>(vendorXAxis, vendorYAxis);
-        vendorChart.setTitle("Top 10 Vendors by Spending");
-        vendorChart.setPrefHeight(350);
-        vendorChart.setAnimated(true);
-        vendorChart.setLegendVisible(false);
+        paymentMethodChart = new PieChart();
+        paymentMethodChart.setTitle("Payment Methods");
+        paymentMethodChart.setPrefHeight(300);
+        paymentMethodChart.setAnimated(true);
         
-        vendorChartBox.getChildren().addAll(vendorLabel, vendorChart);
+        paymentChartBox.getChildren().addAll(paymentLabel, paymentMethodChart);
         
         // Year-over-Year Comparison
-        VBox comparisonChartBox = new VBox(10);
-        Label comparisonLabel = new Label("Year-over-Year Comparison");
-        comparisonLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        VBox yoyChartBox = new VBox(10);
+        Label yoyLabel = new Label("Year-over-Year Comparison");
+        yoyLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         
-        CategoryAxis compXAxis = new CategoryAxis();
-        NumberAxis compYAxis = new NumberAxis();
-        comparisonChart = new AreaChart<>(compXAxis, compYAxis);
-        comparisonChart.setTitle("YoY Expense Comparison");
-        comparisonChart.setPrefHeight(350);
-        comparisonChart.setAnimated(true);
+        CategoryAxis yoyXAxis = new CategoryAxis();
+        NumberAxis yoyYAxis = new NumberAxis();
+        yoyYAxis.setLabel("Amount ($)");
         
-        comparisonChartBox.getChildren().addAll(comparisonLabel, comparisonChart);
+        yearOverYearChart = new LineChart<>(yoyXAxis, yoyYAxis);
+        yearOverYearChart.setTitle("YoY Expense Trend");
+        yearOverYearChart.setPrefHeight(300);
+        yearOverYearChart.setAnimated(true);
         
-        // Add charts to grid
+        yoyChartBox.getChildren().addAll(yoyLabel, yearOverYearChart);
+        
+        // Top Expense Categories
+        VBox topCategoriesBox = createTopCategoriesBox();
+        
+        // Department Breakdown
+        VBox departmentBox = createDepartmentBreakdownBox();
+        
         chartsGrid.add(categoryChartBox, 0, 0);
-        chartsGrid.add(trendChartBox, 1, 0);
-        chartsGrid.add(vendorChartBox, 0, 1);
-        chartsGrid.add(comparisonChartBox, 1, 1);
+        chartsGrid.add(monthlyChartBox, 1, 0);
+        chartsGrid.add(paymentChartBox, 0, 1);
+        chartsGrid.add(yoyChartBox, 1, 1);
+        chartsGrid.add(topCategoriesBox, 0, 2);
+        chartsGrid.add(departmentBox, 1, 2);
         
-        // Make charts responsive
         ColumnConstraints col = new ColumnConstraints();
         col.setPercentWidth(50);
         chartsGrid.getColumnConstraints().addAll(col, col);
@@ -567,190 +602,26 @@ public class CompanyExpensesTab extends Tab {
         return analyticsSection;
     }
     
-    private VBox createBudgetSection() {
-        VBox budgetSection = new VBox(20);
-        budgetSection.setPadding(new Insets(20));
-        budgetSection.setAlignment(Pos.TOP_CENTER);
+    private VBox createVendorsSection() {
+        VBox vendorsSection = new VBox(15);
+        vendorsSection.setPadding(new Insets(15));
         
-        Label title = new Label("Budget Management");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 24));
+        Label vendorTitle = new Label("Top Vendors by Expense");
+        vendorTitle.setFont(Font.font("Arial", FontWeight.BOLD, 18));
         
-        // Budget Overview Cards
-        HBox budgetCards = new HBox(20);
-        budgetCards.setAlignment(Pos.CENTER);
-        budgetCards.setPadding(new Insets(20, 0, 20, 0));
+        TableView<VendorSummary> vendorTable = new TableView<>();
+        vendorTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        vendorTable.setPrefHeight(300);
         
-        VBox totalBudgetCard = createBudgetCard("Total Budget", "$50,000", Color.web("#3498db"));
-        VBox spentCard = createBudgetCard("Spent", "$32,500", Color.web("#e74c3c"));
-        VBox remainingCard = createBudgetCard("Remaining", "$17,500", Color.web("#27ae60"));
-        VBox projectionCard = createBudgetCard("Projected", "$48,000", Color.web("#f39c12"));
+        TableColumn<VendorSummary, String> vendorNameCol = new TableColumn<>("Vendor Name");
+        vendorNameCol.setCellValueFactory(new PropertyValueFactory<>("vendorName"));
         
-        budgetCards.getChildren().addAll(totalBudgetCard, spentCard, remainingCard, projectionCard);
+        TableColumn<VendorSummary, Integer> transactionCountCol = new TableColumn<>("# Transactions");
+        transactionCountCol.setCellValueFactory(new PropertyValueFactory<>("transactionCount"));
         
-        // Category Budget Table
-        TableView<BudgetCategory> budgetTable = new TableView<>();
-        budgetTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        budgetTable.setPrefHeight(400);
-        
-        TableColumn<BudgetCategory, String> catCol = new TableColumn<>("Category");
-        catCol.setCellValueFactory(new PropertyValueFactory<>("category"));
-        
-        TableColumn<BudgetCategory, Double> budgetCol = new TableColumn<>("Budget");
-        budgetCol.setCellValueFactory(new PropertyValueFactory<>("budget"));
-        budgetCol.setCellFactory(column -> new TableCell<BudgetCategory, Double>() {
-            @Override
-            protected void updateItem(Double budget, boolean empty) {
-                super.updateItem(budget, empty);
-                if (empty || budget == null) {
-                    setText(null);
-                } else {
-                    setText(CURRENCY_FORMAT.format(budget));
-                }
-            }
-        });
-        
-        TableColumn<BudgetCategory, Double> spentCol = new TableColumn<>("Spent");
-        spentCol.setCellValueFactory(new PropertyValueFactory<>("spent"));
-        spentCol.setCellFactory(column -> new TableCell<BudgetCategory, Double>() {
-            @Override
-            protected void updateItem(Double spent, boolean empty) {
-                super.updateItem(spent, empty);
-                if (empty || spent == null) {
-                    setText(null);
-                } else {
-                    setText(CURRENCY_FORMAT.format(spent));
-                }
-            }
-        });
-        
-        TableColumn<BudgetCategory, Double> remainCol = new TableColumn<>("Remaining");
-        remainCol.setCellValueFactory(new PropertyValueFactory<>("remaining"));
-        remainCol.setCellFactory(column -> new TableCell<BudgetCategory, Double>() {
-            @Override
-            protected void updateItem(Double remaining, boolean empty) {
-                super.updateItem(remaining, empty);
-                if (empty || remaining == null) {
-                    setText(null);
-                } else {
-                    setText(CURRENCY_FORMAT.format(remaining));
-                    if (remaining < 0) {
-                        setTextFill(Color.RED);
-                        setStyle("-fx-font-weight: bold;");
-                    } else {
-                        setTextFill(Color.BLACK);
-                        setStyle("");
-                    }
-                }
-            }
-        });
-        
-        TableColumn<BudgetCategory, Double> percentCol = new TableColumn<>("% Used");
-        percentCol.setCellValueFactory(new PropertyValueFactory<>("percentUsed"));
-        percentCol.setCellFactory(column -> new TableCell<BudgetCategory, Double>() {
-            @Override
-            protected void updateItem(Double percent, boolean empty) {
-                super.updateItem(percent, empty);
-                if (empty || percent == null) {
-                    setGraphic(null);
-                } else {
-                    ProgressBar progressBar = new ProgressBar(percent / 100);
-                    progressBar.setPrefWidth(100);
-                    
-                    if (percent > 90) {
-                        progressBar.setStyle("-fx-accent: #e74c3c;");
-                    } else if (percent > 70) {
-                        progressBar.setStyle("-fx-accent: #f39c12;");
-                    } else {
-                        progressBar.setStyle("-fx-accent: #27ae60;");
-                    }
-                    
-                    Label percentLabel = new Label(String.format("%.1f%%", percent));
-                    
-                    HBox box = new HBox(5);
-                    box.setAlignment(Pos.CENTER);
-                    box.getChildren().addAll(progressBar, percentLabel);
-                    setGraphic(box);
-                }
-            }
-        });
-        
-        budgetTable.getColumns().addAll(catCol, budgetCol, spentCol, remainCol, percentCol);
-        
-        // Sample budget data
-        ObservableList<BudgetCategory> budgetData = FXCollections.observableArrayList();
-        for (String category : expenseCategories) {
-            double budget = 3000 + Math.random() * 7000;
-            double spent = budget * (0.3 + Math.random() * 0.7);
-            budgetData.add(new BudgetCategory(category, budget, spent));
-        }
-        budgetTable.setItems(budgetData);
-        
-        // Edit Budget Button
-        Button editBudgetButton = new Button("Edit Budget");
-        editBudgetButton.setStyle("-fx-background-color: #3498db; -fx-text-fill: white;");
-        editBudgetButton.setOnAction(e -> showEditBudgetDialog());
-        
-        budgetSection.getChildren().addAll(title, budgetCards, budgetTable, editBudgetButton);
-        
-        return budgetSection;
-    }
-    
-    private VBox createApprovalSection() {
-        VBox approvalSection = new VBox(20);
-        approvalSection.setPadding(new Insets(20));
-        
-        Label title = new Label("Expense Approvals");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 24));
-        
-        // Approval Stats
-        HBox statsBox = new HBox(30);
-        statsBox.setAlignment(Pos.CENTER);
-        statsBox.setPadding(new Insets(20));
-        
-        Label pendingLabel = new Label("12");
-        pendingLabel.setFont(Font.font("Arial", FontWeight.BOLD, 48));
-        pendingLabel.setTextFill(Color.web("#f39c12"));
-        VBox pendingBox = new VBox(5);
-        pendingBox.setAlignment(Pos.CENTER);
-        pendingBox.getChildren().addAll(pendingLabel, new Label("Pending"));
-        
-        Label approvedLabel = new Label("45");
-        approvedLabel.setFont(Font.font("Arial", FontWeight.BOLD, 48));
-        approvedLabel.setTextFill(Color.web("#27ae60"));
-        VBox approvedBox = new VBox(5);
-        approvedBox.setAlignment(Pos.CENTER);
-        approvedBox.getChildren().addAll(approvedLabel, new Label("Approved"));
-        
-        Label rejectedLabel = new Label("3");
-        rejectedLabel.setFont(Font.font("Arial", FontWeight.BOLD, 48));
-        rejectedLabel.setTextFill(Color.web("#e74c3c"));
-        VBox rejectedBox = new VBox(5);
-        rejectedBox.setAlignment(Pos.CENTER);
-        rejectedBox.getChildren().addAll(rejectedLabel, new Label("Rejected"));
-        
-        statsBox.getChildren().addAll(pendingBox, approvedBox, rejectedBox);
-        
-        // Pending Approvals Table
-        TableView<CompanyExpense> approvalTable = new TableView<>();
-        approvalTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        approvalTable.setPrefHeight(400);
-        
-        // Copy columns from expense table but add approval actions
-        TableColumn<CompanyExpense, LocalDate> dateCol = new TableColumn<>("Date");
-        dateCol.setCellValueFactory(new PropertyValueFactory<>("date"));
-        
-        TableColumn<CompanyExpense, String> employeeCol = new TableColumn<>("Employee");
-        employeeCol.setCellValueFactory(new PropertyValueFactory<>("employee"));
-        
-        TableColumn<CompanyExpense, String> vendorCol = new TableColumn<>("Vendor");
-        vendorCol.setCellValueFactory(new PropertyValueFactory<>("vendor"));
-        
-        TableColumn<CompanyExpense, String> categoryCol = new TableColumn<>("Category");
-        categoryCol.setCellValueFactory(new PropertyValueFactory<>("category"));
-        
-        TableColumn<CompanyExpense, Double> amountCol = new TableColumn<>("Amount");
-        amountCol.setCellValueFactory(new PropertyValueFactory<>("amount"));
-        amountCol.setCellFactory(column -> new TableCell<CompanyExpense, Double>() {
+        TableColumn<VendorSummary, Double> totalAmountCol = new TableColumn<>("Total Amount");
+        totalAmountCol.setCellValueFactory(new PropertyValueFactory<>("totalAmount"));
+        totalAmountCol.setCellFactory(column -> new TableCell<VendorSummary, Double>() {
             @Override
             protected void updateItem(Double amount, boolean empty) {
                 super.updateItem(amount, empty);
@@ -763,257 +634,227 @@ public class CompanyExpensesTab extends Tab {
             }
         });
         
-        TableColumn<CompanyExpense, Void> actionsCol = new TableColumn<>("Actions");
-        actionsCol.setCellFactory(column -> new TableCell<CompanyExpense, Void>() {
-            private final Button approveBtn = new Button("Approve");
-            private final Button rejectBtn = new Button("Reject");
-            private final Button detailsBtn = new Button("Details");
-            
-            {
-                approveBtn.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; " +
-                                  "-fx-font-size: 11px; -fx-padding: 2 8 2 8;");
-                rejectBtn.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; " +
-                                 "-fx-font-size: 11px; -fx-padding: 2 8 2 8;");
-                detailsBtn.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; " +
-                                  "-fx-font-size: 11px; -fx-padding: 2 8 2 8;");
-                
-                approveBtn.setOnAction(e -> approveExpense(getTableRow().getItem()));
-                rejectBtn.setOnAction(e -> rejectExpense(getTableRow().getItem()));
-                detailsBtn.setOnAction(e -> showExpenseDetails(getTableRow().getItem()));
-            }
-            
+        TableColumn<VendorSummary, Double> avgAmountCol = new TableColumn<>("Average Amount");
+        avgAmountCol.setCellValueFactory(new PropertyValueFactory<>("averageAmount"));
+        avgAmountCol.setCellFactory(column -> new TableCell<VendorSummary, Double>() {
             @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
+            protected void updateItem(Double amount, boolean empty) {
+                super.updateItem(amount, empty);
+                if (empty || amount == null) {
+                    setText(null);
                 } else {
-                    HBox buttons = new HBox(5);
-                    buttons.setAlignment(Pos.CENTER);
-                    buttons.getChildren().addAll(approveBtn, rejectBtn, detailsBtn);
-                    setGraphic(buttons);
+                    setText(CURRENCY_FORMAT.format(amount));
                 }
             }
         });
         
-        approvalTable.getColumns().addAll(dateCol, employeeCol, vendorCol, categoryCol, 
-                                         amountCol, actionsCol);
+        TableColumn<VendorSummary, String> lastTransactionCol = new TableColumn<>("Last Transaction");
+        lastTransactionCol.setCellValueFactory(new PropertyValueFactory<>("lastTransactionDate"));
         
-        // Filter pending expenses
-        ObservableList<CompanyExpense> pendingExpenses = FXCollections.observableArrayList();
-        // Add sample pending expenses
-        approvalTable.setItems(pendingExpenses);
+        vendorTable.getColumns().addAll(vendorNameCol, transactionCountCol, 
+                                       totalAmountCol, avgAmountCol, lastTransactionCol);
         
-        approvalSection.getChildren().addAll(title, statsBox, approvalTable);
+        // Vendor management buttons
+        HBox vendorButtons = new HBox(10);
+        vendorButtons.setAlignment(Pos.CENTER_RIGHT);
         
-        return approvalSection;
+        Button addVendorButton = new Button("Add Vendor");
+        addVendorButton.setStyle("-fx-base: #27ae60;");
+        
+        Button editVendorButton = new Button("Edit Vendor");
+        editVendorButton.setStyle("-fx-base: #f39c12;");
+        
+        Button vendorReportButton = new Button("Vendor Report");
+        vendorReportButton.setStyle("-fx-base: #3498db;");
+        vendorReportButton.setOnAction(e -> generateVendorReport());
+        
+        vendorButtons.getChildren().addAll(addVendorButton, editVendorButton, vendorReportButton);
+        
+        // Vendor chart
+        BarChart<String, Number> topVendorsChart = createTopVendorsChart();
+        
+        vendorsSection.getChildren().addAll(vendorTitle, vendorTable, vendorButtons, 
+                                           new Separator(), topVendorsChart);
+        
+        return vendorsSection;
     }
     
-    private VBox createBudgetCard(String title, String value, Color color) {
-        VBox card = new VBox(10);
-        card.setPadding(new Insets(20));
-        card.setAlignment(Pos.CENTER);
-        card.setPrefWidth(200);
-        card.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
+    private VBox createTopCategoriesBox() {
+        VBox topCategoriesBox = new VBox(10);
+        topCategoriesBox.setPadding(new Insets(15));
+        topCategoriesBox.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 5;");
         
-        Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("Arial", 14));
-        titleLabel.setTextFill(Color.GRAY);
+        Label title = new Label("Top 5 Expense Categories");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         
-        Label valueLabel = new Label(value);
-        valueLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
-        valueLabel.setTextFill(color);
+        ListView<String> categoriesList = new ListView<>();
+        categoriesList.setPrefHeight(200);
+        categoriesList.setPlaceholder(new Label("No data available"));
         
-        card.getChildren().addAll(titleLabel, valueLabel);
+        topCategoriesBox.getChildren().addAll(title, categoriesList);
         
-        DropShadow shadow = new DropShadow();
-        shadow.setOffsetY(3);
-        shadow.setColor(Color.color(0, 0, 0, 0.1));
-        card.setEffect(shadow);
-        
-        return card;
+        return topCategoriesBox;
     }
     
-    private Button createStyledButton(String text, String color, String iconPath) {
-        Button button = new Button(text);
-        button.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: white; " +
-                                    "-fx-font-weight: bold; -fx-background-radius: 5;", color));
-        button.setPrefHeight(35);
+    private VBox createDepartmentBreakdownBox() {
+        VBox departmentBox = new VBox(10);
+        departmentBox.setPadding(new Insets(15));
+        departmentBox.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 5;");
+        
+        Label title = new Label("Department Expense Breakdown");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        
+        ListView<String> departmentList = new ListView<>();
+        departmentList.setPrefHeight(200);
+        departmentList.setPlaceholder(new Label("No data available"));
+        
+        departmentBox.getChildren().addAll(title, departmentList);
+        
+        return departmentBox;
+    }
+    
+    private BarChart<String, Number> createTopVendorsChart() {
+        CategoryAxis xAxis = new CategoryAxis();
+        NumberAxis yAxis = new NumberAxis();
+        yAxis.setLabel("Total Amount ($)");
+        
+        BarChart<String, Number> chart = new BarChart<>(xAxis, yAxis);
+        chart.setTitle("Top 10 Vendors by Total Expense");
+        chart.setPrefHeight(300);
+        chart.setAnimated(true);
+        chart.setLegendVisible(false);
+        
+        return chart;
+    }
+    
+    private void loadData() {
+        logger.info("Loading company expense data");
         
         try {
-            ImageView icon = new ImageView(new Image(getClass().getResourceAsStream("/icons/" + iconPath)));
-            icon.setFitHeight(16);
-            icon.setFitWidth(16);
-            button.setGraphic(icon);
+            List<CompanyExpense> expenses = expenseDAO.findByDateRange(
+                startDatePicker.getValue(), 
+                endDatePicker.getValue()
+            );
+            
+            allExpenses.clear();
+            allExpenses.addAll(expenses);
+            
+            filteredExpenses = new FilteredList<>(allExpenses, p -> true);
+            SortedList<CompanyExpense> sortedExpenses = new SortedList<>(filteredExpenses);
+            sortedExpenses.comparatorProperty().bind(expenseTable.comparatorProperty());
+            expenseTable.setItems(sortedExpenses);
+            
+            applyFilters();
+            updateSummaryCards();
+            updateCharts();
+            
+            logger.info("Loaded {} expense records", expenses.size());
+            
         } catch (Exception e) {
-            // Icon not found
+            logger.error("Failed to load expense data", e);
+            showAlert(Alert.AlertType.ERROR, "Error", "Failed to load expense data: " + e.getMessage());
         }
-        
-        button.setOnMouseEntered(e -> button.setOpacity(0.8));
-        button.setOnMouseExited(e -> button.setOpacity(1.0));
-        
-        return button;
-    }
-    
-    private void addCardHoverEffect(Node card) {
-        card.setOnMouseEntered(e -> {
-            ScaleTransition st = new ScaleTransition(Duration.millis(200), card);
-            st.setToX(1.05);
-            st.setToY(1.05);
-            st.play();
-        });
-        
-        card.setOnMouseExited(e -> {
-            ScaleTransition st = new ScaleTransition(Duration.millis(200), card);
-            st.setToX(1);
-            st.setToY(1);
-            st.play();
-        });
-    }
-    
-    private String getCategoryStyle(String category) {
-        Map<String, String> categoryColors = new HashMap<>();
-        categoryColors.put("Fuel", "#e74c3c");
-        categoryColors.put("Maintenance", "#3498db");
-        categoryColors.put("Insurance", "#9b59b6");
-        categoryColors.put("Office Supplies", "#f39c12");
-        categoryColors.put("Utilities", "#1abc9c");
-        categoryColors.put("Marketing", "#e67e22");
-        categoryColors.put("Payroll", "#34495e");
-        categoryColors.put("Equipment", "#16a085");
-        
-        String color = categoryColors.getOrDefault(category, "#95a5a6");
-        return String.format("-fx-background-color: %s; -fx-text-fill: white; " +
-                           "-fx-background-radius: 15; -fx-font-size: 11px;", color);
-    }
-    
-    private String getStatusStyle(String status) {
-        switch (status) {
-            case "Approved":
-                return "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-background-radius: 15;";
-            case "Pending":
-                return "-fx-background-color: #f39c12; -fx-text-fill: white; -fx-background-radius: 15;";
-            case "Rejected":
-                return "-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-background-radius: 15;";
-            default:
-                return "-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-background-radius: 15;";
-        }
-    }
-    
-    private void updateDateRange() {
-        String period = periodComboBox.getValue();
-        LocalDate now = LocalDate.now();
-        
-        switch (period) {
-            case "This Month":
-                startDatePicker.setValue(now.withDayOfMonth(1));
-                endDatePicker.setValue(now);
-                break;
-            case "Last Month":
-                LocalDate lastMonth = now.minusMonths(1);
-                startDatePicker.setValue(lastMonth.withDayOfMonth(1));
-                endDatePicker.setValue(lastMonth.withDayOfMonth(lastMonth.lengthOfMonth()));
-                break;
-            case "This Quarter":
-                int quarter = (now.getMonthValue() - 1) / 3;
-                startDatePicker.setValue(now.withMonth(quarter * 3 + 1).withDayOfMonth(1));
-                endDatePicker.setValue(now);
-                break;
-            case "This Year":
-                startDatePicker.setValue(now.withDayOfYear(1));
-                endDatePicker.setValue(now);
-                break;
-        }
-    }
-    
-    private void loadExpenseData() {
-        loadingIndicator.setVisible(true);
-
-        Task<List<CompanyExpense>> task = new Task<List<CompanyExpense>>() {
-            @Override
-            protected List<CompanyExpense> call() throws Exception {
-                List<com.company.payroll.expenses.CompanyExpense> all = expenseDAO.getAll();
-                LocalDate start = startDatePicker.getValue();
-                LocalDate end = endDatePicker.getValue();
-                if (start != null && end != null) {
-                    all = all.stream()
-                        .filter(e -> e.getExpenseDate() != null &&
-                             !e.getExpenseDate().isBefore(start) &&
-                             !e.getExpenseDate().isAfter(end))
-                        .collect(Collectors.toList());
-                }
-                return all.stream()
-                    .map(CompanyExpensesTab.this::mapToViewModel)
-                    .collect(Collectors.toList());
-            }
-        };
-        
-        task.setOnSucceeded(e -> {
-            List<CompanyExpense> data = task.getValue();
-            updateTable(data);
-            updateSummaryCards(data);
-            updateCharts(data);
-            loadingIndicator.setVisible(false);
-        });
-        
-        task.setOnFailed(e -> {
-            loadingIndicator.setVisible(false);
-            showAlert(AlertType.ERROR, "Error", "Failed to load expense data.");
-        });
-        
-        new Thread(task).start();
-    }
-    
-    private void updateTable(List<CompanyExpense> data) {
-        ObservableList<CompanyExpense> tableData = FXCollections.observableArrayList(data);
-        expenseTable.setItems(tableData);
-        
-        // Apply filters
-        searchField.textProperty().addListener((obs, oldText, newText) -> applyFilters());
-        categoryComboBox.setOnAction(e -> applyFilters());
-        vendorComboBox.setOnAction(e -> applyFilters());
     }
     
     private void applyFilters() {
-        String searchText = searchField.getText().toLowerCase();
-        String selectedCategory = categoryComboBox.getValue();
-        String selectedVendor = vendorComboBox.getValue();
+        if (filteredExpenses == null) return;
         
-        ObservableList<CompanyExpense> filtered = expenseTable.getItems().filtered(expense -> {
-            boolean matchesSearch = searchText.isEmpty() ||
-                expense.getVendor().toLowerCase().contains(searchText) ||
-                expense.getDescription().toLowerCase().contains(searchText) ||
-                expense.getCategory().toLowerCase().contains(searchText);
+        filteredExpenses.setPredicate(expense -> {
+            // Search text filter
+            String searchText = searchField.getText().toLowerCase();
+            if (!searchText.isEmpty()) {
+                boolean matchesSearch = 
+                    (expense.getVendor() != null && expense.getVendor().toLowerCase().contains(searchText)) ||
+                    (expense.getDescription() != null && expense.getDescription().toLowerCase().contains(searchText)) ||
+                    (expense.getReceiptNumber() != null && expense.getReceiptNumber().toLowerCase().contains(searchText)) ||
+                    (expense.getCategory() != null && expense.getCategory().toLowerCase().contains(searchText));
+                
+                if (!matchesSearch) return false;
+            }
             
-            boolean matchesCategory = "All Categories".equals(selectedCategory) ||
-                selectedCategory == null ||
-                expense.getCategory().equals(selectedCategory);
+            // Category filter
+            String category = categoryFilter.getValue();
+            if (!"All Categories".equals(category) && category != null) {
+                if (!category.equals(expense.getCategory())) {
+                    return false;
+                }
+            }
             
-            boolean matchesVendor = selectedVendor == null ||
-                "All Vendors".equals(selectedVendor) ||
-                expense.getVendor().equals(selectedVendor);
+            // Department filter
+            String department = departmentFilter.getValue();
+            if (!"All Departments".equals(department) && department != null) {
+                if (!department.equals(expense.getDepartment())) {
+                    return false;
+                }
+            }
             
-            return matchesSearch && matchesCategory && matchesVendor;
+            // Payment method filter
+            String paymentMethod = paymentMethodFilter.getValue();
+            if (!"All Payment Methods".equals(paymentMethod) && paymentMethod != null) {
+                if (!paymentMethod.equals(expense.getPaymentMethod())) {
+                    return false;
+                }
+            }
+            
+            // Date range filter
+            LocalDate startDate = startDatePicker.getValue();
+            LocalDate endDate = endDatePicker.getValue();
+            if (startDate != null && expense.getExpenseDate().isBefore(startDate)) {
+                return false;
+            }
+            if (endDate != null && expense.getExpenseDate().isAfter(endDate)) {
+                return false;
+            }
+            
+            return true;
         });
         
-        expenseTable.setItems(filtered);
+        updateSummaryCards();
+        updateCharts();
     }
     
-    private void updateSummaryCards(List<CompanyExpense> data) {
-        double total = data.stream().mapToDouble(CompanyExpense::getAmount).sum();
-        double monthlyAvg = total / 12; // Simplified calculation
-        double largest = data.stream().mapToDouble(CompanyExpense::getAmount).max().orElse(0);
-        long pending = data.stream().filter(e -> "Pending".equals(e.getStatus())).count();
+    private void updateSummaryCards() {
+        List<CompanyExpense> visibleExpenses = filteredExpenses != null ? 
+            new ArrayList<>(filteredExpenses) : new ArrayList<>();
         
-        animateValue(totalExpensesLabel, CURRENCY_FORMAT.format(total));
-        animateValue(monthlyAverageLabel, CURRENCY_FORMAT.format(monthlyAvg));
-        animateValue(largestExpenseLabel, CURRENCY_FORMAT.format(largest));
-        animateValue(pendingApprovalLabel, String.valueOf(pending));
+        // Total expenses
+        double totalExpenses = visibleExpenses.stream()
+            .mapToDouble(CompanyExpense::getAmount)
+            .sum();
+        totalExpensesLabel.setText(CURRENCY_FORMAT.format(totalExpenses));
+        
+        // Total records
+        totalRecordsLabel.setText(String.valueOf(visibleExpenses.size()));
+        
+        // Average expense
+        double avgExpense = visibleExpenses.isEmpty() ? 0 : totalExpenses / visibleExpenses.size();
+        avgExpenseLabel.setText(CURRENCY_FORMAT.format(avgExpense));
+        
+        // Operating expenses (Fuel, Permits, Insurance, etc.)
+        Set<String> operatingCategories = Set.of("Fuel", "Permits & Licenses", "Insurance", 
+                                                 "Equipment Purchase", "Communications");
+        double operatingExpenses = visibleExpenses.stream()
+            .filter(e -> operatingCategories.contains(e.getCategory()))
+            .mapToDouble(CompanyExpense::getAmount)
+            .sum();
+        operatingExpensesLabel.setText(CURRENCY_FORMAT.format(operatingExpenses));
+        
+        // Administrative expenses
+        Set<String> adminCategories = Set.of("Office Supplies", "Professional Services", 
+                                           "Software & Technology", "Marketing & Advertising");
+        double adminExpenses = visibleExpenses.stream()
+            .filter(e -> adminCategories.contains(e.getCategory()))
+            .mapToDouble(CompanyExpense::getAmount)
+            .sum();
+        administrativeExpensesLabel.setText(CURRENCY_FORMAT.format(adminExpenses));
     }
     
-    private void updateCharts(List<CompanyExpense> data) {
-        // Update category chart
-        Map<String, Double> categoryTotals = data.stream()
+    private void updateCharts() {
+        List<CompanyExpense> visibleExpenses = filteredExpenses != null ? 
+            new ArrayList<>(filteredExpenses) : new ArrayList<>();
+        
+        // Update expense by category chart
+        Map<String, Double> categoryTotals = visibleExpenses.stream()
             .collect(Collectors.groupingBy(
                 CompanyExpense::getCategory,
                 Collectors.summingDouble(CompanyExpense::getAmount)
@@ -1023,214 +864,937 @@ public class CompanyExpensesTab extends Tab {
         categoryTotals.forEach((category, total) -> {
             pieData.add(new PieChart.Data(category + " (" + CURRENCY_FORMAT.format(total) + ")", total));
         });
-        categoryChart.setData(pieData);
+        expenseByCategoryChart.setData(pieData);
         
-        // Add tooltips
-        pieData.forEach(data1 -> {
-            Tooltip tooltip = new Tooltip(String.format("%s: %.1f%%", 
-                data1.getName(), (data1.getPieValue() / data.stream()
-                    .mapToDouble(CompanyExpense::getAmount).sum()) * 100));
-            Tooltip.install(data1.getNode(), tooltip);
-        });
-        
-        // Update trend chart
-        XYChart.Series<String, Number> trendSeries = new XYChart.Series<>();
-        trendSeries.setName("Monthly Expenses");
-        
-        Map<String, Double> monthlyTotals = data.stream()
+        // Update monthly trend chart
+        Map<String, Double> monthlyTotals = visibleExpenses.stream()
             .collect(Collectors.groupingBy(
-                expense -> expense.getDate().format(DateTimeFormatter.ofPattern("MMM")),
+                expense -> expense.getExpenseDate().format(DateTimeFormatter.ofPattern("MMM yyyy")),
                 Collectors.summingDouble(CompanyExpense::getAmount)
             ));
         
-        monthlyTotals.forEach((month, total) -> {
-            trendSeries.getData().add(new XYChart.Data<>(month, total));
-        });
-        
-        trendChart.getData().clear();
-        trendChart.getData().add(trendSeries);
-        
-        // Update vendor chart
-        XYChart.Series<String, Number> vendorSeries = new XYChart.Series<>();
-        Map<String, Double> vendorTotals = data.stream()
-            .collect(Collectors.groupingBy(
-                CompanyExpense::getVendor,
-                Collectors.summingDouble(CompanyExpense::getAmount)
-            ));
-        
-        vendorTotals.entrySet().stream()
-            .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
-            .limit(10)
+        XYChart.Series<String, Number> monthlySeries = new XYChart.Series<>();
+        monthlyTotals.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
             .forEach(entry -> {
-                vendorSeries.getData().add(new XYChart.Data<>(entry.getKey(), entry.getValue()));
+                monthlySeries.getData().add(new XYChart.Data<>(entry.getKey(), entry.getValue()));
             });
         
-        vendorChart.getData().clear();
-        vendorChart.getData().add(vendorSeries);
+        monthlyTrendChart.getData().clear();
+        monthlyTrendChart.getData().add(monthlySeries);
+        
+        // Update payment method chart
+        Map<String, Double> paymentMethodTotals = visibleExpenses.stream()
+            .collect(Collectors.groupingBy(
+                CompanyExpense::getPaymentMethod,
+                Collectors.summingDouble(CompanyExpense::getAmount)
+            ));
+        
+        ObservableList<PieChart.Data> paymentData = FXCollections.observableArrayList();
+        paymentMethodTotals.forEach((method, total) -> {
+            paymentData.add(new PieChart.Data(method + " (" + CURRENCY_FORMAT.format(total) + ")", total));
+        });
+        paymentMethodChart.setData(paymentData);
+        
+        // Update year-over-year chart (simplified - would need historical data)
+        updateYearOverYearChart(visibleExpenses);
     }
     
-    private void animateValue(Label label, String newValue) {
-        FadeTransition ft = new FadeTransition(Duration.millis(300), label);
-        ft.setFromValue(1.0);
-        ft.setToValue(0.0);
-        ft.setOnFinished(e -> {
-            label.setText(newValue);
-            FadeTransition ft2 = new FadeTransition(Duration.millis(300), label);
-            ft2.setFromValue(0.0);
-            ft2.setToValue(1.0);
-            ft2.play();
-        });
-        ft.play();
+    private void updateYearOverYearChart(List<CompanyExpense> expenses) {
+        // Group by year and month
+        Map<String, Map<Integer, Double>> yearMonthTotals = expenses.stream()
+            .collect(Collectors.groupingBy(
+                e -> e.getExpenseDate().getMonth().toString(),
+                Collectors.groupingBy(
+                    e -> e.getExpenseDate().getYear(),
+                    Collectors.summingDouble(CompanyExpense::getAmount)
+                )
+            ));
+        
+        yearOverYearChart.getData().clear();
+        
+        // Create series for each year
+        Set<Integer> years = expenses.stream()
+            .map(e -> e.getExpenseDate().getYear())
+            .collect(Collectors.toSet());
+        
+        for (Integer year : years) {
+            XYChart.Series<String, Number> yearSeries = new XYChart.Series<>();
+            yearSeries.setName(String.valueOf(year));
+            
+            for (String month : Arrays.asList("JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+                                            "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER")) {
+                Double amount = yearMonthTotals.getOrDefault(month, Collections.emptyMap()).getOrDefault(year, 0.0);
+                yearSeries.getData().add(new XYChart.Data<>(month.substring(0, 3), amount));
+            }
+            
+            yearOverYearChart.getData().add(yearSeries);
+        }
     }
-    	
-	private void showAddExpenseDialog() {
+    
+    private void showAddExpenseDialog() {
+        showExpenseDialog(null, true);
+    }
+    
+    private void showEditExpenseDialog(CompanyExpense expense) {
+        showExpenseDialog(expense, false);
+    }
+    
+    private void showExpenseDialog(CompanyExpense expense, boolean isAdd) {
         Dialog<CompanyExpense> dialog = new Dialog<>();
-        dialog.setTitle("Add New Expense");
-        dialog.setHeaderText("Enter expense details");
+        dialog.setTitle(isAdd ? "Add Company Expense" : "Edit Company Expense");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         
-        ButtonType addButtonType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(addButtonType, ButtonType.CANCEL);
-        
-        // Create form
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
-        grid.setPadding(new Insets(20, 150, 10, 10));
+        grid.setPadding(new Insets(20));
         
-        DatePicker datePicker = new DatePicker(LocalDate.now());
+        // Date
+        DatePicker datePicker = new DatePicker(expense != null ? expense.getExpenseDate() : LocalDate.now());
+        
+        // Vendor
         TextField vendorField = new TextField();
         vendorField.setPromptText("Vendor name");
+        if (expense != null) vendorField.setText(expense.getVendor());
         
-        ComboBox<String> categoryField = new ComboBox<>(expenseCategories);
-        categoryField.setPromptText("Select category");
+        // Category
+        ComboBox<String> categoryCombo = new ComboBox<>(expenseCategories);
+        categoryCombo.setPromptText("Select category");
+        if (expense != null) categoryCombo.setValue(expense.getCategory());
         
+        // Department
+        ComboBox<String> departmentCombo = new ComboBox<>(departments);
+        departmentCombo.setPromptText("Select department");
+        departmentCombo.setValue(expense != null ? expense.getDepartment() : "Operations");
+        
+        // Description
+        TextArea descriptionArea = new TextArea();
+        descriptionArea.setPromptText("Description of expense...");
+        descriptionArea.setPrefRowCount(3);
+        if (expense != null) descriptionArea.setText(expense.getDescription());
+        
+        // Amount
         TextField amountField = new TextField();
         amountField.setPromptText("0.00");
+        if (expense != null) amountField.setText(String.valueOf(expense.getAmount()));
         
-        TextArea descriptionArea = new TextArea();
-        descriptionArea.setPromptText("Description");
-        descriptionArea.setPrefRowCount(3);
+        // Payment Method
+        ComboBox<String> paymentMethodCombo = new ComboBox<>(paymentMethods);
+        paymentMethodCombo.setPromptText("Select payment method");
+        if (expense != null) paymentMethodCombo.setValue(expense.getPaymentMethod());
         
-        CheckBox receiptCheckBox = new CheckBox("Receipt attached");
+        // Receipt Number
+        TextField receiptField = new TextField();
+        receiptField.setPromptText("Receipt/Invoice number");
+        if (expense != null) receiptField.setText(expense.getReceiptNumber());
         
-        grid.add(new Label("Date:"), 0, 0);
-        grid.add(datePicker, 1, 0);
-        grid.add(new Label("Vendor:"), 0, 1);
-        grid.add(vendorField, 1, 1);
-        grid.add(new Label("Category:"), 0, 2);
-        grid.add(categoryField, 1, 2);
-        grid.add(new Label("Amount:"), 0, 3);
-        grid.add(amountField, 1, 3);
-        grid.add(new Label("Description:"), 0, 4);
-        grid.add(descriptionArea, 1, 4);
-        grid.add(receiptCheckBox, 1, 5);
+        // Recurring
+        CheckBox recurringCheckBox = new CheckBox("Recurring Expense");
+        if (expense != null) recurringCheckBox.setSelected(expense.isRecurring());
+        
+        // Status (for approval workflow)
+        ComboBox<String> statusCombo = new ComboBox<>();
+        statusCombo.getItems().addAll("Pending", "Approved", "Rejected", "Under Review");
+        statusCombo.setValue(expense != null ? expense.getStatus() : "Pending");
+        
+        // Notes
+        TextArea notesArea = new TextArea();
+        notesArea.setPromptText("Additional notes...");
+        notesArea.setPrefRowCount(2);
+        if (expense != null) notesArea.setText(expense.getNotes());
+        
+        // Layout
+        int row = 0;
+        grid.add(new Label("Date:"), 0, row);
+        grid.add(datePicker, 1, row++);
+        
+        grid.add(new Label("Vendor:"), 0, row);
+        grid.add(vendorField, 1, row++);
+        
+        grid.add(new Label("Category:"), 0, row);
+        grid.add(categoryCombo, 1, row++);
+        
+        grid.add(new Label("Department:"), 0, row);
+        grid.add(departmentCombo, 1, row++);
+        
+        grid.add(new Label("Description:"), 0, row);
+        grid.add(descriptionArea, 1, row++);
+        
+        grid.add(new Label("Amount:"), 0, row);
+        grid.add(amountField, 1, row++);
+        
+        grid.add(new Label("Payment Method:"), 0, row);
+        grid.add(paymentMethodCombo, 1, row++);
+        
+        grid.add(new Label("Receipt #:"), 0, row);
+        grid.add(receiptField, 1, row++);
+        
+        grid.add(recurringCheckBox, 1, row++);
+        
+        grid.add(new Label("Status:"), 0, row);
+        grid.add(statusCombo, 1, row++);
+        
+        grid.add(new Label("Notes:"), 0, row);
+        grid.add(notesArea, 1, row++);
         
         dialog.getDialogPane().setContent(grid);
         
-        // Validate amount field
+        // Validation
         amountField.textProperty().addListener((obs, oldText, newText) -> {
             if (!newText.matches("\\d*\\.?\\d*")) {
                 amountField.setText(oldText);
             }
         });
         
-        // Enable/Disable add button
-        Node addButton = dialog.getDialogPane().lookupButton(addButtonType);
-        addButton.setDisable(true);
-        
-        vendorField.textProperty().addListener((obs, oldVal, newVal) -> 
-            validateExpenseForm(addButton, vendorField, categoryField, amountField));
-        categoryField.valueProperty().addListener((obs, oldVal, newVal) -> 
-            validateExpenseForm(addButton, vendorField, categoryField, amountField));
-        amountField.textProperty().addListener((obs, oldVal, newVal) -> 
-            validateExpenseForm(addButton, vendorField, categoryField, amountField));
-        
         dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == addButtonType) {
-                CompanyExpense expense = new CompanyExpense();
-                expense.setDate(datePicker.getValue());
-                expense.setVendor(vendorField.getText());
-                expense.setCategory(categoryField.getValue());
-                expense.setAmount(Double.parseDouble(amountField.getText()));
-                expense.setDescription(descriptionArea.getText());
-                expense.setStatus("Pending");
-                expense.setHasReceipt(receiptCheckBox.isSelected() ? "Yes" : "No");
-                expense.setEmployee("mgubran1"); // Current user
-                return expense;
+            if (dialogButton == ButtonType.OK) {
+                try {
+                    CompanyExpense result = expense != null ? expense : new CompanyExpense();
+                    
+                    result.setExpenseDate(datePicker.getValue());
+                    result.setVendor(vendorField.getText());
+                    result.setCategory(categoryCombo.getValue());
+                    result.setDepartment(departmentCombo.getValue());
+                    result.setDescription(descriptionArea.getText());
+                    result.setAmount(amountField.getText().isEmpty() ? 0 : 
+                                   Double.parseDouble(amountField.getText()));
+                    result.setPaymentMethod(paymentMethodCombo.getValue());
+                    result.setReceiptNumber(receiptField.getText());
+                    result.setRecurring(recurringCheckBox.isSelected());
+                    result.setStatus(statusCombo.getValue());
+                    result.setNotes(notesArea.getText());
+                    result.setEmployeeId(CURRENT_USER);
+                    
+                    return result;
+                } catch (Exception e) {
+                    logger.error("Error creating expense record", e);
+                    return null;
+                }
             }
             return null;
         });
         
-        Optional<CompanyExpense> result = dialog.showAndWait();
-        result.ifPresent(expense -> {
-            expenseTable.getItems().add(expense);
-            showAlert(AlertType.INFORMATION, "Expense Added", 
-                     "Expense for " + CURRENCY_FORMAT.format(expense.getAmount()) + " added successfully!");
-            loadExpenseData(); // Refresh data
+        dialog.showAndWait().ifPresent(result -> {
+            try {
+                expenseDAO.save(result);
+                loadData();
+                showAlert(Alert.AlertType.INFORMATION, "Success", 
+                         isAdd ? "Company expense added successfully" : 
+                                "Company expense updated successfully");
+            } catch (Exception e) {
+                logger.error("Failed to save expense record", e);
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                         "Failed to save expense record: " + e.getMessage());
+            }
         });
     }
     
-    private void validateExpenseForm(Node button, TextField vendor, ComboBox<String> category, TextField amount) {
-        boolean isValid = !vendor.getText().trim().isEmpty() &&
-                         category.getValue() != null &&
-                         !amount.getText().trim().isEmpty() &&
-                         amount.getText().matches("\\d+\\.?\\d*");
-        button.setDisable(!isValid);
+    private void editSelectedExpense() {
+        CompanyExpense selected = expenseTable.getSelectionModel().getSelectedItem();
+        if (selected != null) {
+            showEditExpenseDialog(selected);
+        } else {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select an expense to edit");
+        }
     }
     
-    private void importExpenses() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Import Expenses");
-        fileChooser.getExtensionFilters().addAll(
-            new FileChooser.ExtensionFilter("CSV Files", "*.csv"),
-            new FileChooser.ExtensionFilter("Excel Files", "*.xlsx", "*.xls")
-        );
-        
-        File file = fileChooser.showOpenDialog(getTabPane().getScene().getWindow());
-        if (file != null) {
-            loadingIndicator.setVisible(true);
+    private void duplicateSelectedExpense() {
+        CompanyExpense selected = expenseTable.getSelectionModel().getSelectedItem();
+        if (selected != null) {
+            CompanyExpense duplicate = new CompanyExpense();
+            duplicate.setVendor(selected.getVendor());
+            duplicate.setCategory(selected.getCategory());
+            duplicate.setDepartment(selected.getDepartment());
+            duplicate.setDescription(selected.getDescription());
+            duplicate.setAmount(selected.getAmount());
+            duplicate.setPaymentMethod(selected.getPaymentMethod());
+            duplicate.setRecurring(selected.isRecurring());
+            duplicate.setExpenseDate(LocalDate.now());
+            duplicate.setStatus("Pending");
             
-            Task<Integer> importTask = new Task<Integer>() {
-                @Override
-                protected Integer call() throws Exception {
-                    // Simulate import process
-                    Thread.sleep(2000);
-                    return 15; // Number of imported expenses
-                }
-            };
-            
-            importTask.setOnSucceeded(e -> {
-                loadingIndicator.setVisible(false);
-                int count = importTask.getValue();
-                showAlert(AlertType.INFORMATION, "Import Successful", 
-                         count + " expenses imported successfully!");
-                loadExpenseData();
-            });
-            
-            importTask.setOnFailed(e -> {
-                loadingIndicator.setVisible(false);
-                showAlert(AlertType.ERROR, "Import Failed", 
-                         "Failed to import expenses. Please check the file format.");
-            });
-            
-            new Thread(importTask).start();
+            showExpenseDialog(duplicate, true);
         }
+    }
+    
+    private void deleteSelectedExpense() {
+        CompanyExpense selected = expenseTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select an expense to delete");
+            return;
+        }
+        
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Are you sure you want to delete this expense record?",
+                ButtonType.YES, ButtonType.NO);
+        confirm.setHeaderText("Confirm Deletion");
+        
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.YES) {
+                try {
+                    expenseDAO.delete(selected.getId());
+                    loadData();
+                    showAlert(Alert.AlertType.INFORMATION, "Success", 
+                             "Expense record deleted successfully");
+                } catch (Exception e) {
+                    logger.error("Failed to delete expense record", e);
+                    showAlert(Alert.AlertType.ERROR, "Error", 
+                             "Failed to delete record: " + e.getMessage());
+                }
+            }
+        });
+    }
+    
+    private void approveSelectedExpense() {
+        CompanyExpense selected = expenseTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select an expense to approve/reject");
+            return;
+        }
+        
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Approve/Reject Expense");
+        dialog.setHeaderText("Review expense from " + selected.getVendor());
+        
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20));
+        
+        ComboBox<String> statusCombo = new ComboBox<>();
+        statusCombo.getItems().addAll("Approved", "Rejected", "Under Review");
+        statusCombo.setValue(selected.getStatus());
+        
+        TextArea commentsArea = new TextArea();
+        commentsArea.setPromptText("Comments...");
+        commentsArea.setPrefRowCount(3);
+        
+        grid.add(new Label("Status:"), 0, 0);
+        grid.add(statusCombo, 1, 0);
+        grid.add(new Label("Comments:"), 0, 1);
+        grid.add(commentsArea, 1, 1);
+        
+        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == ButtonType.OK) {
+                return statusCombo.getValue();
+            }
+            return null;
+        });
+        
+        dialog.showAndWait().ifPresent(status -> {
+            selected.setStatus(status);
+            if (!commentsArea.getText().isEmpty()) {
+                selected.setNotes(selected.getNotes() + "\n[" + CURRENT_USER + " - " + 
+                                LocalDate.now() + "]: " + commentsArea.getText());
+            }
+            
+            try {
+                expenseDAO.save(selected);
+                loadData();
+                showAlert(Alert.AlertType.INFORMATION, "Success", 
+                         "Expense status updated to: " + status);
+            } catch (Exception e) {
+                logger.error("Failed to update expense status", e);
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                         "Failed to update status: " + e.getMessage());
+            }
+        });
+    }
+    
+    private void viewSelectedReceipt() {
+        CompanyExpense selected = expenseTable.getSelectionModel().getSelectedItem();
+        if (selected != null) {
+            viewDocument(selected.getId(), null);
+        }
+    }
+    
+    private String getStatusStyle(String status) {
+        switch (status) {
+            case "Approved":
+                return "-fx-background-color: #d4edda; -fx-text-fill: #155724; -fx-background-radius: 3;";
+            case "Pending":
+                return "-fx-background-color: #fff3cd; -fx-text-fill: #856404; -fx-background-radius: 3;";
+            case "Rejected":
+                return "-fx-background-color: #f8d7da; -fx-text-fill: #721c24; -fx-background-radius: 3;";
+            case "Under Review":
+                return "-fx-background-color: #d1ecf1; -fx-text-fill: #0c5460; -fx-background-radius: 3;";
+            default:
+                return "-fx-background-color: #e2e3e5; -fx-text-fill: #383d41; -fx-background-radius: 3;";
+        }
+    }
+    
+    private void showDocumentManager() {
+        CompanyExpense selected = expenseTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select an expense record to manage documents");
+            return;
+        }
+        
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Document Manager - " + selected.getVendor() + " - " + 
+                       selected.getExpenseDate().format(DATE_FORMAT));
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        
+        ListView<String> docListView = new ListView<>();
+        updateDocumentList(docListView, selected.getId());
+        
+        Button uploadBtn = new Button("Upload");
+        Button viewBtn = new Button("View");
+        Button printBtn = new Button("Print");
+        Button deleteBtn = new Button("Delete");
+        
+        uploadBtn.setOnAction(e -> {
+            uploadDocumentForExpense(selected.getId());
+            updateDocumentList(docListView, selected.getId());
+        });
+        
+        viewBtn.setOnAction(e -> {
+            String selectedDoc = docListView.getSelectionModel().getSelectedItem();
+            if (selectedDoc != null) {
+                viewDocument(selected.getId(), selectedDoc);
+            }
+        });
+        
+        printBtn.setOnAction(e -> {
+            String selectedDoc = docListView.getSelectionModel().getSelectedItem();
+            if (selectedDoc != null) {
+                printDocument(selected.getId(), selectedDoc);
+            }
+        });
+        
+        deleteBtn.setOnAction(e -> {
+            String selectedDoc = docListView.getSelectionModel().getSelectedItem();
+            if (selectedDoc != null) {
+                deleteDocument(selected.getId(), selectedDoc);
+                updateDocumentList(docListView, selected.getId());
+            }
+        });
+        
+        HBox buttonBox = new HBox(10, uploadBtn, viewBtn, printBtn, deleteBtn);
+        buttonBox.setAlignment(Pos.CENTER);
+        buttonBox.setPadding(new Insets(10, 0, 0, 0));
+        
+        VBox content = new VBox(10, 
+                               new Label("Documents for this expense"), 
+                               docListView, 
+                               buttonBox);
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(500);
+        content.setPrefHeight(400);
+        
+        dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
+    }
+    
+    private void uploadDocument() {
+        CompanyExpense selected = expenseTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select an expense record to upload document");
+            return;
+        }
+        
+        uploadDocumentForExpense(selected.getId());
+    }
+    
+    private void uploadDocumentForExpense(int expenseId) {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select Document to Upload");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("PDF Files", "*.pdf"),
+                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg"),
+                new FileChooser.ExtensionFilter("All Files", "*.*"));
+        
+        File selectedFile = fileChooser.showOpenDialog(getTabPane().getScene().getWindow());
+        if (selectedFile != null) {
+            try {
+                Path expenseDir = Paths.get(docStoragePath, String.valueOf(expenseId));
+                Files.createDirectories(expenseDir);
+                
+                String timestamp = String.valueOf(System.currentTimeMillis());
+                String extension = selectedFile.getName().substring(
+                        selectedFile.getName().lastIndexOf('.'));
+                String newFileName = "receipt_" + timestamp + extension;
+                
+                Path destPath = expenseDir.resolve(newFileName);
+                Files.copy(selectedFile.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
+                
+                logger.info("Uploaded document for expense {}: {}", expenseId, newFileName);
+                showAlert(Alert.AlertType.INFORMATION, "Success", 
+                         "Document uploaded successfully");
+                
+            } catch (Exception e) {
+                logger.error("Failed to upload document", e);
+                showAlert(Alert.AlertType.ERROR, "Error", 
+                         "Failed to upload document: " + e.getMessage());
+            }
+        }
+    }
+    
+    private void updateDocumentList(ListView<String> listView, int expenseId) {
+        try {
+            Path expenseDir = Paths.get(docStoragePath, String.valueOf(expenseId));
+            if (Files.exists(expenseDir)) {
+                List<String> files = Files.list(expenseDir)
+                    .map(p -> p.getFileName().toString())
+                    .sorted()
+                    .collect(Collectors.toList());
+                listView.setItems(FXCollections.observableArrayList(files));
+            } else {
+                listView.setItems(FXCollections.observableArrayList());
+            }
+        } catch (Exception e) {
+            logger.error("Failed to list documents", e);
+            listView.setItems(FXCollections.observableArrayList());
+        }
+    }
+    
+    private void viewDocument(int expenseId, String document) {
+        try {
+            Path expenseDir = Paths.get(docStoragePath, String.valueOf(expenseId));
+            
+            if (document == null && Files.exists(expenseDir)) {
+                // Try to find the first document
+                List<Path> docs = Files.list(expenseDir).collect(Collectors.toList());
+                if (!docs.isEmpty()) {
+                    document = docs.get(0).getFileName().toString();
+                }
+            }
+            
+            if (document != null) {
+                Path docPath = expenseDir.resolve(document);
+                File file = docPath.toFile();
+                if (java.awt.Desktop.isDesktopSupported()) {
+                    java.awt.Desktop.getDesktop().open(file);
+                } else {
+                    showAlert(Alert.AlertType.INFORMATION, "Cannot Open", 
+                             "Cannot open file. File is saved at: " + docPath);
+                }
+            } else {
+                showAlert(Alert.AlertType.INFORMATION, "No Document", 
+                         "No receipt/document attached to this expense");
+            }
+        } catch (Exception e) {
+            logger.error("Failed to open document", e);
+            showAlert(Alert.AlertType.ERROR, "Error", 
+                     "Failed to open document: " + e.getMessage());
+        }
+    }
+    
+    private void printDocument(int expenseId, String document) {
+        try {
+            Path docPath = Paths.get(docStoragePath, String.valueOf(expenseId), document);
+            File file = docPath.toFile();
+            if (java.awt.Desktop.isDesktopSupported() && 
+                java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.PRINT)) {
+                java.awt.Desktop.getDesktop().print(file);
+                logger.info("Printing document: {}", docPath);
+            } else {
+                                showAlert(Alert.AlertType.INFORMATION, "Print Not Supported", 
+                         "Printing is not supported. Please open the file first.");
+                viewDocument(expenseId, document);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to print document", e);
+            showAlert(Alert.AlertType.ERROR, "Error", 
+                     "Failed to print document: " + e.getMessage());
+        }
+    }
+    
+    private void deleteDocument(int expenseId, String document) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Are you sure you want to delete this document?",
+                ButtonType.YES, ButtonType.NO);
+        confirm.setHeaderText("Confirm Deletion");
+        
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.YES) {
+                try {
+                    Path docPath = Paths.get(docStoragePath, String.valueOf(expenseId), document);
+                    Files.delete(docPath);
+                    logger.info("Deleted document: {}", docPath);
+                } catch (Exception e) {
+                    logger.error("Failed to delete document", e);
+                    showAlert(Alert.AlertType.ERROR, "Error", 
+                             "Failed to delete document: " + e.getMessage());
+                }
+            }
+        });
+    }
+    
+    private void printSelectedDocument() {
+        CompanyExpense selected = expenseTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select an expense record to print documents");
+            return;
+        }
+        
+        try {
+            Path expenseDir = Paths.get(docStoragePath, String.valueOf(selected.getId()));
+            if (!Files.exists(expenseDir) || !Files.isDirectory(expenseDir)) {
+                showAlert(Alert.AlertType.INFORMATION, "No Documents", 
+                         "No documents found for this expense record");
+                return;
+            }
+            
+            List<String> documents = Files.list(expenseDir)
+                .map(p -> p.getFileName().toString())
+                .sorted()
+                .collect(Collectors.toList());
+            
+            if (documents.isEmpty()) {
+                showAlert(Alert.AlertType.INFORMATION, "No Documents", 
+                         "No documents found for this expense record");
+                return;
+            }
+            
+            if (documents.size() == 1) {
+                printDocument(selected.getId(), documents.get(0));
+            } else {
+                // Show selection dialog
+                Dialog<String> dialog = new Dialog<>();
+                dialog.setTitle("Select Document to Print");
+                dialog.setHeaderText("Choose a document to print");
+                
+                ListView<String> docList = new ListView<>(FXCollections.observableArrayList(documents));
+                docList.setPrefHeight(300);
+                
+                dialog.getDialogPane().setContent(docList);
+                dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+                
+                dialog.setResultConverter(dialogButton -> {
+                    if (dialogButton == ButtonType.OK) {
+                        return docList.getSelectionModel().getSelectedItem();
+                    }
+                    return null;
+                });
+                
+                dialog.showAndWait().ifPresent(doc -> 
+                    printDocument(selected.getId(), doc)
+                );
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error accessing documents", e);
+            showAlert(Alert.AlertType.ERROR, "Error", 
+                     "Error accessing documents: " + e.getMessage());
+        }
+    }
+    
+    private void generateReport() {
+        logger.info("Generating company expense report");
+        
+        List<CompanyExpense> expenses = filteredExpenses != null ? 
+            new ArrayList<>(filteredExpenses) : new ArrayList<>();
+        
+        if (expenses.isEmpty()) {
+            showAlert(Alert.AlertType.INFORMATION, "No Data", 
+                     "No expense records to report");
+            return;
+        }
+        
+        StringBuilder report = new StringBuilder();
+        report.append("COMPANY EXPENSE REPORT\n");
+        report.append("======================\n\n");
+        report.append("Report Date: ").append(LocalDate.now().format(DATE_FORMAT)).append("\n");
+        report.append("Date Range: ").append(startDatePicker.getValue().format(DATE_FORMAT))
+              .append(" to ").append(endDatePicker.getValue().format(DATE_FORMAT)).append("\n\n");
+        
+        // Summary
+        double totalExpenses = expenses.stream().mapToDouble(CompanyExpense::getAmount).sum();
+        double avgExpense = totalExpenses / expenses.size();
+        
+        report.append("SUMMARY\n");
+        report.append("-------\n");
+        report.append("Total Records: ").append(expenses.size()).append("\n");
+        report.append("Total Expenses: ").append(CURRENCY_FORMAT.format(totalExpenses)).append("\n");
+        report.append("Average Expense: ").append(CURRENCY_FORMAT.format(avgExpense)).append("\n\n");
+        
+        // By Category
+        Map<String, Double> categoryTotals = expenses.stream()
+            .collect(Collectors.groupingBy(
+                CompanyExpense::getCategory,
+                Collectors.summingDouble(CompanyExpense::getAmount)
+            ));
+        
+        report.append("BY CATEGORY\n");
+        report.append("-----------\n");
+        categoryTotals.entrySet().stream()
+            .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+            .forEach(entry -> {
+                report.append(entry.getKey()).append(": ")
+                      .append(CURRENCY_FORMAT.format(entry.getValue())).append("\n");
+            });
+        report.append("\n");
+        
+        // By Department
+        Map<String, Double> departmentTotals = expenses.stream()
+            .collect(Collectors.groupingBy(
+                CompanyExpense::getDepartment,
+                Collectors.summingDouble(CompanyExpense::getAmount)
+            ));
+        
+        report.append("BY DEPARTMENT\n");
+        report.append("-------------\n");
+        departmentTotals.entrySet().stream()
+            .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+            .forEach(entry -> {
+                report.append(entry.getKey()).append(": ")
+                      .append(CURRENCY_FORMAT.format(entry.getValue())).append("\n");
+            });
+        report.append("\n");
+        
+        // Top Vendors
+        Map<String, Double> vendorTotals = expenses.stream()
+            .collect(Collectors.groupingBy(
+                CompanyExpense::getVendor,
+                Collectors.summingDouble(CompanyExpense::getAmount)
+            ));
+        
+        report.append("TOP 10 VENDORS\n");
+        report.append("--------------\n");
+        vendorTotals.entrySet().stream()
+            .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+            .limit(10)
+            .forEach(entry -> {
+                report.append(entry.getKey()).append(": ")
+                      .append(CURRENCY_FORMAT.format(entry.getValue())).append("\n");
+            });
+        report.append("\n");
+        
+        // Payment Methods
+        Map<String, Double> paymentMethodTotals = expenses.stream()
+            .collect(Collectors.groupingBy(
+                CompanyExpense::getPaymentMethod,
+                Collectors.summingDouble(CompanyExpense::getAmount)
+            ));
+        
+        report.append("BY PAYMENT METHOD\n");
+        report.append("-----------------\n");
+        paymentMethodTotals.forEach((method, total) -> {
+            report.append(method).append(": ")
+                  .append(CURRENCY_FORMAT.format(total)).append("\n");
+        });
+        
+        // Show report in dialog
+        TextArea reportArea = new TextArea(report.toString());
+        reportArea.setEditable(false);
+        reportArea.setFont(Font.font("Courier New", 12));
+        
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Company Expense Report");
+        dialog.getDialogPane().setContent(reportArea);
+        dialog.getDialogPane().setPrefSize(700, 600);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK);
+        dialog.showAndWait();
+    }
+    
+    private void generateVendorReport() {
+        logger.info("Generating vendor report");
+        
+        List<CompanyExpense> expenses = allExpenses;
+        Map<String, List<CompanyExpense>> vendorExpenses = expenses.stream()
+            .collect(Collectors.groupingBy(CompanyExpense::getVendor));
+        
+        StringBuilder report = new StringBuilder();
+        report.append("VENDOR EXPENSE REPORT\n");
+        report.append("====================\n\n");
+        report.append("Report Date: ").append(LocalDate.now().format(DATE_FORMAT)).append("\n\n");
+        
+        vendorExpenses.entrySet().stream()
+            .sorted((e1, e2) -> {
+                double total1 = e1.getValue().stream().mapToDouble(CompanyExpense::getAmount).sum();
+                double total2 = e2.getValue().stream().mapToDouble(CompanyExpense::getAmount).sum();
+                return Double.compare(total2, total1);
+            })
+            .limit(20)
+            .forEach(entry -> {
+                String vendor = entry.getKey();
+                List<CompanyExpense> vendorExps = entry.getValue();
+                double total = vendorExps.stream().mapToDouble(CompanyExpense::getAmount).sum();
+                double avg = total / vendorExps.size();
+                
+                report.append("VENDOR: ").append(vendor).append("\n");
+                report.append("Total Expenses: ").append(CURRENCY_FORMAT.format(total)).append("\n");
+                report.append("Number of Transactions: ").append(vendorExps.size()).append("\n");
+                report.append("Average Transaction: ").append(CURRENCY_FORMAT.format(avg)).append("\n");
+                
+                // Category breakdown
+                Map<String, Double> categories = vendorExps.stream()
+                    .collect(Collectors.groupingBy(
+                        CompanyExpense::getCategory,
+                        Collectors.summingDouble(CompanyExpense::getAmount)
+                    ));
+                
+                report.append("Categories:\n");
+                categories.forEach((cat, amt) -> {
+                    report.append("  - ").append(cat).append(": ")
+                          .append(CURRENCY_FORMAT.format(amt)).append("\n");
+                });
+                
+                report.append("\n");
+            });
+        
+        // Show report
+        TextArea reportArea = new TextArea(report.toString());
+        reportArea.setEditable(false);
+        reportArea.setFont(Font.font("Courier New", 12));
+        
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Vendor Report");
+        dialog.getDialogPane().setContent(reportArea);
+        dialog.getDialogPane().setPrefSize(600, 500);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK);
+        dialog.showAndWait();
+    }
+    
+    private void showBudgetComparison() {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Budget Analysis");
+        dialog.setHeaderText("Compare actual expenses to budget");
+        
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20));
+        
+        // Mock budget data (in real app, this would come from database)
+        Map<String, Double> budgets = new HashMap<>();
+        budgets.put("Fuel", 50000.0);
+        budgets.put("Insurance", 25000.0);
+        budgets.put("Permits & Licenses", 10000.0);
+        budgets.put("Office Supplies", 5000.0);
+        budgets.put("Professional Services", 15000.0);
+        
+        Map<String, Double> actuals = filteredExpenses.stream()
+            .collect(Collectors.groupingBy(
+                CompanyExpense::getCategory,
+                Collectors.summingDouble(CompanyExpense::getAmount)
+            ));
+        
+        int row = 0;
+        grid.add(new Label("Category"), 0, row);
+        grid.add(new Label("Budget"), 1, row);
+        grid.add(new Label("Actual"), 2, row);
+        grid.add(new Label("Variance"), 3, row);
+        grid.add(new Label("% Used"), 4, row);
+        row++;
+        
+        grid.add(new Separator(), 0, row++, 5, 1);
+        
+        for (String category : budgets.keySet()) {
+            double budget = budgets.get(category);
+            double actual = actuals.getOrDefault(category, 0.0);
+            double variance = budget - actual;
+            double percentUsed = (actual / budget) * 100;
+            
+            grid.add(new Label(category), 0, row);
+            grid.add(new Label(CURRENCY_FORMAT.format(budget)), 1, row);
+            
+            Label actualLabel = new Label(CURRENCY_FORMAT.format(actual));
+            if (actual > budget) {
+                actualLabel.setTextFill(Color.RED);
+            }
+            grid.add(actualLabel, 2, row);
+            
+            Label varianceLabel = new Label(CURRENCY_FORMAT.format(variance));
+            if (variance < 0) {
+                varianceLabel.setTextFill(Color.RED);
+            } else {
+                varianceLabel.setTextFill(Color.GREEN);
+            }
+            grid.add(varianceLabel, 3, row);
+            
+            ProgressBar progressBar = new ProgressBar(percentUsed / 100);
+            progressBar.setPrefWidth(100);
+            if (percentUsed > 90) {
+                progressBar.setStyle("-fx-accent: red;");
+            } else if (percentUsed > 75) {
+                progressBar.setStyle("-fx-accent: orange;");
+            } else {
+                progressBar.setStyle("-fx-accent: green;");
+            }
+            
+            HBox percentBox = new HBox(5);
+            percentBox.setAlignment(Pos.CENTER_LEFT);
+            percentBox.getChildren().addAll(progressBar, 
+                                           new Label(String.format("%.1f%%", percentUsed)));
+            grid.add(percentBox, 4, row);
+            
+            row++;
+        }
+        
+        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.showAndWait();
     }
     
     private void showExportMenu(Button exportButton) {
         ContextMenu exportMenu = new ContextMenu();
         
+        MenuItem csvItem = new MenuItem("Export to CSV");
+        csvItem.setOnAction(e -> exportToCSV());
+        
         MenuItem excelItem = new MenuItem("Export to Excel");
         excelItem.setOnAction(e -> exportToExcel());
         
         MenuItem pdfItem = new MenuItem("Export to PDF");
-        pdfItem.setOnAction(e -> exportToPdf());
+        pdfItem.setOnAction(e -> exportToPDF());
         
-        MenuItem csvItem = new MenuItem("Export to CSV");
-        csvItem.setOnAction(e -> exportToCsv());
+        exportMenu.getItems().addAll(csvItem, excelItem, pdfItem);
+        exportMenu.show(exportButton, javafx.geometry.Side.BOTTOM, 0, 0);
+    }
+    
+    private void exportToCSV() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save CSV File");
+        fileChooser.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("CSV Files", "*.csv")
+        );
+        fileChooser.setInitialFileName("company_expenses_" + LocalDate.now() + ".csv");
         
-        exportMenu.getItems().addAll(excelItem, pdfItem, csvItem);
-        exportMenu.show(exportButton, Side.BOTTOM, 0, 0);
+        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
+        if (file != null) {
+            try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+                // Write headers
+                writer.println("Date,Vendor,Category,Department,Description,Amount,Payment Method,Receipt #,Status,Recurring");
+                
+                // Write data
+                List<CompanyExpense> expenses = filteredExpenses != null ? 
+                    new ArrayList<>(filteredExpenses) : new ArrayList<>();
+                    
+                for (CompanyExpense expense : expenses) {
+                    writer.printf("%s,%s,%s,%s,%s,%.2f,%s,%s,%s,%s%n",
+                        expense.getExpenseDate().format(DATE_FORMAT),
+                        expense.getVendor(),
+                        expense.getCategory(),
+                        expense.getDepartment(),
+                        expense.getDescription() != null ? expense.getDescription().replace(",", ";") : "",
+                        expense.getAmount(),
+                        expense.getPaymentMethod(),
+                        expense.getReceiptNumber() != null ? expense.getReceiptNumber() : "",
+                        expense.getStatus(),
+                        expense.isRecurring() ? "Yes" : "No"
+                    );
+                }
+                
+                showAlert(Alert.AlertType.INFORMATION, "Export Successful", 
+                         "Company expenses exported to CSV successfully!");
+                         
+            } catch (Exception e) {
+                logger.error("Failed to export to CSV", e);
+                showAlert(Alert.AlertType.ERROR, "Export Failed", 
+                         "Failed to export data: " + e.getMessage());
+            }
+        }
     }
     
     private void exportToExcel() {
@@ -1239,279 +1803,62 @@ public class CompanyExpensesTab extends Tab {
         fileChooser.getExtensionFilters().add(
             new FileChooser.ExtensionFilter("Excel Files", "*.xlsx")
         );
-        fileChooser.setInitialFileName("expenses_" + LocalDate.now() + ".xlsx");
+        fileChooser.setInitialFileName("company_expenses_" + LocalDate.now() + ".xlsx");
         
         File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
         if (file != null) {
-            // Export logic here
-            showAlert(AlertType.INFORMATION, "Export Successful", 
-                     "Expenses exported to Excel successfully!");
+            // Note: In a real implementation, you would use Apache POI here
+            showAlert(Alert.AlertType.INFORMATION, "Export to Excel", 
+                     "Excel export functionality would be implemented here using Apache POI");
         }
     }
     
-    private void exportToPdf() {
+    private void exportToPDF() {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Save PDF File");
         fileChooser.getExtensionFilters().add(
             new FileChooser.ExtensionFilter("PDF Files", "*.pdf")
         );
-        fileChooser.setInitialFileName("expense_report_" + LocalDate.now() + ".pdf");
+        fileChooser.setInitialFileName("company_expense_report_" + LocalDate.now() + ".pdf");
         
         File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
         if (file != null) {
-            // PDF export logic
-            showAlert(AlertType.INFORMATION, "Export Successful", 
-                     "Expense report exported to PDF successfully!");
+            // Note: In a real implementation, you would use Apache PDFBox or iText here
+            showAlert(Alert.AlertType.INFORMATION, "Export to PDF", 
+                     "PDF export functionality would be implemented here using Apache PDFBox");
         }
     }
     
-    private void exportToCsv() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Save CSV File");
-        fileChooser.getExtensionFilters().add(
-            new FileChooser.ExtensionFilter("CSV Files", "*.csv")
-        );
-        fileChooser.setInitialFileName("expenses_" + LocalDate.now() + ".csv");
-        
-        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
-        if (file != null) {
-            // CSV export logic
-            showAlert(AlertType.INFORMATION, "Export Successful", 
-                     "Expenses exported to CSV successfully!");
-        }
-    }
-    
-    private void viewReceipt() {
-        CompanyExpense selected = expenseTable.getSelectionModel().getSelectedItem();
-        if (selected != null) {
-            // In a real application, this would open the receipt image/PDF
-            showAlert(AlertType.INFORMATION, "Receipt Viewer", 
-                     "Viewing receipt for expense: " + selected.getVendor());
-        }
-    }
-    
-    private void deleteSelectedExpenses() {
-        ObservableList<CompanyExpense> selected = expenseTable.getSelectionModel().getSelectedItems();
-        if (!selected.isEmpty()) {
-            Alert confirmAlert = new Alert(AlertType.CONFIRMATION);
-            confirmAlert.setTitle("Delete Expenses");
-            confirmAlert.setHeaderText("Delete " + selected.size() + " expense(s)?");
-            confirmAlert.setContentText("This action cannot be undone.");
-            
-            Optional<ButtonType> result = confirmAlert.showAndWait();
-            if (result.isPresent() && result.get() == ButtonType.OK) {
-                expenseTable.getItems().removeAll(selected);
-                showAlert(AlertType.INFORMATION, "Expenses Deleted", 
-                         selected.size() + " expense(s) deleted successfully.");
-                loadExpenseData();
-            }
-        }
-    }
-    
-    private void showEditBudgetDialog() {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Edit Budget");
-        dialog.setHeaderText("Set budget limits for each category");
-        
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-        
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20));
-        
-        Map<String, TextField> budgetFields = new HashMap<>();
-        int row = 0;
-        
-        for (String category : expenseCategories) {
-            Label label = new Label(category + ":");
-            TextField field = new TextField();
-            field.setPromptText("0.00");
-            field.setText(String.format("%.2f", 3000 + Math.random() * 7000));
-            budgetFields.put(category, field);
-            
-            grid.add(label, 0, row);
-            grid.add(field, 1, row);
-            row++;
-        }
-        
-        ScrollPane scrollPane = new ScrollPane(grid);
-        scrollPane.setPrefHeight(400);
-        dialog.getDialogPane().setContent(scrollPane);
-        
-        dialog.showAndWait();
-    }
-    
-    private void approveExpense(CompanyExpense expense) {
-        if (expense != null) {
-            expense.setStatus("Approved");
-            showAlert(AlertType.INFORMATION, "Expense Approved", 
-                     "Expense from " + expense.getVendor() + " has been approved.");
-            loadExpenseData();
-        }
-    }
-    
-    private void rejectExpense(CompanyExpense expense) {
-        if (expense != null) {
-            TextInputDialog dialog = new TextInputDialog();
-            dialog.setTitle("Reject Expense");
-            dialog.setHeaderText("Reason for rejection:");
-            dialog.setContentText("Please provide a reason:");
-            
-            Optional<String> result = dialog.showAndWait();
-            result.ifPresent(reason -> {
-                expense.setStatus("Rejected");
-                showAlert(AlertType.INFORMATION, "Expense Rejected", 
-                         "Expense from " + expense.getVendor() + " has been rejected.\nReason: " + reason);
-                loadExpenseData();
-            });
-        }
-    }
-    
-    private void showExpenseDetails(CompanyExpense expense) {
-        if (expense != null) {
-            Alert alert = new Alert(AlertType.INFORMATION);
-            alert.setTitle("Expense Details");
-            alert.setHeaderText("Expense Information");
-            
-            String details = String.format(
-                "Date: %s\n" +
-                "Vendor: %s\n" +
-                "Category: %s\n" +
-                "Amount: %s\n" +
-                "Description: %s\n" +
-                "Status: %s\n" +
-                "Employee: %s\n" +
-                "Receipt: %s",
-                expense.getDate().format(DATE_FORMAT),
-                expense.getVendor(),
-                expense.getCategory(),
-                CURRENCY_FORMAT.format(expense.getAmount()),
-                expense.getDescription(),
-                expense.getStatus(),
-                expense.getEmployee(),
-                expense.getHasReceipt()
-            );
-            
-            alert.setContentText(details);
-            alert.showAndWait();
-        }
-    }
-    
-    private void showAlert(AlertType type, String title, String content) {
+    private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(content);
         alert.showAndWait();
     }
-
-    private CompanyExpense mapToViewModel(com.company.payroll.expenses.CompanyExpense exp) {
-        CompanyExpense ce = new CompanyExpense();
-        ce.setDate(exp.getExpenseDate());
-        ce.setVendor(exp.getVendor());
-        ce.setCategory(exp.getCategory());
-        ce.setDescription(exp.getDescription());
-        ce.setAmount(exp.getAmount());
-        ce.setStatus(exp.getStatus());
-        ce.setHasReceipt((exp.getReceiptNumber() != null && !exp.getReceiptNumber().isEmpty()) ? "Yes" : "No");
-        ce.setEmployee(exp.getEmployeeId());
-        return ce;
-    }
     
-    private void initializeData() {
-        try {
-            List<com.company.payroll.expenses.CompanyExpense> all = expenseDAO.getAll();
-            Set<String> vendors = all.stream()
-                .map(com.company.payroll.expenses.CompanyExpense::getVendor)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(TreeSet::new));
-            vendorComboBox.getItems().add("All Vendors");
-            vendorComboBox.getItems().addAll(vendors);
-        } catch (Exception e) {
-            vendorComboBox.getItems().add("All Vendors");
-        }
-    }
-    
-    
-    // Inner class for Company Expense
-    public static class CompanyExpense {
-        private final ObjectProperty<LocalDate> date = new SimpleObjectProperty<>();
-        private final StringProperty vendor = new SimpleStringProperty();
-        private final StringProperty category = new SimpleStringProperty();
-        private final StringProperty description = new SimpleStringProperty();
-        private final DoubleProperty amount = new SimpleDoubleProperty();
-        private final StringProperty status = new SimpleStringProperty();
-        private final StringProperty hasReceipt = new SimpleStringProperty();
-        private final StringProperty employee = new SimpleStringProperty();
-        private final BooleanProperty selected = new SimpleBooleanProperty(false);
+    // Inner class for vendor summary
+    public static class VendorSummary {
+        private final String vendorName;
+        private final int transactionCount;
+        private final double totalAmount;
+        private final double averageAmount;
+        private final String lastTransactionDate;
         
-        // Getters and setters
-        public LocalDate getDate() { return date.get(); }
-        public void setDate(LocalDate value) { date.set(value); }
-        public ObjectProperty<LocalDate> dateProperty() { return date; }
-        
-        public String getVendor() { return vendor.get(); }
-        public void setVendor(String value) { vendor.set(value); }
-        public StringProperty vendorProperty() { return vendor; }
-        
-        public String getCategory() { return category.get(); }
-        public void setCategory(String value) { category.set(value); }
-        public StringProperty categoryProperty() { return category; }
-        
-        public String getDescription() { return description.get(); }
-        public void setDescription(String value) { description.set(value); }
-        public StringProperty descriptionProperty() { return description; }
-        
-        public double getAmount() { return amount.get(); }
-        public void setAmount(double value) { amount.set(value); }
-        public DoubleProperty amountProperty() { return amount; }
-        
-        public String getStatus() { return status.get(); }
-        public void setStatus(String value) { status.set(value); }
-        public StringProperty statusProperty() { return status; }
-        
-        public String getHasReceipt() { return hasReceipt.get(); }
-        public void setHasReceipt(String value) { hasReceipt.set(value); }
-        public StringProperty hasReceiptProperty() { return hasReceipt; }
-        
-        public String getEmployee() { return employee.get(); }
-        public void setEmployee(String value) { employee.set(value); }
-        public StringProperty employeeProperty() { return employee; }
-        
-        public boolean isSelected() { return selected.get(); }
-        public void setSelected(boolean value) { selected.set(value); }
-        public BooleanProperty selectedProperty() { return selected; }
-    }
-    
-    // Inner class for Budget Category
-    public static class BudgetCategory {
-        private final StringProperty category = new SimpleStringProperty();
-        private final DoubleProperty budget = new SimpleDoubleProperty();
-        private final DoubleProperty spent = new SimpleDoubleProperty();
-        private final DoubleProperty remaining = new SimpleDoubleProperty();
-        private final DoubleProperty percentUsed = new SimpleDoubleProperty();
-        
-        public BudgetCategory(String category, double budget, double spent) {
-            this.category.set(category);
-            this.budget.set(budget);
-            this.spent.set(spent);
-            this.remaining.set(budget - spent);
-            this.percentUsed.set((spent / budget) * 100);
+        public VendorSummary(String vendorName, int transactionCount, double totalAmount, 
+                           double averageAmount, String lastTransactionDate) {
+            this.vendorName = vendorName;
+            this.transactionCount = transactionCount;
+            this.totalAmount = totalAmount;
+            this.averageAmount = averageAmount;
+            this.lastTransactionDate = lastTransactionDate;
         }
         
         // Getters
-        public String getCategory() { return category.get(); }
-        public double getBudget() { return budget.get(); }
-        public double getSpent() { return spent.get(); }
-        public double getRemaining() { return remaining.get(); }
-        public double getPercentUsed() { return percentUsed.get(); }
-        
-        // Properties
-        public StringProperty categoryProperty() { return category; }
-        public DoubleProperty budgetProperty() { return budget; }
-        public DoubleProperty spentProperty() { return spent; }
-        public DoubleProperty remainingProperty() { return remaining; }
-        public DoubleProperty percentUsedProperty() { return percentUsed; }
+        public String getVendorName() { return vendorName; }
+        public int getTransactionCount() { return transactionCount; }
+        public double getTotalAmount() { return totalAmount; }
+        public double getAverageAmount() { return averageAmount; }
+        public String getLastTransactionDate() { return lastTransactionDate; }
     }
 }
