@@ -1,6 +1,7 @@
 package com.company.payroll.loads;
 
 import com.company.payroll.employees.EmployeesTab;
+import com.company.payroll.employees.Employee;
 import com.company.payroll.trailers.TrailersTab;
 import com.company.payroll.trailers.Trailer;
 import javafx.scene.control.Tab;
@@ -67,7 +68,7 @@ public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeList
     }
 
     @Override
-    public void onEmployeeDataChanged(java.util.List<com.company.payroll.employees.Employee> currentList) {
+    public void onEmployeeDataChanged(List<Employee> currentList) {
         logger.debug("Employee data changed, updating LoadsPanel with {} employees", currentList.size());
         loadsPanel.onEmployeeDataChanged(currentList);
     }
@@ -92,5 +93,7 @@ public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeList
     public void setSyncCallback(Consumer<List<Load>> callback) {
         logger.info("Setting sync callback");
         this.syncCallback = callback;
+        // Pass it through to the panel
+        loadsPanel.setSyncToTriumphCallback(callback);
     }
 }

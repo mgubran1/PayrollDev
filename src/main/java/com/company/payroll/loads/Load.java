@@ -3,6 +3,7 @@ package com.company.payroll.loads;
 import com.company.payroll.employees.Employee;
 import com.company.payroll.trailers.Trailer;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,8 +32,10 @@ public class Load {
     private Status status;
     private double grossAmount;
     private String notes;
-    private LocalDate pickUpDate;  // NEW FIELD
+    private LocalDate pickUpDate;
+    private LocalTime pickUpTime;  // NEW FIELD
     private LocalDate deliveryDate;
+    private LocalTime deliveryTime;  // NEW FIELD
     private String reminder;
     private boolean hasLumper;
     private boolean hasRevisedRateConfirmation;
@@ -47,7 +50,8 @@ public class Load {
 
     public Load(int id, String loadNumber, String poNumber, String customer, String pickUpLocation, String dropLocation,
                 Employee driver, String truckUnitSnapshot, Status status, double grossAmount, String notes, 
-                LocalDate pickUpDate, LocalDate deliveryDate, String reminder, boolean hasLumper, boolean hasRevisedRateConfirmation) {
+                LocalDate pickUpDate, LocalTime pickUpTime, LocalDate deliveryDate, LocalTime deliveryTime, 
+                String reminder, boolean hasLumper, boolean hasRevisedRateConfirmation) {
         this.id = id;
         this.loadNumber = loadNumber;
         this.poNumber = poNumber;
@@ -60,7 +64,9 @@ public class Load {
         this.grossAmount = grossAmount;
         this.notes = notes;
         this.pickUpDate = pickUpDate;
+        this.pickUpTime = pickUpTime;
         this.deliveryDate = deliveryDate;
+        this.deliveryTime = deliveryTime;
         this.reminder = reminder;
         this.hasLumper = hasLumper;
         this.hasRevisedRateConfirmation = hasRevisedRateConfirmation;
@@ -78,38 +84,47 @@ public class Load {
     // Constructor with trailer parameters
     public Load(int id, String loadNumber, String poNumber, String customer, String pickUpLocation, String dropLocation,
                 Employee driver, String truckUnitSnapshot, int trailerId, String trailerNumber, Status status, 
-                double grossAmount, String notes, LocalDate pickUpDate, LocalDate deliveryDate, String reminder, 
+                double grossAmount, String notes, LocalDate pickUpDate, LocalTime pickUpTime, 
+                LocalDate deliveryDate, LocalTime deliveryTime, String reminder, 
                 boolean hasLumper, boolean hasRevisedRateConfirmation) {
         this(id, loadNumber, poNumber, customer, pickUpLocation, dropLocation, driver, truckUnitSnapshot, 
-            status, grossAmount, notes, pickUpDate, deliveryDate, reminder, hasLumper, hasRevisedRateConfirmation);
+            status, grossAmount, notes, pickUpDate, pickUpTime, deliveryDate, deliveryTime, 
+            reminder, hasLumper, hasRevisedRateConfirmation);
         this.trailerId = trailerId;
         this.trailerNumber = trailerNumber;
     }
 
-    // Backwards compatible constructors
+    // Backwards compatible constructors - updated to include null times
+    public Load(int id, String loadNumber, String poNumber, String customer, String pickUpLocation, String dropLocation,
+                Employee driver, String truckUnitSnapshot, Status status, double grossAmount, String notes, 
+                LocalDate pickUpDate, LocalDate deliveryDate, String reminder, boolean hasLumper, boolean hasRevisedRateConfirmation) {
+        this(id, loadNumber, poNumber, customer, pickUpLocation, dropLocation, driver, truckUnitSnapshot, 
+             status, grossAmount, notes, pickUpDate, null, deliveryDate, null, reminder, hasLumper, hasRevisedRateConfirmation);
+    }
+
     public Load(int id, String loadNumber, String poNumber, String customer, String pickUpLocation, String dropLocation,
                 Employee driver, String truckUnitSnapshot, Status status, double grossAmount, String notes, LocalDate deliveryDate,
                 String reminder, boolean hasLumper, boolean hasRevisedRateConfirmation) {
         this(id, loadNumber, poNumber, customer, pickUpLocation, dropLocation, driver, truckUnitSnapshot, 
-             status, grossAmount, notes, null, deliveryDate, reminder, hasLumper, hasRevisedRateConfirmation);
+             status, grossAmount, notes, null, null, deliveryDate, null, reminder, hasLumper, hasRevisedRateConfirmation);
     }
 
     public Load(int id, String loadNumber, String poNumber, String customer, String pickUpLocation, String dropLocation,
                 Employee driver, Status status, double grossAmount, String notes, LocalDate deliveryDate) {
         this(id, loadNumber, poNumber, customer, pickUpLocation, dropLocation, driver, 
-             driver != null ? driver.getTruckUnit() : "", status, grossAmount, notes, null, deliveryDate, "", false, false);
+             driver != null ? driver.getTruckUnit() : "", status, grossAmount, notes, null, null, deliveryDate, null, "", false, false);
     }
 
     public Load(int id, String loadNumber, String customer, String pickUpLocation, String dropLocation,
                 Employee driver, Status status, double grossAmount, String notes, LocalDate deliveryDate) {
         this(id, loadNumber, "", customer, pickUpLocation, dropLocation, driver, 
-             driver != null ? driver.getTruckUnit() : "", status, grossAmount, notes, null, deliveryDate, "", false, false);
+             driver != null ? driver.getTruckUnit() : "", status, grossAmount, notes, null, null, deliveryDate, null, "", false, false);
     }
 
     public Load(int id, String loadNumber, String customer, String pickUpLocation, String dropLocation,
                 Employee driver, Status status, double grossAmount, String notes) {
         this(id, loadNumber, "", customer, pickUpLocation, dropLocation, driver, 
-             driver != null ? driver.getTruckUnit() : "", status, grossAmount, notes, null, null, "", false, false);
+             driver != null ? driver.getTruckUnit() : "", status, grossAmount, notes, null, null, null, null, "", false, false);
     }
 
     // Helper method to parse locations
@@ -179,10 +194,14 @@ public class Load {
     }
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
-    public LocalDate getPickUpDate() { return pickUpDate; }  // NEW GETTER
-    public void setPickUpDate(LocalDate pickUpDate) { this.pickUpDate = pickUpDate; }  // NEW SETTER
+    public LocalDate getPickUpDate() { return pickUpDate; }
+    public void setPickUpDate(LocalDate pickUpDate) { this.pickUpDate = pickUpDate; }
+    public LocalTime getPickUpTime() { return pickUpTime; }  // NEW GETTER
+    public void setPickUpTime(LocalTime pickUpTime) { this.pickUpTime = pickUpTime; }  // NEW SETTER
     public LocalDate getDeliveryDate() { return deliveryDate; }
     public void setDeliveryDate(LocalDate deliveryDate) { this.deliveryDate = deliveryDate; }
+    public LocalTime getDeliveryTime() { return deliveryTime; }  // NEW GETTER
+    public void setDeliveryTime(LocalTime deliveryTime) { this.deliveryTime = deliveryTime; }  // NEW SETTER
     public String getReminder() { return reminder; }
     public void setReminder(String reminder) { this.reminder = reminder; }
     public boolean isHasLumper() { return hasLumper; }

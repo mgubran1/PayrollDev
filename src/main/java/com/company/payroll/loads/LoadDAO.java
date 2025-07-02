@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -80,6 +81,22 @@ public class LoadDAO {
             } catch (SQLException ignore) {
                 logger.debug("pickup_date column already exists");
             }
+            
+            // Add pickup_time column
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN pickup_time TIME");
+                logger.info("Added pickup_time column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("pickup_time column already exists");
+            }
+            
+            // Add delivery_time column
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN delivery_time TIME");
+                logger.info("Added delivery_time column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("delivery_time column already exists");
+            }
         } catch (SQLException ignore) {}
         
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
@@ -99,7 +116,9 @@ public class LoadDAO {
                     gross_amount REAL,
                     notes TEXT,
                     pickup_date DATE,
+                    pickup_time TIME,
                     delivery_date DATE,
+                    delivery_time TIME,
                     reminder TEXT,
                     has_lumper INTEGER DEFAULT 0,
                     has_revised_rate_confirmation INTEGER DEFAULT 0,
@@ -178,8 +197,8 @@ public class LoadDAO {
         String sql = """
             INSERT INTO loads (load_number, po_number, customer, pick_up_location, drop_location, 
             driver_id, truck_unit_snapshot, trailer_id, trailer_number, status, gross_amount, notes, 
-            pickup_date, delivery_date, reminder, has_lumper, has_revised_rate_confirmation) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            pickup_date, pickup_time, delivery_date, delivery_time, reminder, has_lumper, has_revised_rate_confirmation) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -199,13 +218,21 @@ public class LoadDAO {
                 ps.setDate(13, java.sql.Date.valueOf(load.getPickUpDate()));
             else
                 ps.setNull(13, java.sql.Types.DATE);
-            if (load.getDeliveryDate() != null)
-                ps.setDate(14, java.sql.Date.valueOf(load.getDeliveryDate()));
+            if (load.getPickUpTime() != null)
+                ps.setTime(14, java.sql.Time.valueOf(load.getPickUpTime()));
             else
-                ps.setNull(14, java.sql.Types.DATE);
-            ps.setString(15, load.getReminder());
-            ps.setInt(16, load.isHasLumper() ? 1 : 0);
-            ps.setInt(17, load.isHasRevisedRateConfirmation() ? 1 : 0);
+                ps.setNull(14, java.sql.Types.TIME);
+            if (load.getDeliveryDate() != null)
+                ps.setDate(15, java.sql.Date.valueOf(load.getDeliveryDate()));
+            else
+                ps.setNull(15, java.sql.Types.DATE);
+            if (load.getDeliveryTime() != null)
+                ps.setTime(16, java.sql.Time.valueOf(load.getDeliveryTime()));
+            else
+                ps.setNull(16, java.sql.Types.TIME);
+            ps.setString(17, load.getReminder());
+            ps.setInt(18, load.isHasLumper() ? 1 : 0);
+            ps.setInt(19, load.isHasRevisedRateConfirmation() ? 1 : 0);
             ps.executeUpdate();
             ResultSet keys = ps.getGeneratedKeys();
             if (keys.next()) {
@@ -241,7 +268,7 @@ public class LoadDAO {
         String sql = """
             UPDATE loads SET load_number=?, po_number=?, customer=?, pick_up_location=?, 
             drop_location=?, driver_id=?, truck_unit_snapshot=?, trailer_id=?, trailer_number=?, status=?, gross_amount=?, 
-            notes=?, pickup_date=?, delivery_date=?, reminder=?, has_lumper=?, has_revised_rate_confirmation=? 
+            notes=?, pickup_date=?, pickup_time=?, delivery_date=?, delivery_time=?, reminder=?, has_lumper=?, has_revised_rate_confirmation=? 
             WHERE id=?
         """;
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
@@ -262,14 +289,22 @@ public class LoadDAO {
                 ps.setDate(13, java.sql.Date.valueOf(load.getPickUpDate()));
             else
                 ps.setNull(13, java.sql.Types.DATE);
-            if (load.getDeliveryDate() != null)
-                ps.setDate(14, java.sql.Date.valueOf(load.getDeliveryDate()));
+            if (load.getPickUpTime() != null)
+                ps.setTime(14, java.sql.Time.valueOf(load.getPickUpTime()));
             else
-                ps.setNull(14, java.sql.Types.DATE);
-            ps.setString(15, load.getReminder());
-            ps.setInt(16, load.isHasLumper() ? 1 : 0);
-            ps.setInt(17, load.isHasRevisedRateConfirmation() ? 1 : 0);
-            ps.setInt(18, load.getId());
+                ps.setNull(14, java.sql.Types.TIME);
+            if (load.getDeliveryDate() != null)
+                ps.setDate(15, java.sql.Date.valueOf(load.getDeliveryDate()));
+            else
+                ps.setNull(15, java.sql.Types.DATE);
+            if (load.getDeliveryTime() != null)
+                ps.setTime(16, java.sql.Time.valueOf(load.getDeliveryTime()));
+            else
+                ps.setNull(16, java.sql.Types.TIME);
+            ps.setString(17, load.getReminder());
+            ps.setInt(18, load.isHasLumper() ? 1 : 0);
+            ps.setInt(19, load.isHasRevisedRateConfirmation() ? 1 : 0);
+            ps.setInt(20, load.getId());
             int rowsAffected = ps.executeUpdate();
             if (rowsAffected > 0) {
                 logger.info("Load updated successfully");
@@ -806,9 +841,25 @@ public class LoadDAO {
             pickUpDate = null;
         }
         
+        LocalTime pickUpTime = null;
+        try {
+            java.sql.Time sqlPickupTime = rs.getTime("pickup_time");
+            if (sqlPickupTime != null) pickUpTime = sqlPickupTime.toLocalTime();
+        } catch (SQLException ex) {
+            pickUpTime = null;
+        }
+        
         LocalDate deliveryDate = null;
         java.sql.Date sqlDate = rs.getDate("delivery_date");
         if (sqlDate != null) deliveryDate = sqlDate.toLocalDate();
+        
+        LocalTime deliveryTime = null;
+        try {
+            java.sql.Time sqlDeliveryTime = rs.getTime("delivery_time");
+            if (sqlDeliveryTime != null) deliveryTime = sqlDeliveryTime.toLocalTime();
+        } catch (SQLException ex) {
+            deliveryTime = null;
+        }
         
         String reminder = "";
         try { reminder = rs.getString("reminder"); } catch (SQLException ex) { reminder = ""; }
@@ -820,7 +871,8 @@ public class LoadDAO {
         try { hasRevisedRateConfirmation = rs.getInt("has_revised_rate_confirmation") == 1; } catch (SQLException ex) { hasRevisedRateConfirmation = false; }
         
         Load load = new Load(id, loadNumber, poNumber, customer, pickUp, drop, driver, truckUnitSnapshot, 
-                          status, gross, notes, pickUpDate, deliveryDate, reminder, hasLumper, hasRevisedRateConfirmation);
+                          status, gross, notes, pickUpDate, pickUpTime, deliveryDate, deliveryTime, 
+                          reminder, hasLumper, hasRevisedRateConfirmation);
         
         // Set trailer info
         load.setTrailerId(trailerId);

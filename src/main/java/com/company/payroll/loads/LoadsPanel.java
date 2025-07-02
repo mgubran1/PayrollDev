@@ -6,6 +6,7 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.*;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Consumer;
@@ -741,16 +742,28 @@ public class LoadsPanel extends BorderPane {
         ));
         pickupDateCol.setPrefWidth(100);
 
+        TableColumn<Load, String> pickupTimeCol = new TableColumn<>("Pick Up Time");
+        pickupTimeCol.setCellValueFactory(e -> new SimpleStringProperty(
+                e.getValue().getPickUpTime() != null ? e.getValue().getPickUpTime().format(DateTimeFormatter.ofPattern("HH:mm")) : ""
+        ));
+        pickupTimeCol.setPrefWidth(90);
+
         TableColumn<Load, String> deliveryDateCol = new TableColumn<>("Delivery Date");
         deliveryDateCol.setCellValueFactory(e -> new SimpleStringProperty(
                 e.getValue().getDeliveryDate() != null ? e.getValue().getDeliveryDate().toString() : ""
         ));
         deliveryDateCol.setPrefWidth(100);
 
+        TableColumn<Load, String> deliveryTimeCol = new TableColumn<>("Delivery Time");
+        deliveryTimeCol.setCellValueFactory(e -> new SimpleStringProperty(
+                e.getValue().getDeliveryTime() != null ? e.getValue().getDeliveryTime().format(DateTimeFormatter.ofPattern("HH:mm")) : ""
+        ));
+        deliveryTimeCol.setPrefWidth(90);
+
         table.getColumns().addAll(
                 Arrays.asList(loadNumCol, poCol, customerCol, pickUpCol, dropCol,
                         driverCol, truckUnitCol, trailerCol, statusCol, grossCol,
-                        reminderCol, pickupDateCol, deliveryDateCol));
+                        reminderCol, pickupDateCol, pickupTimeCol, deliveryDateCol, deliveryTimeCol));
 
         // Add action columns if requested
         if (includeActionColumns) {
@@ -1180,10 +1193,25 @@ public class LoadsPanel extends BorderPane {
 			contentStream.showText("Trailer #: " + trailerInfo);
 			contentStream.newLine();
 			
-			contentStream.showText("Pick Up Date: " + (load.getPickUpDate() != null ? load.getPickUpDate().toString() : "N/A"));
+			// Format dates with times
+			String pickupDateTime = "N/A";
+			if (load.getPickUpDate() != null) {
+				pickupDateTime = load.getPickUpDate().toString();
+				if (load.getPickUpTime() != null) {
+					pickupDateTime += " " + load.getPickUpTime().format(DateTimeFormatter.ofPattern("HH:mm"));
+				}
+			}
+			contentStream.showText("Pick Up Date/Time: " + pickupDateTime);
 			contentStream.newLine();
 			
-			contentStream.showText("Delivery Date: " + (load.getDeliveryDate() != null ? load.getDeliveryDate().toString() : "N/A"));
+			String deliveryDateTime = "N/A";
+			if (load.getDeliveryDate() != null) {
+				deliveryDateTime = load.getDeliveryDate().toString();
+				if (load.getDeliveryTime() != null) {
+					deliveryDateTime += " " + load.getDeliveryTime().format(DateTimeFormatter.ofPattern("HH:mm"));
+				}
+			}
+			contentStream.showText("Delivery Date/Time: " + deliveryDateTime);
 			contentStream.newLine();
 			
 			contentStream.showText("PO: " + load.getPONumber());
@@ -1343,6 +1371,69 @@ public class LoadsPanel extends BorderPane {
         }
     }
 
+    // Helper method to create time spinner
+    private Spinner<LocalTime> createTimeSpinner() {
+        SpinnerValueFactory<LocalTime> factory = new SpinnerValueFactory<LocalTime>() {
+            {
+                setValue(null);
+            }
+            
+            @Override
+            public void decrement(int steps) {
+                LocalTime current = getValue();
+                if (current == null) {
+                    setValue(LocalTime.of(0, 0));
+                } else {
+                    setValue(current.minusMinutes(15L * steps));
+                }
+            }
+            
+            @Override
+            public void increment(int steps) {
+                LocalTime current = getValue();
+                if (current == null) {
+                    setValue(LocalTime.of(0, 0));
+                } else {
+                    setValue(current.plusMinutes(15L * steps));
+                }
+            }
+        };
+        
+        Spinner<LocalTime> spinner = new Spinner<>(factory);
+        spinner.setEditable(true);
+        spinner.setPrefWidth(100);
+        
+        // Custom converter for time display
+        spinner.getValueFactory().setConverter(new StringConverter<LocalTime>() {
+            private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm");
+            
+            @Override
+            public String toString(LocalTime time) {
+                return time != null ? time.format(formatter) : "";
+            }
+            
+            @Override
+            public LocalTime fromString(String string) {
+                if (string == null || string.trim().isEmpty()) {
+                    return null;
+                }
+                try {
+                    return LocalTime.parse(string.trim(), formatter);
+                } catch (Exception e) {
+                    // Try parsing with just hour
+                    try {
+                        int hour = Integer.parseInt(string.trim());
+                        return LocalTime.of(hour, 0);
+                    } catch (Exception ex) {
+                        return null;
+                    }
+                }
+            }
+        });
+        
+        return spinner;
+    }
+
     private void showLoadDialog(Load load, boolean isAdd) {
         logger.debug("Showing load dialog - isAdd: {}", isAdd);
         Dialog<Load> dialog = new Dialog<>();
@@ -1351,6 +1442,7 @@ public class LoadsPanel extends BorderPane {
 
         TextField loadNumField = new TextField();
         TextField poField = new TextField();
+		//Please continue typing the code from here
         ComboBox<String> customerBox = new ComboBox<>(allCustomers);
         customerBox.setEditable(true);
         
@@ -1419,7 +1511,7 @@ public class LoadsPanel extends BorderPane {
             @Override
             protected void updateItem(Trailer t, boolean empty) {
                 super.updateItem(t, empty);
-                                setText((t == null || empty) ? "" : t.getTrailerNumber() + " - " + t.getType());
+                setText((t == null || empty) ? "" : t.getTrailerNumber() + " - " + t.getType());
             }
         });
         trailerBox.setButtonCell(new ListCell<Trailer>() {
@@ -1465,8 +1557,10 @@ public class LoadsPanel extends BorderPane {
         ComboBox<Load.Status> statusBox = new ComboBox<>(FXCollections.observableArrayList(Load.Status.values()));
         TextField grossField = new TextField();
         TextArea notesField = new TextArea();
-        DatePicker pickUpDatePicker = new DatePicker();  // NEW
+        DatePicker pickUpDatePicker = new DatePicker();
+        Spinner<LocalTime> pickUpTimeSpinner = createTimeSpinner();  // NEW
         DatePicker deliveryDatePicker = new DatePicker();
+        Spinner<LocalTime> deliveryTimeSpinner = createTimeSpinner();  // NEW
         TextField reminderField = new TextField();
         CheckBox hasLumperCheck = new CheckBox("Has Lumper");
         CheckBox hasRevisedRateCheck = new CheckBox("Has Revised Rate Confirmation");
@@ -1511,8 +1605,14 @@ public class LoadsPanel extends BorderPane {
             if (load.getPickUpDate() != null) {
                 pickUpDatePicker.setValue(load.getPickUpDate());
             }
+            if (load.getPickUpTime() != null) {
+                pickUpTimeSpinner.getValueFactory().setValue(load.getPickUpTime());
+            }
             if (load.getDeliveryDate() != null) {
                 deliveryDatePicker.setValue(load.getDeliveryDate());
+            }
+            if (load.getDeliveryTime() != null) {
+                deliveryTimeSpinner.getValueFactory().setValue(load.getDeliveryTime());
             }
             reminderField.setText(load.getReminder());
             hasLumperCheck.setSelected(load.isHasLumper());
@@ -1540,8 +1640,16 @@ public class LoadsPanel extends BorderPane {
         grid.add(new Label("Status:"), 0, r);       grid.add(statusBox, 1, r++);
         grid.add(new Label("Gross Amount:"), 0, r); grid.add(grossField, 1, r++);
         grid.add(new Label("Notes:"), 0, r);        grid.add(notesField, 1, r++);
-        grid.add(new Label("Pick Up Date:"), 0, r); grid.add(pickUpDatePicker, 1, r++);  // NEW
-        grid.add(new Label("Delivery Date:"), 0, r);grid.add(deliveryDatePicker, 1, r++);
+        
+        // Date and time fields
+        HBox pickUpBox = new HBox(10, pickUpDatePicker, new Label("Time:"), pickUpTimeSpinner);
+        pickUpBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(new Label("Pick Up Date:"), 0, r); grid.add(pickUpBox, 1, r++);
+        
+        HBox deliveryBox = new HBox(10, deliveryDatePicker, new Label("Time:"), deliveryTimeSpinner);
+        deliveryBox.setAlignment(Pos.CENTER_LEFT);
+        grid.add(new Label("Delivery Date:"), 0, r);grid.add(deliveryBox, 1, r++);
+        
         grid.add(new Label("Reminder:"), 0, r);     grid.add(reminderField, 1, r++);
         grid.add(hasLumperCheck, 1, r++);
         grid.add(hasRevisedRateCheck, 1, r++);
@@ -1591,13 +1699,15 @@ public class LoadsPanel extends BorderPane {
                     Load.Status status = statusBox.getValue() != null ? statusBox.getValue() : Load.Status.BOOKED;
                     double gross = grossField.getText().isEmpty() ? 0 : Double.parseDouble(grossField.getText());
                     String notes = notesField.getText().trim();
-                    LocalDate pickUpDate = pickUpDatePicker.getValue();  // NEW
+                    LocalDate pickUpDate = pickUpDatePicker.getValue();
+                    LocalTime pickUpTime = pickUpTimeSpinner.getValue();  // NEW
                     LocalDate deliveryDate = deliveryDatePicker.getValue();
+                    LocalTime deliveryTime = deliveryTimeSpinner.getValue();  // NEW
                     String reminder = reminderField.getText().trim();
                     boolean hasLumper = hasLumperCheck.isSelected();
                     boolean hasRevisedRate = hasRevisedRateCheck.isSelected();
                     
-					// Capture truck unit at time of load creation/update
+                    // Capture truck unit at time of load creation/update
                     String truckUnitSnapshot = driver != null ? driver.getTruckUnit() : "";
                     
                     // Get trailer info
@@ -1611,8 +1721,8 @@ public class LoadsPanel extends BorderPane {
                     if (isAdd) {
                         logger.info("Adding new load: {}", loadNum);
                         Load newLoad = new Load(0, loadNum, poNum, customer, pickUp, drop, driver, 
-                                             truckUnitSnapshot, status, gross, notes, pickUpDate, deliveryDate, 
-                                             reminder, hasLumper, hasRevisedRate);
+                                             truckUnitSnapshot, status, gross, notes, pickUpDate, pickUpTime,
+                                             deliveryDate, deliveryTime, reminder, hasLumper, hasRevisedRate);
                         
                         // Set trailer information
                         newLoad.setTrailerId(trailerId);
@@ -1645,8 +1755,10 @@ public class LoadsPanel extends BorderPane {
                         load.setStatus(status);
                         load.setGrossAmount(gross);
                         load.setNotes(notes);
-                        load.setPickUpDate(pickUpDate);  // NEW
+                        load.setPickUpDate(pickUpDate);
+                        load.setPickUpTime(pickUpTime);  // NEW
                         load.setDeliveryDate(deliveryDate);
+                        load.setDeliveryTime(deliveryTime);  // NEW
                         load.setReminder(reminder);
                         load.setHasLumper(hasLumper);
                         load.setHasRevisedRateConfirmation(hasRevisedRate);
@@ -1744,7 +1856,9 @@ public class LoadsPanel extends BorderPane {
                         String.valueOf(l.getGrossAmount()),
                         safe(l.getReminder()),
                         safe(l.getPickUpDate() != null ? l.getPickUpDate().toString() : ""),
-                        safe(l.getDeliveryDate() != null ? l.getDeliveryDate().toString() : "")
+                        safe(l.getPickUpTime() != null ? l.getPickUpTime().format(DateTimeFormatter.ofPattern("HH:mm")) : ""),
+                        safe(l.getDeliveryDate() != null ? l.getDeliveryDate().toString() : ""),
+                        safe(l.getDeliveryTime() != null ? l.getDeliveryTime().format(DateTimeFormatter.ofPattern("HH:mm")) : "")
                 );
                 bw.write(row); bw.newLine();
                 count++;
@@ -1775,3 +1889,4 @@ public class LoadsPanel extends BorderPane {
         alert.showAndWait();
     }
 }
+		
