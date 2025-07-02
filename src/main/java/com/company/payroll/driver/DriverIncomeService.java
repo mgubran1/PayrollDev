@@ -126,7 +126,8 @@ public class DriverIncomeService {
             double totalEscrowDeposits = 0.0;
             currentDate = startDate;
             while (!currentDate.isAfter(endDate)) {
-                double weeklyDeposit = payrollEscrow.getTotalDeposits(driver);  // Pass the Employee object
+                // PayrollEscrow now returns a BigDecimal, convert it to double
+                double weeklyDeposit = payrollEscrow.getTotalDeposits(driver).doubleValue();
                 totalEscrowDeposits += weeklyDeposit;
                 currentDate = currentDate.plusWeeks(1);
             }

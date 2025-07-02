@@ -31,9 +31,12 @@ dependencies {
     
     // Apache Commons for utility functions
     implementation 'org.apache.commons:commons-lang3:3.14.0'
-    
+
     // For better date/time handling (optional but recommended)
     implementation 'org.threeten:threeten-extra:1.7.2'
+
+    // Jackson for JSON parsing used in GeocodingService
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
 }
 
 tasks.withType(JavaCompile) {
