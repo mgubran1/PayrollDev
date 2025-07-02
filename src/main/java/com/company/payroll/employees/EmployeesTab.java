@@ -68,6 +68,12 @@ public class EmployeesTab extends BorderPane {
 
         TableColumn<Employee, String> trailerCol = new TableColumn<>("Trailer #");
         trailerCol.setCellValueFactory(e -> new SimpleStringProperty(e.getValue().getTrailerNumber()));
+        
+        TableColumn<Employee, String> phoneCol = new TableColumn<>("Mobile #");
+        phoneCol.setCellValueFactory(e -> new SimpleStringProperty(e.getValue().getPhone()));
+        
+        TableColumn<Employee, String> emailCol = new TableColumn<>("Email");
+        emailCol.setCellValueFactory(e -> new SimpleStringProperty(e.getValue().getEmail()));
 
         TableColumn<Employee, Number> driverPctCol = new TableColumn<>("Driver %");
         driverPctCol.setCellValueFactory(e -> new SimpleDoubleProperty(e.getValue().getDriverPercent()));
@@ -105,7 +111,7 @@ public class EmployeesTab extends BorderPane {
                 e.getValue().getStatus() != null ? e.getValue().getStatus().name().replace("_", " ") : ""));
 
         table.getColumns().addAll(
-            nameCol, truckCol, trailerCol, driverPctCol, companyPctCol, serviceFeeCol,
+            nameCol, truckCol, trailerCol, phoneCol, emailCol, driverPctCol, companyPctCol, serviceFeeCol,
             dobCol, licenseCol, driverTypeCol, llcCol,
             cdlExpiryCol, medExpiryCol, statusCol
         );
@@ -205,7 +211,9 @@ public class EmployeesTab extends BorderPane {
             matches &= (emp.getName() != null && emp.getName().toLowerCase(Locale.ROOT).contains(lower)) ||
                        (emp.getTruckUnit() != null && emp.getTruckUnit().toLowerCase(Locale.ROOT).contains(lower)) ||
                        (emp.getTrailerNumber() != null && emp.getTrailerNumber().toLowerCase(Locale.ROOT).contains(lower)) ||
-                       (emp.getLicenseNumber() != null && emp.getLicenseNumber().toLowerCase(Locale.ROOT).contains(lower));
+                       (emp.getLicenseNumber() != null && emp.getLicenseNumber().toLowerCase(Locale.ROOT).contains(lower)) ||
+                       (emp.getEmail() != null && emp.getEmail().toLowerCase(Locale.ROOT).contains(lower)) ||
+                       (emp.getPhone() != null && emp.getPhone().toLowerCase(Locale.ROOT).contains(lower));
         }
         if (status != null) {
             matches &= emp.getStatus() == status;
@@ -227,6 +235,8 @@ public class EmployeesTab extends BorderPane {
         TextField nameField = new TextField();
         TextField truckField = new TextField();
         TextField trailerField = new TextField();
+        TextField phoneField = new TextField();
+        TextField emailField = new TextField();
         TextField driverPctField = new TextField();
         TextField companyPctField = new TextField();
         TextField serviceFeeField = new TextField();
@@ -244,6 +254,8 @@ public class EmployeesTab extends BorderPane {
             nameField.setText(employee.getName());
             truckField.setText(employee.getTruckUnit());
             trailerField.setText(employee.getTrailerNumber());
+            phoneField.setText(employee.getPhone());
+            emailField.setText(employee.getEmail());
             driverPctField.setText(String.valueOf(employee.getDriverPercent()));
             companyPctField.setText(String.valueOf(employee.getCompanyPercent()));
             serviceFeeField.setText(String.valueOf(employee.getServiceFeePercent()));
@@ -268,6 +280,8 @@ public class EmployeesTab extends BorderPane {
         grid.add(new Label("Driver Name*:"), 0, r);        grid.add(nameField, 1, r++);
         grid.add(new Label("Truck/Unit:"), 0, r);          grid.add(truckField, 1, r++);
         grid.add(new Label("Trailer #:"), 0, r);           grid.add(trailerField, 1, r++);
+        grid.add(new Label("Mobile #:"), 0, r);            grid.add(phoneField, 1, r++);
+        grid.add(new Label("Email:"), 0, r);               grid.add(emailField, 1, r++);
         grid.add(new Label("Driver %*:"), 0, r);           grid.add(driverPctField, 1, r++);
         grid.add(new Label("Company %:"), 0, r);           grid.add(companyPctField, 1, r++);
         grid.add(new Label("Service Fee %:"), 0, r);       grid.add(serviceFeeField, 1, r++);
@@ -320,6 +334,8 @@ public class EmployeesTab extends BorderPane {
                     String name = nameField.getText().trim();
                     String truck = truckField.getText().trim();
                     String trailer = trailerField.getText().trim();
+                    String phone = phoneField.getText().trim();
+                    String email = emailField.getText().trim();
                     double driverPct = parseDouble(driverPctField.getText());
                     double companyPct = parseDouble(companyPctField.getText());
                     double serviceFee = parseDouble(serviceFeeField.getText());
@@ -334,6 +350,8 @@ public class EmployeesTab extends BorderPane {
                     if (isAdd) {
                         logger.info("Adding new employee: {}", name);
                         Employee emp = new Employee(0, name, truck, trailer, driverPct, companyPct, serviceFee, dob, license, driverType, llc, cdlExp, medExp, status);
+                        emp.setPhone(phone);
+                        emp.setEmail(email);
                         int newId = dao.add(emp);
                         emp.setId(newId);
                         employees.setAll(dao.getAll());
@@ -345,6 +363,8 @@ public class EmployeesTab extends BorderPane {
                         employee.setName(name);
                         employee.setTruckUnit(truck);
                         employee.setTrailerNumber(trailer);
+                        employee.setPhone(phone);
+                        employee.setEmail(email);
                         employee.setDriverPercent(driverPct);
                         employee.setCompanyPercent(companyPct);
                         employee.setServiceFeePercent(serviceFee);

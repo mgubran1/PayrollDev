@@ -41,6 +41,8 @@ import com.company.payroll.maintenance.MaintenanceTab;
 import com.company.payroll.expenses.CompanyExpensesTab;
 import com.company.payroll.revenue.RevenueTab;
 import com.company.payroll.driver.DriverIncomeTab;
+import com.company.payroll.dispatcher.DispatcherView;
+import com.company.payroll.dispatcher.DispatcherManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -183,6 +185,23 @@ public class MainController extends BorderPane {
             driverIncomeTab.setGraphic(createEnhancedTabIcon("🚗", "#16a085"));
             logger.info("Driver Income tab created successfully");
 
+            // Dispatcher tab
+            logger.debug("Creating Dispatcher tab");
+            DispatcherView dispatcherView = new DispatcherView();
+            Tab dispatcherTab = new Tab("Dispatcher", dispatcherView.getRoot());
+            dispatcherTab.setClosable(false);
+            dispatcherTab.setGraphic(createEnhancedTabIcon("📍", "#8e44ad"));
+            
+            // Initialize dispatcher manager when tab is selected for the first time
+            dispatcherTab.setOnSelectionChanged(event -> {
+                if (dispatcherTab.isSelected()) {
+                    logger.debug("Dispatcher tab selected, initializing driver availability");
+                    DispatcherManager manager = new DispatcherManager();
+                    manager.initializeDriverAvailability();
+                }
+            });
+            logger.info("Dispatcher tab created successfully");
+
             // Register PayrollTab as a listener for load data changes
             logger.debug("Registering PayrollTab as LoadDataChangeListener");
             loadsTab.addLoadDataChangeListener(payrollTabContent);
@@ -192,6 +211,14 @@ public class MainController extends BorderPane {
             logger.debug("Registering PayrollTab as FuelDataChangeListener");
             fuelImportTabContent.addFuelDataChangeListener(payrollTabContent);
             logger.info("PayrollTab registered as fuel data change listener");
+
+            // Register loads tab to update dispatcher when loads change
+            logger.debug("Registering Dispatcher for load updates");
+            loadsTab.addLoadDataChangeListener(loads -> {
+                logger.debug("Load data changed, updating dispatcher availability");
+                DispatcherManager manager = new DispatcherManager();
+                manager.initializeDriverAvailability();
+            });
 
             logger.info("MyTriumph Audit tab created successfully");
 
@@ -204,6 +231,7 @@ public class MainController extends BorderPane {
                 maintenanceTab,
                 companyExpensesTab,
                 loadsTab,        // Add LoadsTab directly (it is a Tab)
+                dispatcherTab,   // Add the new Dispatcher tab
                 fuelImportTab,
                 payrollTab,
                 driverIncomeTab,

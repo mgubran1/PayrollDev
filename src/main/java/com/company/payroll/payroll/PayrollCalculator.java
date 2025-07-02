@@ -217,8 +217,9 @@ public class PayrollCalculator {
         logger.info("Driver {} - Summary: Gross=${}, Deductions=${}, Reimbursements=${}, Net=${}", 
             driver.getName(), gross, totalDeductions, totalReimbursements, net);
 
-        // Create payroll row
+        // Create payroll row - UPDATED to include driver ID
         return new PayrollRow(
+            driver.getId(),  // Added driver ID
             driver.getName(), 
             driver.getTruckUnit() != null ? driver.getTruckUnit() : "",
             loads.size(), 
@@ -330,6 +331,7 @@ public class PayrollCalculator {
      */
     private PayrollRow createErrorRow(Employee driver, String errorMessage) {
         return new PayrollRow(
+            driver.getId(),  // Added driver ID
             driver.getName() + " (ERROR: " + errorMessage + ")",
             driver.getTruckUnit() != null ? driver.getTruckUnit() : "",
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -391,9 +393,10 @@ public class PayrollCalculator {
      * PayrollRow represents a single driver's payroll calculation
      */
     public static class PayrollRow {
+        public final int driverId;  // ADDED driver ID field
         public final String driverName;
         public final String truckUnit;
-        public final int loadCount;
+        public final int loadCount;  // KEEPING ORIGINAL NAME
         public final double gross;
         public final double serviceFee;
         public final double grossAfterServiceFee;
@@ -410,15 +413,21 @@ public class PayrollCalculator {
         public final double netPay;
         public final List<Load> loads;
         public final List<FuelTransaction> fuels;
+        
+        // Also add numLoads as an alias for backward compatibility
+        public int getNumLoads() {
+            return loadCount;
+        }
 
-        public PayrollRow(String driverName, String truckUnit, int loadCount, double gross, double serviceFee, 
+        public PayrollRow(int driverId, String driverName, String truckUnit, int loadCount, double gross, double serviceFee, 
                           double grossAfterServiceFee, double companyPay, double driverPay, double fuel, 
                           double grossAfterFuel, double recurringFees, double advancesGiven, 
                           double advanceRepayments, double escrowDeposits, double otherDeductions, 
                           double reimbursements, double netPay, List<Load> loads, List<FuelTransaction> fuels) {
+            this.driverId = driverId;  // Store driver ID
             this.driverName = driverName;
             this.truckUnit = truckUnit;
-            this.loadCount = loadCount;
+            this.loadCount = loadCount;  // Keep original name
             this.gross = gross;
             this.serviceFee = serviceFee;
             this.grossAfterServiceFee = grossAfterServiceFee;
@@ -551,8 +560,8 @@ public class PayrollCalculator {
         
         @Override
         public String toString() {
-            return String.format("PayrollRow[driver=%s, truck=%s, loads=%d, gross=%.2f, net=%.2f]",
-                    driverName, truckUnit, loadCount, gross, netPay);
+            return String.format("PayrollRow[driverId=%d, driver=%s, truck=%s, loads=%d, gross=%.2f, net=%.2f]",
+                    driverId, driverName, truckUnit, loadCount, gross, netPay);
         }
     }
     

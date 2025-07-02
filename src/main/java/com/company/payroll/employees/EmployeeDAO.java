@@ -26,6 +26,22 @@ public class EmployeeDAO {
                 logger.debug("trailer_number column already exists");
             }
             
+            // Add email column if it doesn't exist
+            try {
+                conn.createStatement().execute("ALTER TABLE employees ADD COLUMN email TEXT");
+                logger.info("Added email column to employees table");
+            } catch (SQLException ignore) {
+                logger.debug("email column already exists");
+            }
+            
+            // Add phone column if it doesn't exist
+            try {
+                conn.createStatement().execute("ALTER TABLE employees ADD COLUMN phone TEXT");
+                logger.info("Added phone column to employees table");
+            } catch (SQLException ignore) {
+                logger.debug("phone column already exists");
+            }
+            
             String sql = """
                 CREATE TABLE IF NOT EXISTS employees (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +57,9 @@ public class EmployeeDAO {
                     employee_llc TEXT,
                     cdl_expiry DATE,
                     medical_expiry DATE,
-                    status TEXT
+                    status TEXT,
+                    email TEXT,
+                    phone TEXT
                 );
             """;
             conn.createStatement().execute(sql);
@@ -97,8 +115,8 @@ public class EmployeeDAO {
         logger.info("Adding new employee: {}", emp.getName());
         String sql = """
             INSERT INTO employees 
-            (name, truck_unit, trailer_number, driver_percent, company_percent, service_fee_percent, dob, license_number, driver_type, employee_llc, cdl_expiry, medical_expiry, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (name, truck_unit, trailer_number, driver_percent, company_percent, service_fee_percent, dob, license_number, driver_type, employee_llc, cdl_expiry, medical_expiry, status, email, phone) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -121,13 +139,13 @@ public class EmployeeDAO {
         logger.info("Updating employee: {} (ID: {})", emp.getName(), emp.getId());
         String sql = """
             UPDATE employees SET 
-                name=?, truck_unit=?, trailer_number=?, driver_percent=?, company_percent=?, service_fee_percent=?, dob=?, license_number=?, driver_type=?, employee_llc=?, cdl_expiry=?, medical_expiry=?, status=?
+                name=?, truck_unit=?, trailer_number=?, driver_percent=?, company_percent=?, service_fee_percent=?, dob=?, license_number=?, driver_type=?, employee_llc=?, cdl_expiry=?, medical_expiry=?, status=?, email=?, phone=?
             WHERE id=?
         """;
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement ps = conn.prepareStatement(sql)) {
             setParams(ps, emp);
-            ps.setInt(14, emp.getId());
+            ps.setInt(16, emp.getId());
             int rowsAffected = ps.executeUpdate();
             if (rowsAffected > 0) {
                 logger.info("Employee {} updated successfully", emp.getName());
@@ -209,7 +227,23 @@ public class EmployeeDAO {
             trailerNumber = "";
         }
         
-        return new Employee(
+        String email = "";
+        try {
+            email = rs.getString("email");
+        } catch (SQLException e) {
+            // Column might not exist in older databases
+            email = "";
+        }
+        
+        String phone = "";
+        try {
+            phone = rs.getString("phone");
+        } catch (SQLException e) {
+            // Column might not exist in older databases
+            phone = "";
+        }
+        
+        Employee emp = new Employee(
             rs.getInt("id"),
             rs.getString("name"),
             rs.getString("truck_unit"),
@@ -225,6 +259,12 @@ public class EmployeeDAO {
             rs.getObject("medical_expiry") != null ? rs.getDate("medical_expiry").toLocalDate() : null,
             rs.getString("status") != null ? Employee.Status.valueOf(rs.getString("status")) : null
         );
+        
+        // Set the new fields
+        emp.setEmail(email);
+        emp.setPhone(phone);
+        
+        return emp;
     }
 
     private void setParams(PreparedStatement ps, Employee emp) throws SQLException {
@@ -250,5 +290,7 @@ public class EmployeeDAO {
         else
             ps.setNull(12, Types.DATE);
         ps.setString(13, emp.getStatus() != null ? emp.getStatus().name() : null);
+        ps.setString(14, emp.getEmail());
+        ps.setString(15, emp.getPhone());
     }
 }
