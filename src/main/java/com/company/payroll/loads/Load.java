@@ -2,6 +2,7 @@ package com.company.payroll.loads;
 
 import com.company.payroll.employees.Employee;
 import com.company.payroll.trailers.Trailer;
+import com.company.payroll.loads.LoadStatus;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.LocalDateTime;
@@ -187,16 +188,35 @@ public class Load {
         parseLocations();
     }
     public String getDropLocation() { return dropLocation; }
-    public void setDropLocation(String dropLocation) { 
-        this.dropLocation = dropLocation; 
+    public void setDropLocation(String dropLocation) {
+        this.dropLocation = dropLocation;
         parseLocations();
     }
+
+    // Convenience alias used by dispatcher code
+    public String getLoadId() { return loadNumber; }
+
+    // Older code expects this spelling
+    public LocalDate getPickupDate() { return getPickUpDate(); }
     public Employee getDriver() { return driver; }
     public void setDriver(Employee driver) { this.driver = driver; }
     public String getTruckUnitSnapshot() { return truckUnitSnapshot; }
     public void setTruckUnitSnapshot(String truckUnitSnapshot) { this.truckUnitSnapshot = truckUnitSnapshot; }
     public Status getStatus() { return status; }
     public void setStatus(Status status) { this.status = status; }
+
+    // Map internal status to the extended LoadStatus enum
+    public LoadStatus getLoadStatus() {
+        switch (status) {
+            case BOOKED: return LoadStatus.BOOKED;
+            case ASSIGNED: return LoadStatus.ASSIGNED;
+            case IN_TRANSIT: return LoadStatus.IN_TRANSIT;
+            case DELIVERED: return LoadStatus.DELIVERED;
+            case PAID: return LoadStatus.PAID;
+            case CANCELLED: return LoadStatus.CANCELLED;
+            default: return LoadStatus.BOOKED;
+        }
+    }
     public double getGrossAmount() { return grossAmount; }
     public void setGrossAmount(double grossAmount) { 
         this.grossAmount = grossAmount; 

@@ -6,6 +6,7 @@ import com.company.payroll.loads.LoadStatus;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 /** Minimal data access facade used for compilation. */
 public class DataService {
@@ -16,4 +17,12 @@ public class DataService {
     public List<Load> getActiveLoads() { return Collections.emptyList(); }
     public List<Load> getLoadsForDriver(Driver driver, LocalDate start, LocalDate end) { return Collections.emptyList(); }
     public void updateDriverStatus(Driver driver, LoadStatus status) { }
+
+    // Placeholder methods used by DispatcherController
+    public void registerForUpdates(Consumer<Object> listener) { }
+    public void unregisterForUpdates() { }
+    public Driver getDriverById(String driverId) { return null; }
+    public Load getLoadById(String loadId) { return null; }
+    public void assignLoadToDriver(String loadId, String driverId) { }
+    public void unassignLoad(String loadId) { }
 }

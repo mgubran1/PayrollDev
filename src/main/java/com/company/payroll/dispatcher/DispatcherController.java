@@ -8,6 +8,8 @@ import com.company.payroll.services.DataService;
 import com.company.payroll.services.NotificationService;
 import com.company.payroll.security.SecurityContext;
 
+import javafx.application.Platform;
+
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
@@ -159,9 +161,9 @@ public class DispatcherController {
         if (driver.getCurrentLoad() != null) {
             Load currentLoad = driver.getCurrentLoad();
             
-            if (currentLoad.getStatus() == LoadStatus.LOADING) {
+            if (currentLoad.getLoadStatus() == LoadStatus.LOADING) {
                 return DispatcherDriverStatus.Status.LOADING;
-            } else if (currentLoad.getStatus() == LoadStatus.UNLOADING) {
+            } else if (currentLoad.getLoadStatus() == LoadStatus.UNLOADING) {
                 return DispatcherDriverStatus.Status.UNLOADING;
             } else {
                 return DispatcherDriverStatus.Status.ON_ROAD;
@@ -195,11 +197,11 @@ public class DispatcherController {
         if (driver.getCurrentLoad() != null) {
             Load load = driver.getCurrentLoad();
             
-            if (load.getStatus() == LoadStatus.LOADING) {
+            if (load.getLoadStatus() == LoadStatus.LOADING) {
                 return "At " + load.getOriginName();
-            } else if (load.getStatus() == LoadStatus.UNLOADING) {
+            } else if (load.getLoadStatus() == LoadStatus.UNLOADING) {
                 return "At " + load.getDestName();
-            } else if (load.getStatus() == LoadStatus.IN_TRANSIT) {
+            } else if (load.getLoadStatus() == LoadStatus.IN_TRANSIT) {
                 // Simulate GPS location
                 return "En route to " + load.getDestName();
             }
@@ -217,9 +219,9 @@ public class DispatcherController {
         if (driver.getCurrentLoad() != null) {
             Load load = driver.getCurrentLoad();
             
-            if (load.getStatus() == LoadStatus.IN_TRANSIT) {
+            if (load.getLoadStatus() == LoadStatus.IN_TRANSIT) {
                 return load.getDeliveryDate().atTime(12, 0);
-            } else if (load.getStatus() == LoadStatus.ASSIGNED) {
+            } else if (load.getLoadStatus() == LoadStatus.ASSIGNED) {
                 return load.getPickupDate().atTime(8, 0);
             }
         }

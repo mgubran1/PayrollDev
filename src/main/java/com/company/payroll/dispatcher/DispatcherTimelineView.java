@@ -15,11 +15,16 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.Node;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.MouseButton;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.LinearGradient;
 import javafx.scene.paint.Stop;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
@@ -30,6 +35,8 @@ import org.slf4j.LoggerFactory;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.DayOfWeek;
+import java.time.format.TextStyle;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -1118,6 +1125,18 @@ public class DispatcherTimelineView extends BorderPane {
     private void showDriverDetails(DispatcherDriverStatus driver) {
         logger.info("Showing details for driver: {}", driver.getDriverName());
         // TODO: Implement driver details dialog
+    }
+
+    // Utility to fetch a node from a grid pane at a specific column and row
+    private Node getNodeFromGridPane(GridPane grid, int col, int row) {
+        for (Node child : grid.getChildren()) {
+            Integer column = GridPane.getColumnIndex(child);
+            Integer rowIndex = GridPane.getRowIndex(child);
+            if (column != null && rowIndex != null && column == col && rowIndex == row) {
+                return child;
+            }
+        }
+        return null;
     }
     
     // Cleanup
