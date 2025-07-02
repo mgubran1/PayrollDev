@@ -524,8 +524,9 @@ public class CashAdvancePanel extends BorderPane {
         });
         actionsCol.setPrefWidth(80);
         
-        table.getColumns().addAll(dateCol, typeCol, amountCol, balanceCol, statusCol, 
-            advanceIdCol, notesCol, actionsCol);
+        table.getColumns().setAll(java.util.List.of(
+            dateCol, typeCol, amountCol, balanceCol, statusCol,
+            advanceIdCol, notesCol, actionsCol));
         
         // Placeholder for empty table
         Label placeholder = new Label("No cash advance entries found");
@@ -926,7 +927,7 @@ public class CashAdvancePanel extends BorderPane {
             entry.getValue().getReferenceNumber() != null ? 
             entry.getValue().getReferenceNumber() : ""));
         
-        repaymentTable.getColumns().addAll(dateCol, amountCol, methodCol, refCol);
+        repaymentTable.getColumns().setAll(java.util.List.of(dateCol, amountCol, methodCol, refCol));
         repaymentTable.setPrefHeight(200);
         
         Button closeBtn = new Button("Close");

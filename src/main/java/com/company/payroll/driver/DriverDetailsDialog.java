@@ -286,8 +286,8 @@ public class DriverDetailsDialog extends Dialog<Void> {
         milesCol.setPrefWidth(80);
         milesCol.setStyle("-fx-alignment: CENTER-RIGHT;");
         
-        table.getColumns().addAll(loadNumCol, customerCol, pickupCol, dropCol, 
-                                 dateCol, amountCol, milesCol);
+        table.getColumns().setAll(java.util.List.of(loadNumCol, customerCol, pickupCol,
+                                 dropCol, dateCol, amountCol, milesCol));
         
         content.getChildren().addAll(summaryCard, table);
         

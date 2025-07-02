@@ -336,7 +336,7 @@ public class RevenueTab extends Tab {
         
         // Revenue Table
         revenueTable = new TableView<>();
-        revenueTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        revenueTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         revenueTable.setPrefHeight(400);
         
         // Create columns
@@ -420,8 +420,9 @@ public class RevenueTab extends Tab {
             }
         });
         
-        revenueTable.getColumns().addAll(invoiceCol, dateCol, customerCol, loadCol, 
-                                        amountCol, statusCol, dueDateCol);
+        revenueTable.getColumns().setAll(java.util.List.of(
+                invoiceCol, dateCol, customerCol, loadCol,
+                amountCol, statusCol, dueDateCol));
         
         // Enable row selection
         revenueTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);

@@ -194,8 +194,9 @@ public class DispatcherDailyView extends BorderPane {
             new SimpleStringProperty(data.getValue().getStatus()));
         statusCol.setPrefWidth(100);
         
-        eventTable.getColumns().addAll(timeCol, typeCol, driverCol, loadCol, 
-                                      customerCol, locationCol, statusCol);
+        eventTable.getColumns().setAll(java.util.List.of(
+                timeCol, typeCol, driverCol, loadCol,
+                customerCol, locationCol, statusCol));
         eventTable.setItems(dailyEvents);
         
         // Row factory for styling

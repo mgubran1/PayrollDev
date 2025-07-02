@@ -479,7 +479,9 @@ public class PayrollEscrowPanel extends BorderPane {
         });
         actionsCol.setPrefWidth(80);
         
-        table.getColumns().addAll(dateCol, weekCol, driverCol, typeCol, amountCol, balanceCol, remainingCol, notesCol, actionsCol);
+        table.getColumns().setAll(java.util.List.of(
+                dateCol, weekCol, driverCol, typeCol, amountCol,
+                balanceCol, remainingCol, notesCol, actionsCol));
         
         // Placeholder for empty table
         Label placeholder = new Label("No escrow entries found");

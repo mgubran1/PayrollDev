@@ -6,6 +6,7 @@ import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import com.company.payroll.driver.DriverDetailsDialog;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -251,8 +252,9 @@ public class DispatcherFleetStatusView extends BorderPane {
         });
         actionCol.setPrefWidth(150);
         
-        driverTable.getColumns().addAll(statusCol, nameCol, truckCol, trailerCol, 
-                                       locationCol, loadCol, etaCol, hoursCol, actionCol);
+        driverTable.getColumns().setAll(java.util.List.of(
+                statusCol, nameCol, truckCol, trailerCol,
+                locationCol, loadCol, etaCol, hoursCol, actionCol));
         driverTable.setItems(drivers);
         
         // Row factory for hover effects

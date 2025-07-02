@@ -132,8 +132,9 @@ public class TrailersTab extends BorderPane {
         plateCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getLicensePlate()));
         plateCol.setPrefWidth(120);
         
-        table.getColumns().addAll(numberCol, vinCol, makeModelCol, typeCol, statusCol, assignedToCol, 
-                                 regExpiryCol, insExpiryCol, inspExpiryCol, plateCol);
+        table.getColumns().setAll(java.util.List.of(
+                numberCol, vinCol, makeModelCol, typeCol, statusCol, assignedToCol,
+                regExpiryCol, insExpiryCol, inspExpiryCol, plateCol));
         
         // --- FILTERED/SORTED VIEW ---
         FilteredList<Trailer> filteredTrailers = new FilteredList<>(trailers, p -> true);
@@ -813,7 +814,7 @@ public class TrailersTab extends BorderPane {
             return new SimpleStringProperty("");
         });
         
-        alertTable.getColumns().addAll(numberCol, typeCol, assignedCol, inspCol, daysCol);
+        alertTable.getColumns().setAll(java.util.List.of(numberCol, typeCol, assignedCol, inspCol, daysCol));
         alertTable.setItems(FXCollections.observableArrayList(expiringTrailers));
         
         VBox content = new VBox(10, alertTable);

@@ -1,6 +1,7 @@
 package com.company.payroll.dispatcher;
 
 import com.company.payroll.loads.Load;
+import com.company.payroll.dispatcher.LoadDetailsDialog;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;

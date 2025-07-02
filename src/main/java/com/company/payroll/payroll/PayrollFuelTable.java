@@ -34,6 +34,7 @@ public class PayrollFuelTable extends TableView<FuelTransaction> {
         itemCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().getItem()));
         TableColumn<FuelTransaction, Number> qtyCol = new TableColumn<>("Qty");
         qtyCol.setCellValueFactory(cell -> new SimpleDoubleProperty(cell.getValue().getQty()));
-        getColumns().addAll(dateCol, invCol, unitCol, driverCol, locCol, amtCol, feesCol, totalCol, itemCol, qtyCol);
+        getColumns().setAll(java.util.List.of(dateCol, invCol, unitCol, driverCol, locCol,
+                amtCol, feesCol, totalCol, itemCol, qtyCol));
     }
 }
