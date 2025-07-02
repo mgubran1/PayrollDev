@@ -7,7 +7,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Load {
-    public enum Status { BOOKED, IN_TRANSIT, DELIVERED, PAID, CANCELLED }
+    /**
+     * Represents the lifecycle status of a load.
+     * ASSIGNED indicates a load has been matched with a driver
+     * but has not yet started transit.
+     */
+    public enum Status { BOOKED, ASSIGNED, IN_TRANSIT, DELIVERED, PAID, CANCELLED }
 
     private int id;
     private String loadNumber;

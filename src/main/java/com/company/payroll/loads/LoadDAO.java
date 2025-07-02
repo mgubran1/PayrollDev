@@ -545,6 +545,34 @@ public class LoadDAO {
         return list;
     }
 
+    /**
+     * Retrieve active loads for a specific driver. Active loads are those
+     * that are not cancelled and not yet delivered/paid.
+     */
+    public List<Load> getActiveLoadsByDriver(int driverId) {
+        logger.debug("Getting active loads for driver {}", driverId);
+        List<Load> list = new ArrayList<>();
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            String sql = "SELECT * FROM loads WHERE driver_id = ? AND status IN (?, ?, ?)";
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setInt(1, driverId);
+            ps.setString(2, Load.Status.BOOKED.name());
+            ps.setString(3, Load.Status.ASSIGNED.name());
+            ps.setString(4, Load.Status.IN_TRANSIT.name());
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                Load load = extractLoad(rs);
+                load.setDocuments(getDocumentsByLoadId(load.getId()));
+                list.add(load);
+            }
+            logger.info("Found {} active loads for driver {}", list.size(), driverId);
+        } catch (SQLException e) {
+            logger.error("Error getting active loads for driver {}: {}", driverId, e.getMessage());
+            throw new DataAccessException("Error getting active loads for driver", e);
+        }
+        return list;
+    }
+
     public List<Load> getByDriverAndDateRange(int driverId, LocalDate start, LocalDate end) {
         logger.debug("Getting loads - DriverId: {}, Start: {}, End: {}", driverId, start, end);
         List<Load> list = new ArrayList<>();

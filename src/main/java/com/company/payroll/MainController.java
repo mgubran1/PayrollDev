@@ -214,7 +214,7 @@ public class MainController extends BorderPane {
 
             // Register loads tab to update dispatcher when loads change
             logger.debug("Registering Dispatcher for load updates");
-            loadsTab.addLoadDataChangeListener(loads -> {
+            loadsTab.addLoadDataChangeListener(() -> {
                 logger.debug("Load data changed, updating dispatcher availability");
                 DispatcherManager manager = new DispatcherManager();
                 manager.initializeDriverAvailability();
