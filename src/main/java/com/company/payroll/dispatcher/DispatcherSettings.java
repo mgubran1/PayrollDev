@@ -8,7 +8,6 @@ public class DispatcherSettings {
     private static String dispatcherPhone = "";
     private static String dispatcherEmail = "";
     private static String dispatcherFax = "";
-    private static String woNumber = "";
     private static String companyName = "";
     private static String companyLogoPath = "";
     private static String pickupDeliveryPolicy = "";
@@ -21,8 +20,6 @@ public class DispatcherSettings {
     public static void setDispatcherEmail(String v) { dispatcherEmail = v; }
     public static String getDispatcherFax() { return dispatcherFax; }
     public static void setDispatcherFax(String v) { dispatcherFax = v; }
-    public static String getWONumber() { return woNumber; }
-    public static void setWONumber(String v) { woNumber = v; }
     public static String getCompanyName() { return companyName; }
     public static void setCompanyName(String v) { companyName = v; }
     public static String getCompanyLogoPath() { return companyLogoPath; }

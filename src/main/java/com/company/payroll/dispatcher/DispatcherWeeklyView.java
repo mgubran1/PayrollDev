@@ -237,20 +237,20 @@ public class DispatcherWeeklyView extends BorderPane {
         driverCell.setStyle("-fx-background-color: #f5f5f5; -fx-border-color: #cccccc;");
         
         Label nameLabel = new Label(driver.getDriverName());
-        nameLabel.setStyle("-fx-font-weight: bold;");
+        nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #000000;");
         
         Label truckLabel = new Label(driver.getTruckUnit());
-        truckLabel.setStyle("-fx-font-size: 10;");
+        truckLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #000000;");
         
         Label statusLabel = new Label(driver.getStatus().getDisplayName());
-        statusLabel.setStyle("-fx-font-size: 10; -fx-text-fill: " + driver.getStatus().getColor() + ";");
+        statusLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #000000;");
         
         // Week summary for driver
         int weekLoads = (int) driver.getAssignedLoads().stream()
             .filter(this::isLoadInWeek)
             .count();
         Label summaryLabel = new Label(weekLoads + " loads");
-        summaryLabel.setStyle("-fx-font-size: 10; -fx-font-style: italic;");
+        summaryLabel.setStyle("-fx-font-size: 10; -fx-font-style: italic; -fx-text-fill: #000000;");
         
         driverCell.getChildren().addAll(nameLabel, truckLabel, statusLabel, summaryLabel);
         driverCell.setPrefHeight(DRIVER_ROW_HEIGHT);
@@ -307,10 +307,10 @@ public class DispatcherWeeklyView extends BorderPane {
         }
         
         Label iconLabel = new Label(icon);
-        iconLabel.setStyle("-fx-font-size: 10;");
+        iconLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #000000;");
         
         Label loadLabel = new Label(load.getLoadNumber());
-        loadLabel.setStyle("-fx-font-size: 9; -fx-font-weight: bold;");
+        loadLabel.setStyle("-fx-font-size: 9; -fx-font-weight: bold; -fx-text-fill: #000000;");
         
         entry.getChildren().addAll(iconLabel, loadLabel);
         
@@ -389,11 +389,11 @@ public class DispatcherWeeklyView extends BorderPane {
         }
         
         Label countsLabel = new Label(String.format("▲%d ▼%d", pickups, deliveries));
-        countsLabel.setStyle("-fx-font-size: 11; -fx-font-weight: bold;");
+        countsLabel.setStyle("-fx-font-size: 11; -fx-font-weight: bold; -fx-text-fill: #000000;");
         
         if (inTransit > 0) {
             Label transitLabel = new Label("↔" + inTransit + " in transit");
-            transitLabel.setStyle("-fx-font-size: 9;");
+            transitLabel.setStyle("-fx-font-size: 9; -fx-text-fill: #000000;");
             summary.getChildren().addAll(countsLabel, transitLabel);
         } else {
             summary.getChildren().add(countsLabel);

@@ -119,7 +119,7 @@ public class DispatcherTimelineView extends BorderPane {
         refreshBtn.setOnAction(e -> refresh());
         
         Label modeLabel = new Label(mode == TimelineMode.TWELVE_HOUR ? "12 Hour View" : "24 Hour View");
-        modeLabel.setStyle("-fx-font-weight: bold;");
+        modeLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #000000;");
         
         toolbar.getChildren().addAll(
             dateLabel, datePicker, prevBtn, todayBtn, nextBtn,
@@ -193,13 +193,13 @@ public class DispatcherTimelineView extends BorderPane {
         driverCell.setStyle("-fx-background-color: #f5f5f5; -fx-border-color: #cccccc;");
         
         Label nameLabel = new Label(driver.getDriverName());
-        nameLabel.setStyle("-fx-font-weight: bold;");
+        nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #000000;");
         
         Label truckLabel = new Label(driver.getTruckUnit());
-        truckLabel.setStyle("-fx-font-size: 10;");
+        truckLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #000000;");
         
         Label statusLabel = new Label(driver.getStatus().getDisplayName());
-        statusLabel.setStyle("-fx-font-size: 10; -fx-text-fill: " + getStatusColor(driver.getStatus()) + ";");
+        statusLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #000000;");
         
         driverCell.getChildren().addAll(nameLabel, truckLabel, statusLabel);
         driverCell.setPrefHeight(DRIVER_ROW_HEIGHT);
@@ -285,16 +285,16 @@ public class DispatcherTimelineView extends BorderPane {
         
         // Load info
         Label loadNumLabel = new Label(load.getLoadNumber());
-        loadNumLabel.setStyle("-fx-font-size: 11; -fx-font-weight: bold;");
+        loadNumLabel.setStyle("-fx-font-size: 11; -fx-font-weight: bold; -fx-text-fill: #000000;");
         
         Label customerLabel = new Label(load.getCustomer());
-        customerLabel.setStyle("-fx-font-size: 10;");
+        customerLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #000000;");
         
         Label routeLabel = new Label(String.format("%s → %s", 
             getCityAbbreviation(load.getPickUpLocation()),
             getCityAbbreviation(load.getDropLocation())
         ));
-        routeLabel.setStyle("-fx-font-size: 9;");
+        routeLabel.setStyle("-fx-font-size: 9; -fx-text-fill: #000000;");
         
         block.getChildren().addAll(loadNumLabel, customerLabel, routeLabel);
         

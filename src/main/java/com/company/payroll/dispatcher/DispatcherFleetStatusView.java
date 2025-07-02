@@ -231,15 +231,11 @@ public class DispatcherFleetStatusView extends BorderPane {
         // Action column
         TableColumn<DispatcherDriverStatus, Void> actionCol = new TableColumn<>("Actions");
         actionCol.setCellFactory(column -> new TableCell<>() {
-            private final Button detailsBtn = new Button("Details");
             private final Button updateBtn = new Button("Update");
-            private final HBox buttonBox = new HBox(5);
-            
+
             {
-                detailsBtn.setStyle("-fx-font-size: 10;");
                 updateBtn.setStyle("-fx-font-size: 10;");
-                buttonBox.getChildren().addAll(detailsBtn, updateBtn);
-                buttonBox.setAlignment(Pos.CENTER);
+                setAlignment(Pos.CENTER);
             }
             
             @Override
@@ -250,9 +246,8 @@ public class DispatcherFleetStatusView extends BorderPane {
                 } else {
                     DispatcherDriverStatus driver = getTableRow().getItem();
                     if (driver != null) {
-                        detailsBtn.setOnAction(e -> showDriverDetails(driver));
                         updateBtn.setOnAction(e -> updateDriverStatus(driver));
-                        setGraphic(buttonBox);
+                        setGraphic(updateBtn);
                     }
                 }
             }
