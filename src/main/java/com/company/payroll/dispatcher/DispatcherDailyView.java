@@ -10,6 +10,7 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.effect.DropShadow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +24,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Daily schedule view showing timeline of activities
+ * Daily schedule view showing timeline of activities with modern UI
  */
 public class DispatcherDailyView extends BorderPane {
     private static final Logger logger = LoggerFactory.getLogger(DispatcherDailyView.class);
@@ -48,80 +49,90 @@ public class DispatcherDailyView extends BorderPane {
     }
     
     private void initializeUI() {
-        // Header
+        getStyleClass().add("dispatcher-container");
+        
+        // Header with modern design
         VBox header = createHeader();
         setTop(header);
         
-        // Main content - split pane
+        // Main content - split pane with modern styling
         SplitPane splitPane = new SplitPane();
         splitPane.setDividerPositions(0.7);
+        splitPane.setStyle("-fx-background-color: #FAFAFA;");
         
-        // Left side - Event table
-        VBox leftPanel = new VBox(10);
-        leftPanel.setPadding(new Insets(10));
+        // Left side - Event table with modern design
+        VBox leftPanel = new VBox(15);
+        leftPanel.setPadding(new Insets(20));
+        leftPanel.setStyle("-fx-background-color: #FFFFFF;");
         
         Label tableLabel = new Label("Daily Schedule");
-        tableLabel.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
+        tableLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: 700; -fx-text-fill: #212121;");
         
-        setupEventTable();
+        setupModernEventTable();
         VBox.setVgrow(eventTable, Priority.ALWAYS);
         
         leftPanel.getChildren().addAll(tableLabel, eventTable);
         
-        // Right side - Summary and quick stats
-        VBox rightPanel = createSummaryPanel();
+        // Right side - Summary and quick stats with cards
+        VBox rightPanel = createModernSummaryPanel();
         
         splitPane.getItems().addAll(leftPanel, rightPanel);
         setCenter(splitPane);
     }
     
     private VBox createHeader() {
-        VBox header = new VBox(10);
-        header.setPadding(new Insets(10));
-        header.setStyle("-fx-background-color: #f5f5f5; -fx-border-color: #cccccc; -fx-border-width: 0 0 1 0;");
+        VBox header = new VBox(15);
+        header.setPadding(new Insets(20));
+        header.setStyle("-fx-background-color: #FFFFFF; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 5, 0, 0, 2);");
         
-        // Date selection
-        HBox dateControls = new HBox(10);
+        // Date selection with modern controls
+        HBox dateControls = new HBox(15);
         dateControls.setAlignment(Pos.CENTER_LEFT);
         
         Label dateLabel = new Label("Date:");
+        dateLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #757575;");
+        
+        datePicker.setStyle("-fx-background-radius: 5px;");
         datePicker.setOnAction(e -> {
             selectedDate = datePicker.getValue();
             refresh();
         });
         
-        Button prevBtn = new Button("◀ Previous");
+        Button prevBtn = createModernButton("◀ Previous", "#2196F3", false);
         prevBtn.setOnAction(e -> {
             selectedDate = selectedDate.minusDays(1);
             datePicker.setValue(selectedDate);
             refresh();
         });
         
-        Button todayBtn = new Button("Today");
+        Button todayBtn = createModernButton("Today", "#2196F3", true);
         todayBtn.setOnAction(e -> {
             selectedDate = LocalDate.now();
             datePicker.setValue(selectedDate);
             refresh();
         });
         
-        Button nextBtn = new Button("Next ▶");
+        Button nextBtn = createModernButton("Next ▶", "#2196F3", false);
         nextBtn.setOnAction(e -> {
             selectedDate = selectedDate.plusDays(1);
             datePicker.setValue(selectedDate);
             refresh();
         });
         
-        Button refreshBtn = new Button("🔄 Refresh");
+        Button refreshBtn = createModernButton("🔄 Refresh", "#4CAF50", false);
         refreshBtn.setOnAction(e -> refresh());
         
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        
         Label selectedDateLabel = new Label();
-        selectedDateLabel.setStyle("-fx-font-size: 16; -fx-font-weight: bold;");
+        selectedDateLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: 700; -fx-text-fill: #212121;");
         updateDateLabel(selectedDateLabel);
         
         dateControls.getChildren().addAll(
             dateLabel, datePicker, prevBtn, todayBtn, nextBtn,
-            new Separator(), selectedDateLabel,
-            new Separator(), refreshBtn
+            spacer, selectedDateLabel,
+            spacer, refreshBtn
         );
         
         header.getChildren().add(dateControls);
@@ -129,11 +140,63 @@ public class DispatcherDailyView extends BorderPane {
         return header;
     }
     
+    private Button createModernButton(String text, String color, boolean isPrimary) {
+        Button button = new Button(text);
+        if (isPrimary) {
+            button.setStyle(String.format(
+                "-fx-background-color: %s; -fx-text-fill: white; -fx-font-weight: 600; " +
+                "-fx-background-radius: 5px; -fx-padding: 8px 16px; -fx-cursor: hand;",
+                color
+            ));
+        } else {
+            button.setStyle(String.format(
+                "-fx-background-color: white; -fx-text-fill: %s; -fx-font-weight: 600; " +
+                "-fx-background-radius: 5px; -fx-padding: 8px 16px; -fx-cursor: hand; " +
+                "-fx-border-color: %s; -fx-border-width: 1px;",
+                color, color
+            ));
+        }
+        
+        button.setOnMouseEntered(e -> {
+            button.setStyle(button.getStyle() + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0, 0, 2);");
+        });
+        
+        button.setOnMouseExited(e -> {
+            button.setStyle(button.getStyle().replace("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0, 0, 2);", ""));
+        });
+        
+        return button;
+    }
+    
     private void updateDateLabel(Label label) {
         label.setText(selectedDate.format(DATE_FORMAT));
     }
     
-    private void setupEventTable() {
+    private void setupModernEventTable() {
+        eventTable.setStyle("-fx-background-color: white; -fx-background-radius: 8px;");
+        eventTable.setRowFactory(tv -> {
+            TableRow<DailyEvent> row = new TableRow<>();
+            row.setStyle("-fx-background-color: white; -fx-border-width: 0;");
+            
+            row.setOnMouseEntered(e -> {
+                if (!row.isEmpty()) {
+                    row.setStyle("-fx-background-color: #F5F5F5; -fx-cursor: hand;");
+                }
+            });
+            
+            row.setOnMouseExited(e -> {
+                row.setStyle("-fx-background-color: white;");
+            });
+            
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && !row.isEmpty()) {
+                    showEventDetails(row.getItem());
+                }
+            });
+            
+            return row;
+        });
+        
         // Time column
         TableColumn<DailyEvent, String> timeCol = new TableColumn<>("Time");
         timeCol.setCellValueFactory(data -> 
@@ -141,7 +204,7 @@ public class DispatcherDailyView extends BorderPane {
         timeCol.setPrefWidth(80);
         timeCol.setStyle("-fx-alignment: CENTER;");
         
-        // Type column
+        // Type column with color coding
         TableColumn<DailyEvent, String> typeCol = new TableColumn<>("Type");
         typeCol.setCellValueFactory(data -> 
             new SimpleStringProperty(data.getValue().getEventType().getDisplayName()));
@@ -153,12 +216,13 @@ public class DispatcherDailyView extends BorderPane {
                 if (empty || item == null) {
                     setText(null);
                     setStyle("");
+                    setGraphic(null);
                 } else {
-                    setText(item);
                     DailyEvent event = getTableRow().getItem();
                     if (event != null) {
-                        setStyle("-fx-background-color: " + event.getEventType().getColor() + 
-                                "; -fx-font-weight: bold;");
+                        HBox badge = createEventTypeBadge(event.getEventType());
+                        setGraphic(badge);
+                        setText(null);
                     }
                 }
             }
@@ -198,61 +262,107 @@ public class DispatcherDailyView extends BorderPane {
                 timeCol, typeCol, driverCol, loadCol,
                 customerCol, locationCol, statusCol));
         eventTable.setItems(dailyEvents);
-        
-        // Row factory for styling
-        eventTable.setRowFactory(tv -> {
-            TableRow<DailyEvent> row = new TableRow<>();
-            row.setOnMouseClicked(event -> {
-                if (event.getClickCount() == 2 && !row.isEmpty()) {
-                    showEventDetails(row.getItem());
-                }
-            });
-            return row;
-        });
     }
     
-    private VBox createSummaryPanel() {
-        VBox panel = new VBox(15);
-        panel.setPadding(new Insets(10));
-        panel.setStyle("-fx-background-color: #f9f9f9;");
+    private HBox createEventTypeBadge(EventType type) {
+        HBox badge = new HBox();
+        badge.setAlignment(Pos.CENTER);
+        badge.setPadding(new Insets(4, 12, 4, 12));
+        badge.setStyle(String.format(
+            "-fx-background-color: %s; -fx-background-radius: 12px;",
+            type.getColor()
+        ));
         
-        Label titleLabel = new Label("Daily Summary");
-        titleLabel.setStyle("-fx-font-size: 14; -fx-font-weight: bold;");
+        Label label = new Label(type.getDisplayName());
+        label.setStyle("-fx-text-fill: white; -fx-font-size: 11px; -fx-font-weight: 600;");
         
-        // Statistics grid
-        GridPane statsGrid = new GridPane();
-        statsGrid.setHgap(10);
-        statsGrid.setVgap(5);
+        badge.getChildren().add(label);
+        return badge;
+    }
+    
+    private VBox createModernSummaryPanel() {
+        VBox panel = new VBox(20);
+        panel.setPadding(new Insets(20));
+        panel.setStyle("-fx-background-color: #FAFAFA;");
         
-        int row = 0;
-        addStatRow(statsGrid, row++, "Total Events:", String.valueOf(dailyEvents.size()));
-        addStatRow(statsGrid, row++, "Active Drivers:", getActiveDriverCount());
-        addStatRow(statsGrid, row++, "Pickups:", getEventTypeCount(EventType.PICKUP));
-        addStatRow(statsGrid, row++, "Deliveries:", getEventTypeCount(EventType.DELIVERY));
-        addStatRow(statsGrid, row++, "In Transit:", getInTransitCount());
+        Label titleLabel = new Label("Daily Overview");
+        titleLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: 700; -fx-text-fill: #212121;");
+        
+        // Statistics cards
+        VBox statsContainer = new VBox(15);
+        
+        // Total Events Card
+        VBox totalEventsCard = createStatCard("Total Events", String.valueOf(dailyEvents.size()), "#2196F3", "📅");
+        
+        // Active Drivers Card
+        VBox activeDriversCard = createStatCard("Active Drivers", getActiveDriverCount(), "#4CAF50", "🚚");
+        
+        // Pickups Card
+        VBox pickupsCard = createStatCard("Pickups", getEventTypeCount(EventType.PICKUP), "#FF9800", "▲");
+        
+        // Deliveries Card
+        VBox deliveriesCard = createStatCard("Deliveries", getEventTypeCount(EventType.DELIVERY), "#F44336", "▼");
+        
+        // In Transit Card
+        VBox inTransitCard = createStatCard("In Transit", getInTransitCount(), "#00BCD4", "↔");
+        
+        statsContainer.getChildren().addAll(totalEventsCard, activeDriversCard, pickupsCard, deliveriesCard, inTransitCard);
         
         Separator separator = new Separator();
+        separator.setStyle("-fx-background-color: #E0E0E0;");
         
-        // Driver availability summary
+        // Driver availability section
         Label availLabel = new Label("Driver Availability");
-        availLabel.setStyle("-fx-font-size: 12; -fx-font-weight: bold;");
+        availLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: 600; -fx-text-fill: #424242;");
         
-        VBox availBox = new VBox(5);
+        VBox availBox = new VBox(10);
         updateAvailabilitySummary(availBox);
         
-        panel.getChildren().addAll(titleLabel, statsGrid, separator, availLabel, availBox);
+        panel.getChildren().addAll(titleLabel, statsContainer, separator, availLabel, availBox);
         
         return panel;
     }
     
-    private void addStatRow(GridPane grid, int row, String label, String value) {
-        Label labelNode = new Label(label);
-        labelNode.setStyle("-fx-font-weight: bold;");
+    private VBox createStatCard(String title, String value, String color, String icon) {
+        VBox card = new VBox(5);
+        card.setPadding(new Insets(15));
+        card.setStyle(String.format(
+            "-fx-background-color: white; -fx-background-radius: 8px; " +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 5, 0, 0, 2);"
+        ));
         
-        Label valueNode = new Label(value);
+        HBox header = new HBox(10);
+        header.setAlignment(Pos.CENTER_LEFT);
         
-        grid.add(labelNode, 0, row);
-        grid.add(valueNode, 1, row);
+        Label iconLabel = new Label(icon);
+        iconLabel.setStyle(String.format("-fx-font-size: 20px; -fx-text-fill: %s;", color));
+        
+        Label valueLabel = new Label(value);
+        valueLabel.setStyle(String.format("-fx-font-size: 28px; -fx-font-weight: 700; -fx-text-fill: %s;", color));
+        
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        
+        header.getChildren().addAll(iconLabel, spacer, valueLabel);
+        
+        Label titleLabel = new Label(title);
+        titleLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #757575;");
+        
+        card.getChildren().addAll(header, titleLabel);
+        
+        // Hover effect
+        card.setOnMouseEntered(e -> {
+            card.setStyle(card.getStyle() + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 10, 0, 0, 3);");
+        });
+        
+        card.setOnMouseExited(e -> {
+            card.setStyle(card.getStyle().replace(
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 10, 0, 0, 3);",
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 5, 0, 0, 2);"
+            ));
+        });
+        
+        return card;
     }
     
     private void refresh() {
@@ -260,6 +370,41 @@ public class DispatcherDailyView extends BorderPane {
         controller.refreshAll();
         loadDailyEvents();
         updateDateLabel((Label) ((HBox) ((VBox) getTop()).getChildren().get(0)).getChildren().get(6));
+        
+        // Update summary panel
+        SplitPane splitPane = (SplitPane) getCenter();
+        VBox rightPanel = (VBox) splitPane.getItems().get(1);
+        updateSummaryPanel(rightPanel);
+    }
+    
+    private void updateSummaryPanel(VBox panel) {
+        VBox statsContainer = (VBox) panel.getChildren().get(1);
+        
+        // Update each stat card
+        VBox totalEventsCard = (VBox) statsContainer.getChildren().get(0);
+        updateStatCard(totalEventsCard, String.valueOf(dailyEvents.size()));
+        
+        VBox activeDriversCard = (VBox) statsContainer.getChildren().get(1);
+        updateStatCard(activeDriversCard, getActiveDriverCount());
+        
+        VBox pickupsCard = (VBox) statsContainer.getChildren().get(2);
+        updateStatCard(pickupsCard, getEventTypeCount(EventType.PICKUP));
+        
+        VBox deliveriesCard = (VBox) statsContainer.getChildren().get(3);
+        updateStatCard(deliveriesCard, getEventTypeCount(EventType.DELIVERY));
+        
+        VBox inTransitCard = (VBox) statsContainer.getChildren().get(4);
+        updateStatCard(inTransitCard, getInTransitCount());
+        
+        // Update availability
+        VBox availBox = (VBox) panel.getChildren().get(4);
+        updateAvailabilitySummary(availBox);
+    }
+    
+    private void updateStatCard(VBox card, String newValue) {
+        HBox header = (HBox) card.getChildren().get(0);
+        Label valueLabel = (Label) header.getChildren().get(2);
+        valueLabel.setText(newValue);
     }
     
     private void loadDailyEvents() {
@@ -376,17 +521,33 @@ public class DispatcherDailyView extends BorderPane {
         }
         
         container.getChildren().addAll(
-            createAvailabilityLabel("Available", available, Color.GREEN),
-            createAvailabilityLabel("On Road", onRoad, Color.BLUE),
-            createAvailabilityLabel("Off Duty", offDuty, Color.RED)
+            createAvailabilityItem("Available", available, "#4CAF50"),
+            createAvailabilityItem("On Road", onRoad, "#2196F3"),
+            createAvailabilityItem("Off Duty", offDuty, "#F44336")
         );
     }
     
-    private Label createAvailabilityLabel(String text, int count, Color color) {
-        Label label = new Label(String.format("%s: %d", text, count));
-        label.setTextFill(color);
-        label.setStyle("-fx-font-size: 11;");
-        return label;
+    private HBox createAvailabilityItem(String text, int count, String color) {
+        HBox item = new HBox(10);
+        item.setPadding(new Insets(8));
+        item.setAlignment(Pos.CENTER_LEFT);
+        item.setStyle("-fx-background-color: white; -fx-background-radius: 5px;");
+        
+        Label dot = new Label("●");
+        dot.setStyle(String.format("-fx-text-fill: %s; -fx-font-size: 16px;", color));
+        
+        Label label = new Label(text);
+        label.setStyle("-fx-font-size: 14px; -fx-text-fill: #424242;");
+        
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        
+        Label countLabel = new Label(String.valueOf(count));
+        countLabel.setStyle(String.format("-fx-font-size: 16px; -fx-font-weight: 600; -fx-text-fill: %s;", color));
+        
+        item.getChildren().addAll(dot, label, spacer, countLabel);
+        
+        return item;
     }
     
     private void showEventDetails(DailyEvent event) {
@@ -430,11 +591,11 @@ public class DispatcherDailyView extends BorderPane {
     }
     
     public enum EventType {
-        PICKUP("Pick Up", "#90EE90"),
-        DELIVERY("Delivery", "#FFB6C1"),
-        IN_TRANSIT("In Transit", "#87CEEB"),
-        BREAK("Break", "#DDA0DD"),
-        MAINTENANCE("Maintenance", "#F0E68C");
+        PICKUP("Pick Up", "#4CAF50"),
+        DELIVERY("Delivery", "#F44336"),
+        IN_TRANSIT("In Transit", "#2196F3"),
+        BREAK("Break", "#9C27B0"),
+        MAINTENANCE("Maintenance", "#FF9800");
         
         private final String displayName;
         private final String color;
