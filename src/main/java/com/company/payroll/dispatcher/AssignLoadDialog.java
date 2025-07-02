@@ -253,19 +253,27 @@ public class AssignLoadDialog extends Dialog<Boolean> {
         }
         
         try {
-            // TODO: Implement actual assignment logic
-            logger.info("Assigning load {} to driver {}", 
-                selectedLoad.getLoadNumber(), selectedDriver.getDriverName());
-            
-            // Show success
-            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-            alert.setTitle("Assignment Successful");
-            alert.setHeaderText(null);
-            alert.setContentText(String.format("Load %s has been assigned to %s",
-                selectedLoad.getLoadNumber(), selectedDriver.getDriverName()));
-            alert.showAndWait();
-            
-            return true;
+            boolean success = controller.assignLoadToDriver(
+                selectedLoad,
+                selectedDriver.getDriver(),
+                notesArea.getText()
+            );
+
+            if (success) {
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Assignment Successful");
+                alert.setHeaderText(null);
+                alert.setContentText(String.format(
+                    "Load %s has been assigned to %s",
+                    selectedLoad.getLoadNumber(),
+                    selectedDriver.getDriverName()
+                ));
+                alert.showAndWait();
+            } else {
+                showError("Failed to assign load. Please try again.");
+            }
+
+            return success;
         } catch (Exception e) {
             logger.error("Failed to assign load", e);
             showError("Failed to assign load: " + e.getMessage());
