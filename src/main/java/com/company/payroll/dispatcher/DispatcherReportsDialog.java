@@ -1160,7 +1160,7 @@ public class DispatcherReportsDialog extends Dialog<Void> {
             
             List<String> columns = (List<String>) reportMetadata.get("columns");
             for (int i = 0; i < columns.size(); i++) {
-                Cell cell = headerRow.createCell(i);
+org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
                 cell.setCellValue(columns.get(i));
                 cell.setCellStyle(headerStyle);
             }
@@ -1544,6 +1544,24 @@ public class DispatcherReportsDialog extends Dialog<Void> {
                   .replace("\t", "\\t");
     }
     
+// Stub methods
+    private ReportResult generateFinancialSummary(List<DispatcherDriverStatus> d, LocalDate s, LocalDate e) { return new ReportResult(); }
+    private ReportResult generateUtilizationReport(List<DispatcherDriverStatus> d, LocalDate s, LocalDate e) { return new ReportResult(); }
+    private ReportResult generateComplianceReport(List<DispatcherDriverStatus> d, LocalDate s, LocalDate e) { return new ReportResult(); }
+    private ReportResult generateMaintenanceReport(List<DispatcherDriverStatus> d, LocalDate s, LocalDate e) { return new ReportResult(); }
+    private ReportResult generateCustomReport(List<DispatcherDriverStatus> d, LocalDate s, LocalDate e) { return new ReportResult(); }
+    private Chart createLoadsCompletionChart(List<ReportRow> data) { return new PieChart(); }
+    private Chart createLoadStatusChart(List<ReportRow> data) { return new PieChart(); }
+    private Chart createRevenueTimelineChart(List<ReportRow> data) { return new LineChart<>(new CategoryAxis(), new NumberAxis()); }
+    private double calculateOnTimePercent(List<Load> loads) { return 0; }
+    private double calculateUtilization(Driver driver, LocalDate s, LocalDate e) { return 0; }
+    private double calculateRevenuePerMile(List<Load> loads) { return 0; }
+    private double calculateAvgDailyMiles(List<Load> loads, LocalDate s, LocalDate e) { return 0; }
+    private double calculateFuelEfficiency(Driver driver, List<Load> loads) { return 0; }
+    private double calculateSafetyScore(Driver driver, LocalDate s, LocalDate e) { return 0; }
+    private Chart createPerformanceRadarChart(List<ReportRow> data) { return new PieChart(); }
+    private Chart createUtilizationChart(List<ReportRow> data) { return new PieChart(); }
+
     private double parseCurrency(String value) {
         if (value == null || value.isEmpty()) return 0;
         // Remove currency symbols and commas

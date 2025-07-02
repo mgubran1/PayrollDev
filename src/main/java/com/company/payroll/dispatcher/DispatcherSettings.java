@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.prefs.Preferences;
+import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
@@ -26,6 +27,8 @@ import com.fasterxml.jackson.databind.SerializationFeature;
  * @version 2.0
  */
 public class DispatcherSettings {
+    public String getDefaultView() { return defaultView; }
+    public void setDefaultView(String view) { this.defaultView = view; }
     private static final Logger logger = LoggerFactory.getLogger(DispatcherSettings.class);
     
     // Constants
@@ -804,7 +807,7 @@ public class DispatcherSettings {
     }
     
     // Default policy text
-    private static String getDefaultPolicy() {
+    public static String getDefaultPolicy() {
         return """
             PICKUP & DELIVERY POLICY
             

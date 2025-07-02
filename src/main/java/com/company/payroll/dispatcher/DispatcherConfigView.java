@@ -26,6 +26,10 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
+import javafx.scene.web.WebView;
+import javafx.scene.shape.Circle;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -127,7 +131,7 @@ public class DispatcherConfigView extends BorderPane {
     
     public DispatcherConfigView(DispatcherController controller) {
         this.controller = controller;
-        this.settings = new DispatcherSettings();
+        this.settings = DispatcherSettings.getInstance();
         this.fieldMap = new ConcurrentHashMap<>();
         this.hasChanges = new SimpleBooleanProperty(false);
         this.formValid = new SimpleBooleanProperty(true);
@@ -1929,7 +1933,18 @@ public class DispatcherConfigView extends BorderPane {
     }
     
     private static class PolicyDocument {
-        // Implementation for policy document
+        private final SimpleStringProperty name = new SimpleStringProperty();
+        private final SimpleStringProperty type = new SimpleStringProperty();
+        private final SimpleStringProperty lastUpdated = new SimpleStringProperty();
+        public PolicyDocument() {}
+        public PolicyDocument(String name, String type, String updated) {
+            this.name.set(name);
+            this.type.set(type);
+            this.lastUpdated.set(updated);
+        }
+        public StringProperty nameProperty() { return name; }
+        public StringProperty typeProperty() { return type; }
+        public StringProperty lastUpdatedProperty() { return lastUpdated; }
     }
     
     private static class ActivityEntry {
