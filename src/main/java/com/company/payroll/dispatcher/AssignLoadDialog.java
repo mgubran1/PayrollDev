@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -917,7 +918,6 @@ public class AssignLoadDialog extends Dialog<Boolean> {
         }
         
         // Refresh driver list to update compatibility indicators
-        driverCombo.refresh();
     }
     
     /**

@@ -1,4 +1,5 @@
 package com.company.payroll.driver;
+import com.company.payroll.drivers.Driver;
 
 import com.company.payroll.employees.Employee;
 import com.company.payroll.employees.EmployeeDAO;
@@ -64,7 +65,7 @@ public class DriverIncomeService {
     /**
      * Get income data for a specific driver - IMPROVED VERSION
      */
-    public CompletableFuture<DriverIncomeData> getDriverIncomeData(Employee driver, 
+    public CompletableFuture<DriverIncomeData> getDriverIncomeData(Driver driver, 
                                                                    LocalDate startDate, 
                                                                    LocalDate endDate) {
         return CompletableFuture.supplyAsync(() -> {

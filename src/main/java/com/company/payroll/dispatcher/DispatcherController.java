@@ -330,17 +330,15 @@ public class DispatcherController {
      * @param status Internal status
      * @return Data service status
      */
-    private String convertStatus(DispatcherDriverStatus.Status status) {
-        // Map internal status enum to data service status strings
+    private LoadStatus convertStatus(DispatcherDriverStatus.Status status) {
         switch (status) {
-            case AVAILABLE: return "AVAILABLE";
-            case ON_ROAD: return "ON_ROAD";
-            case LOADING: return "LOADING";
-            case UNLOADING: return "UNLOADING";
-            case BREAK: return "BREAK";
-            case OFF_DUTY: return "OFF_DUTY";
-            case SLEEPER: return "SLEEPER";
-            default: return "UNKNOWN";
+            case AVAILABLE: return LoadStatus.ASSIGNED;
+            case ON_ROAD: return LoadStatus.IN_TRANSIT;
+            case LOADING: return LoadStatus.LOADING;
+    public void refreshAll() { refreshData(); }
+
+            case UNLOADING: return LoadStatus.UNLOADING;
+            default: return LoadStatus.BOOKED;
         }
     }
     
@@ -384,7 +382,8 @@ public class DispatcherController {
         // In a real system, this would register for push notifications
         // from the server for real-time updates
         
-        dataService.registerForUpdates(update -> {
+        dataService.registerForUpdates(obj -> {
+            DataUpdate update = (DataUpdate) obj;
             if (update.getType().equals("DRIVER_STATUS")) {
                 Platform.runLater(() -> handleDriverStatusUpdate(update));
             } else if (update.getType().equals("LOAD_UPDATE")) {

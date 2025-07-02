@@ -107,7 +107,7 @@ public class DispatcherDriverStatus {
     }
     
     // Core driver data
-    private final Driver driver;
+    private Driver driver;
     private final StringProperty driverName;
     private final StringProperty truckNumber;
     private final StringProperty trailerNumber;
@@ -119,6 +119,7 @@ public class DispatcherDriverStatus {
     private final ObjectProperty<LocalDateTime> lastUpdateTime;
     private final StringProperty lastUpdatedBy;
     private final ObjectProperty<LocalDateTime> eta;
+    private final ObjectProperty<LocalDateTime> estimatedAvailableTime;
     
     // Load assignment properties
     private final ObjectProperty<Load> currentLoad;
@@ -169,6 +170,7 @@ public class DispatcherDriverStatus {
         this.lastUpdateTime = new SimpleObjectProperty<>(LocalDateTime.now());
         this.lastUpdatedBy = new SimpleStringProperty("mgubran1"); // Use system username
         this.eta = new SimpleObjectProperty<>(eta);
+        this.estimatedAvailableTime = new SimpleObjectProperty<>(eta);
         
         this.currentLoad = new SimpleObjectProperty<>(driver.getCurrentLoad());
         this.nextLoad = new SimpleObjectProperty<>();
@@ -197,6 +199,7 @@ public class DispatcherDriverStatus {
     // Driver info getters
     public Driver getDriver() { return driver; }
     
+    public void setDriver(Driver d) { this.driver = d; driverName.set(d.getName()); truckNumber.set(d.getTruckNumber()); trailerNumber.set(d.getTrailerNumber()); }
     public String getDriverId() { return driver.getDriverId(); }
     
     public String getDriverName() { return driverName.get(); }
@@ -204,6 +207,8 @@ public class DispatcherDriverStatus {
     
     public String getTruckNumber() { return truckNumber.get(); }
     public StringProperty truckNumberProperty() { return truckNumber; }
+    public String getTruckUnit() { return getTruckNumber(); }
+
     public void setTruckNumber(String value) { truckNumber.set(value); }
     
     public String getTrailerNumber() { return trailerNumber.get(); }
@@ -222,6 +227,9 @@ public class DispatcherDriverStatus {
     public void setLocation(String value) { location.set(value); }
     
     public String getNotes() { return notes.get(); }
+    public String getCurrentLocation() { return getLocation(); }
+    public StringProperty currentLocationProperty() { return locationProperty(); }
+
     public StringProperty notesProperty() { return notes; }
     public void setNotes(String value) { notes.set(value); }
     
@@ -235,6 +243,10 @@ public class DispatcherDriverStatus {
     public ObjectProperty<LocalDateTime> etaProperty() { return eta; }
     public void setETA(LocalDateTime value) { eta.set(value); }
     
+    public LocalDateTime getEstimatedAvailableTime() { return estimatedAvailableTime.get(); }
+    public ObjectProperty<LocalDateTime> estimatedAvailableTimeProperty() { return estimatedAvailableTime; }
+    public void setEstimatedAvailableTime(LocalDateTime value) { estimatedAvailableTime.set(value); }
+
     // Load assignment getters and setters
     public Load getCurrentLoad() { return currentLoad.get(); }
     public ObjectProperty<Load> currentLoadProperty() { return currentLoad; }

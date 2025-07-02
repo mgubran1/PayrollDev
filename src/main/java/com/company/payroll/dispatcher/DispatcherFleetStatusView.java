@@ -83,7 +83,7 @@ public class DispatcherFleetStatusView extends BorderPane {
     private final Label lastUpdateLabel;
     private final ProgressBar refreshProgress;
     private final GridPane summaryGrid;
-    private final VBox totalBox;
+    private VBox totalBox;
     
     // State Management
     private Timeline autoRefreshTimeline;
@@ -605,6 +605,8 @@ public class DispatcherFleetStatusView extends BorderPane {
             }
         }
     }
+        private boolean isGPSEnabled(String loc) { return loc.matches(".*\d+\.\d+.*"); }
+        private void openMapLocation(String loc) { }
     
     private class HoursProgressCell extends TableCell<DispatcherDriverStatus, String> {
         @Override
@@ -1199,6 +1201,15 @@ public class DispatcherFleetStatusView extends BorderPane {
                     
             } catch (IOException e) {
                 logger.error("Failed to export fleet status", e);
+    private void refreshSelectedDrivers() {}
+    private void exportSelectedDrivers() {}
+    private void showDriverHistory(DispatcherDriverStatus d) {}
+    private void contactDriver(DispatcherDriverStatus d) {}
+    private void exportToPDF() {}
+    private void emailFleetReport() {}
+    private void toggleCompactView(boolean v) {}
+    private void configureColumns() {}
+
                 showErrorAlert("Export Failed", 
                     "Failed to export fleet status: " + e.getMessage());
             }

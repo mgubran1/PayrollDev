@@ -228,7 +228,9 @@ public class Load {
     public LocalDate getPickUpDate() { return pickUpDate; }
     public void setPickUpDate(LocalDate pickUpDate) { this.pickUpDate = pickUpDate; }
     public LocalTime getPickUpTime() { return pickUpTime; }  // NEW GETTER
+    public LocalTime getPickupTime() { return getPickUpTime(); }
     public void setPickUpTime(LocalTime pickUpTime) { this.pickUpTime = pickUpTime; }  // NEW SETTER
+    public void setPickupTime(LocalTime time) { setPickUpTime(time); }
     public LocalDate getDeliveryDate() { return deliveryDate; }
     public void setDeliveryDate(LocalDate deliveryDate) { this.deliveryDate = deliveryDate; }
     public LocalTime getDeliveryTime() { return deliveryTime; }  // NEW GETTER

@@ -49,6 +49,7 @@ public class UpdateDriverStatusDialog extends Dialog<Boolean> {
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy");
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
     private static final Pattern LOCATION_PATTERN = Pattern.compile("^[\\w\\s,.-]{3,100}$");
+    private static final DispatcherDriverStatus.Status PREPARING_STATUS = DispatcherDriverStatus.Status.LOADING;
     
     // Core Components
     private final DispatcherDriverStatus driver;
@@ -964,7 +965,7 @@ public class UpdateDriverStatusDialog extends Dialog<Boolean> {
             case RETURNING -> "2-4 hours";
             case OFF_DUTY -> "8+ hours";
             case AVAILABLE -> "Immediate";
-            case PREPARING -> "15-30 minutes";
+            case PREPARING_STATUS -> "15-30 minutes";
             default -> "Unknown";
         };
         
@@ -993,7 +994,7 @@ public class UpdateDriverStatusDialog extends Dialog<Boolean> {
             case OFF_DUTY:
                 estimatedETA = estimatedETA.plusHours(10);
                 break;
-            case PREPARING:
+            case PREPARING_STATUS:
                 estimatedETA = estimatedETA.plusMinutes(20);
                 break;
         }
