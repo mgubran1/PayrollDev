@@ -295,6 +295,47 @@ public class DispatcherController {
             .filter(l -> l.getStatus() == Load.Status.BOOKED)
             .collect(Collectors.toList());
     }
+
+    /**
+     * Assign a load to a driver and persist the change. This updates the load
+     * record with the selected driver and refreshes dispatcher data.
+     *
+     * @param load   the load to assign
+     * @param driver the driver who will take the load
+     * @param notes  optional assignment notes
+     * @return true if the assignment succeeded
+     */
+    public boolean assignLoadToDriver(Load load, Employee driver, String notes) {
+        if (load == null || driver == null) {
+            return false;
+        }
+
+        try {
+            load.setDriver(driver);
+            load.setTruckUnitSnapshot(driver.getTruckUnit());
+
+            if (notes != null && !notes.isBlank()) {
+                String existing = load.getNotes();
+                if (existing == null || existing.isBlank()) {
+                    load.setNotes(notes.trim());
+                } else {
+                    load.setNotes(existing + "\n" + notes.trim());
+                }
+            }
+
+            if (load.getStatus() == Load.Status.BOOKED) {
+                load.setStatus(Load.Status.ASSIGNED);
+            }
+
+            loadDAO.update(load);
+            refreshAll();
+            logger.info("Assigned load {} to driver {}", load.getLoadNumber(), driver.getName());
+            return true;
+        } catch (Exception e) {
+            logger.error("Failed to assign load {} to driver {}", load.getLoadNumber(), driver.getName(), e);
+            return false;
+        }
+    }
     
     // Dialog methods
     public void showAssignLoadDialog() {
