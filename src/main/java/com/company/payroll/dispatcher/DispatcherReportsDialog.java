@@ -983,7 +983,7 @@ public class DispatcherReportsDialog extends Dialog<Void> {
         header.append("=".repeat(60)).append("\n");
         header.append(String.format("%s\n", title.toUpperCase()));
         header.append("=".repeat(60)).append("\n");
-        header.append(String.format("Company: %s\n", DispatcherSettings.getCompanyName()));
+        header.append(String.format("Company: %s\n", DispatcherSettings.getInstance().getCompanyName()));
         header.append(String.format("Period: %s to %s\n", 
             startDate.format(DATE_FORMAT), endDate.format(DATE_FORMAT)));
         header.append(String.format("Generated: %s\n", 
@@ -1370,7 +1370,9 @@ public class DispatcherReportsDialog extends Dialog<Void> {
         html.append("</div>\n");
         
         // Report info
-        html.append("<p><strong>Company:</strong> ").append(DispatcherSettings.getCompanyName()).append("</p>\n");
+        html.append("<p><strong>Company:</strong> ")
+            .append(DispatcherSettings.getInstance().getCompanyName())
+            .append("</p>\n");
         html.append("<p><strong>Period:</strong> ").append(reportMetadata.get("startDate"))
             .append(" to ").append(reportMetadata.get("endDate")).append("</p>\n");
         html.append("<p><strong>Generated:</strong> ").append(LocalDateTime.now().format(DATETIME_FORMAT)).append("</p>\n");
@@ -1411,7 +1413,7 @@ public class DispatcherReportsDialog extends Dialog<Void> {
         metadata.put("endDate", endDate.format(DATE_FORMAT));
         metadata.put("generatedAt", LocalDateTime.now());
         metadata.put("generatedBy", System.getProperty("user.name"));
-        metadata.put("company", DispatcherSettings.getCompanyName());
+        metadata.put("company", DispatcherSettings.getInstance().getCompanyName());
         
         if (currentReportData != null) {
             List<String> columns = new ArrayList<>();

@@ -21,6 +21,7 @@ import javafx.scene.text.FontWeight;
 import javafx.stage.Modality;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
+import com.company.payroll.loads.Load;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
