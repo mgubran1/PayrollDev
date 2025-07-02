@@ -122,11 +122,11 @@ public class DriverIncomeService {
             data.setAdvancesGiven(totalAdvancesGiven.doubleValue());
             data.setAdvanceRepayments(totalAdvanceRepayments.doubleValue());
             
-            // Fetch escrow deposits
+            // Fetch escrow deposits - FIXED: Pass Employee object instead of id and date
             double totalEscrowDeposits = 0.0;
             currentDate = startDate;
             while (!currentDate.isAfter(endDate)) {
-                double weeklyDeposit = payrollEscrow.getTotalDeposits(driver.getId(), currentDate);
+                double weeklyDeposit = payrollEscrow.getTotalDeposits(driver);  // Pass the Employee object
                 totalEscrowDeposits += weeklyDeposit;
                 currentDate = currentDate.plusWeeks(1);
             }
