@@ -502,140 +502,190 @@
     -fx-text-fill: white;
 }
 
-/* Maintenance Schedule Card */
-.maintenance-card {
+/* ===== ENHANCED DISPATCHER STYLES ===== */
+
+/* Main controller styles */
+.main-controller {
+    -fx-background-color: #ffffff;
+}
+
+/* Header panel */
+.header-panel {
+    -fx-background-color: linear-gradient(to right, #2196F3, #1976D2);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0, 0, 3);
+}
+
+/* Date header style */
+.date-header {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+}
+
+/* Status bar */
+.status-bar {
+    -fx-background-color: #f5f5f5;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 2 0 0 0;
+}
+
+/* Action buttons */
+.action-button {
+    -fx-background-color: rgba(255,255,255,0.2);
+    -fx-text-fill: white;
+    -fx-background-radius: 5px;
+    -fx-cursor: hand;
+}
+
+.action-button:hover {
+    -fx-background-color: rgba(255,255,255,0.3);
+    -fx-effect: dropshadow(gaussian, rgba(255,255,255,0.3), 5, 0, 0, 2);
+}
+
+/* Field labels */
+.field-label {
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+}
+
+/* Section headers */
+.section-header {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2c3e50;
+    -fx-padding: 0 0 5px 0;
+}
+
+/* Event table */
+.event-table {
     -fx-background-color: white;
-    -fx-background-radius: 10px;
-    -fx-padding: 15px;
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 5, 0, 0, 2);
 }
 
-.maintenance-card:hover {
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 10, 0, 0, 3);
-}
-
-/* Fleet Status Indicators */
-.fleet-status-active {
-    -fx-fill: #27ae60;
-}
-
-.fleet-status-idle {
-    -fx-fill: #f39c12;
-}
-
-.fleet-status-maintenance {
-    -fx-fill: #e74c3c;
-}
-
-.fleet-status-offline {
-    -fx-fill: #95a5a6;
-}
-
-/* Revenue Chart Styles */
-.revenue-positive {
-    -fx-text-fill: #27ae60;
-    -fx-font-weight: bold;
-}
-
-.revenue-negative {
-    -fx-text-fill: #e74c3c;
-    -fx-font-weight: bold;
-}
-
-/* Driver Performance Badge */
-.performance-excellent {
-    -fx-background-color: #27ae60;
-    -fx-text-fill: white;
-    -fx-background-radius: 15px;
-    -fx-padding: 5px 10px;
-}
-
-.performance-good {
-    -fx-background-color: #3498db;
-    -fx-text-fill: white;
-    -fx-background-radius: 15px;
-    -fx-padding: 5px 10px;
-}
-
-.performance-average {
-    -fx-background-color: #f39c12;
-    -fx-text-fill: white;
-    -fx-background-radius: 15px;
-    -fx-padding: 5px 10px;
-}
-
-.performance-poor {
-    -fx-background-color: #e74c3c;
-    -fx-text-fill: white;
-    -fx-background-radius: 15px;
-    -fx-padding: 5px 10px;
-}
-
-/* Alert Banner */
-.alert-banner {
-    -fx-background-color: #e74c3c;
-    -fx-text-fill: white;
-    -fx-padding: 12px;
+/* Stats in summary panel */
+.summary-panel {
+    -fx-background-color: #f8f9fa;
     -fx-background-radius: 5px;
+    -fx-padding: 15px;
 }
 
-.alert-banner .label {
-    -fx-text-fill: white;
+.stat-label {
     -fx-font-weight: bold;
+    -fx-font-size: 12px;
 }
 
-/* Expense Category Pills */
-.expense-category-fuel {
-    -fx-background-color: #e74c3c;
+.stat-value {
+    -fx-font-size: 12px;
+    -fx-text-fill: #2c3e50;
 }
 
-.expense-category-maintenance {
-    -fx-background-color: #f39c12;
+/* WebView for maps */
+.web-view-container {
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 1px;
+    -fx-border-radius: 5px;
 }
 
-.expense-category-insurance {
-    -fx-background-color: #3498db;
-}
-
-.expense-category-payroll {
-    -fx-background-color: #27ae60;
-}
-
-.expense-category-other {
-    -fx-background-color: #9b59b6;
-}
-
-/* Budget Progress */
-.budget-progress-bar {
+/* Details dialog styling */
+.load-details-dialog {
+    -fx-background-color: white;
     -fx-background-radius: 10px;
 }
 
-.budget-progress-bar.over-budget > .bar {
-    -fx-background-color: #e74c3c;
+.load-details-dialog .tab-pane {
+    -fx-background-color: white;
 }
 
-.budget-progress-bar.near-limit > .bar {
-    -fx-background-color: #f39c12;
+.details-box {
+    -fx-background-color: #f8f9fa;
+    -fx-background-radius: 5px;
+    -fx-border-color: #e0e0e0;
+    -fx-border-radius: 5px;
 }
 
-.budget-progress-bar.under-budget > .bar {
-    -fx-background-color: #27ae60;
+/* Status indicators for dispatcher */
+.status-unassigned {
+    -fx-text-fill: white;
+    -fx-background-color: orange;
+    -fx-padding: 3px 8px;
+    -fx-background-radius: 3px;
 }
 
-/* Empty State */
-.empty-state {
-    -fx-alignment: center;
-    -fx-padding: 50px;
+.status-assigned {
+    -fx-text-fill: white;
+    -fx-background-color: blue;
+    -fx-padding: 3px 8px;
+    -fx-background-radius: 3px;
 }
 
-.empty-state .label {
-    -fx-text-fill: #95a5a6;
-    -fx-font-size: 16px;
+.status-in-transit {
+    -fx-text-fill: white;
+    -fx-background-color: green;
+    -fx-padding: 3px 8px;
+    -fx-background-radius: 3px;
 }
 
-/* Export Menu */
-.export-menu-item {
-    -fx-graphic-text-gap: 10px;
+.status-delivered {
+    -fx-text-fill: white;
+    -fx-background-color: purple;
+    -fx-padding: 3px 8px;
+    -fx-background-radius: 3px;
+}
+
+.status-completed {
+    -fx-text-fill: white;
+    -fx-background-color: darkgreen;
+    -fx-padding: 3px 8px;
+    -fx-background-radius: 3px;
+}
+
+.status-cancelled {
+    -fx-text-fill: white;
+    -fx-background-color: red;
+    -fx-padding: 3px 8px;
+    -fx-background-radius: 3px;
+}
+
+/* Dispatcher daily view */
+.dispatcher-daily-view {
+    -fx-background-color: #ffffff;
+}
+
+/* Alerts box */
+.alerts-box {
+    -fx-background-color: #fff8e1;
+    -fx-background-radius: 5px;
+    -fx-border-color: #ffe082;
+    -fx-border-radius: 5px;
+    -fx-padding: 10px;
+}
+
+/* Driver list */
+.driver-list {
+    -fx-background-color: white;
+    -fx-background-radius: 5px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 5, 0, 0, 2);
+}
+
+.driver-list-cell {
+    -fx-padding: 10px;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.driver-list-cell:hover {
+    -fx-background-color: #f0f7ff;
+}
+
+.driver-list-cell:selected {
+    -fx-background-color: #e3f2fd;
+}
+
+/* Map container */
+.map-container {
+    -fx-border-color: #bdc3c7;
+    -fx-border-width: 1px;
+    -fx-border-radius: 5px;
 }
 
 /* Print Styles */

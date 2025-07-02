@@ -1,412 +1,704 @@
 package com.company.payroll.dispatcher;
 
-import com.company.payroll.employees.Employee;
-import com.company.payroll.employees.EmployeeDAO;
+import com.company.payroll.drivers.Driver;
 import com.company.payroll.loads.Load;
-import com.company.payroll.loads.LoadDAO;
-import javafx.animation.Animation;
-import javafx.animation.KeyFrame;
-import javafx.animation.Timeline;
-import javafx.application.Platform;
+import com.company.payroll.loads.LoadStatus;
+import com.company.payroll.exceptions.DispatcherException;
+import com.company.payroll.services.DataService;
+import com.company.payroll.services.NotificationService;
+import com.company.payroll.security.SecurityContext;
+
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.scene.control.Label;
-import javafx.util.Duration;
+import javafx.concurrent.Task;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
+import javafx.scene.layout.Region;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 /**
- * Controller for dispatcher operations
+ * Controller for dispatcher operations, handling interactions between the UI
+ * and data services for driver and load management
+ * 
+ * @author Payroll System
+ * @version 2.0
  */
 public class DispatcherController {
     private static final Logger logger = LoggerFactory.getLogger(DispatcherController.class);
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm");
+    private static final DateTimeFormatter DATETIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     
-    private final EmployeeDAO employeeDAO;
-    private final LoadDAO loadDAO;
+    // Current user and timestamp information
+    private final String currentUser = SecurityContext.getCurrentUser() != null ? 
+        SecurityContext.getCurrentUser() : "mgubran1";
+    private final LocalDateTime currentDateTime = LocalDateTime.now();
+    
+    // Services
+    private final DataService dataService;
+    private final NotificationService notificationService;
+    
+    // Observable collections for UI binding
     private final ObservableList<DispatcherDriverStatus> driverStatuses;
     private final ObservableList<Load> activeLoads;
-    private final Map<Integer, DispatcherDriverStatus> driverStatusMap;
+    private final Map<String, List<Load>> driverLoadsCache;
     
-    private Timeline clockTimeline;
+    // Thread pool for background tasks
+    private final ExecutorService executorService;
     
+    // Status listeners
+    private final List<StatusChangeListener> statusListeners;
+    
+    /**
+     * Constructor - initializes services and data collections
+     */
     public DispatcherController() {
-        this.employeeDAO = new EmployeeDAO();
-        this.loadDAO = new LoadDAO();
+        this.dataService = DataService.getInstance();
+        this.notificationService = NotificationService.getInstance();
         this.driverStatuses = FXCollections.observableArrayList();
         this.activeLoads = FXCollections.observableArrayList();
-        this.driverStatusMap = new HashMap<>();
+        this.driverLoadsCache = new HashMap<>();
+        this.executorService = Executors.newFixedThreadPool(3);
+        this.statusListeners = new ArrayList<>();
         
-        initializeData();
-        startAutoRefresh();
+        // Initial data load
+        initialize();
+        
+        logger.info("DispatcherController initialized by {} at {}", 
+            currentUser, currentDateTime.format(DATETIME_FORMAT));
     }
     
-    private void initializeData() {
-        logger.info("Initializing dispatcher data");
-        refreshAll();
+    /**
+     * Initialize the controller and load data
+     */
+    private void initialize() {
+        try {
+            loadDriverStatuses();
+            loadActiveLoads();
+            
+            // Register for real-time updates if available
+            registerForUpdates();
+            
+            // Start auto-refresh timer
+            startAutoRefresh();
+            
+        } catch (Exception e) {
+            logger.error("Failed to initialize dispatcher controller", e);
+            showErrorDialog("Initialization Error", 
+                "Failed to initialize dispatcher system: " + e.getMessage());
+        }
     }
     
-    private void startAutoRefresh() {
-        // Auto-refresh every 30 seconds
-        Timeline refreshTimeline = new Timeline(
-            new KeyFrame(Duration.seconds(30), e -> refreshAll())
-        );
-        refreshTimeline.setCycleCount(Animation.INDEFINITE);
-        refreshTimeline.play();
+    /**
+     * Get observable list of driver statuses
+     * @return ObservableList of driver statuses
+     */
+    public ObservableList<DispatcherDriverStatus> getDriverStatuses() {
+        return FXCollections.unmodifiableObservableList(driverStatuses);
     }
     
-    public void bindTimeLabel(Label timeLabel) {
-        if (clockTimeline != null) {
-            clockTimeline.stop();
+    /**
+     * Get observable list of active loads
+     * @return ObservableList of loads
+     */
+    public ObservableList<Load> getActiveLoads() {
+        return FXCollections.unmodifiableObservableList(activeLoads);
+    }
+    
+    /**
+     * Load driver status data
+     */
+    private void loadDriverStatuses() {
+        List<Driver> drivers = dataService.getAllDrivers();
+        
+        driverStatuses.clear();
+        for (Driver driver : drivers) {
+            DispatcherDriverStatus.Status status = determineDriverStatus(driver);
+            String location = determineDriverLocation(driver);
+            String notes = driver.getNotes();
+            LocalDateTime eta = determineDriverETA(driver);
+            
+            DispatcherDriverStatus driverStatus = new DispatcherDriverStatus(
+                driver, status, location, eta, notes
+            );
+            
+            driverStatuses.add(driverStatus);
         }
         
-        clockTimeline = new Timeline(
-            new KeyFrame(Duration.seconds(1), e -> {
-                timeLabel.setText(LocalDateTime.now().format(DATE_TIME_FORMATTER));
-            })
-        );
-        clockTimeline.setCycleCount(Animation.INDEFINITE);
-        clockTimeline.play();
+        logger.info("Loaded status for {} drivers", driverStatuses.size());
     }
     
-    public void refreshAll() {
-        logger.info("Refreshing all dispatcher data");
-        Platform.runLater(() -> {
-            refreshDriverStatuses();
-            refreshActiveLoads();
-            calculateDriverAvailability();
+    /**
+     * Load active loads data
+     */
+    private void loadActiveLoads() {
+        List<Load> loads = dataService.getActiveLoads();
+        activeLoads.setAll(loads);
+        logger.info("Loaded {} active loads", activeLoads.size());
+    }
+    
+    /**
+     * Determine driver status based on current assignment and state
+     * @param driver The driver to check
+     * @return Current status
+     */
+    private DispatcherDriverStatus.Status determineDriverStatus(Driver driver) {
+        // In a real system, this would use driver's current state, 
+        // ELD status, and assignment data
+        
+        // Simulated logic for demo
+        if (driver.getCurrentLoad() != null) {
+            Load currentLoad = driver.getCurrentLoad();
+            
+            if (currentLoad.getStatus() == LoadStatus.LOADING) {
+                return DispatcherDriverStatus.Status.LOADING;
+            } else if (currentLoad.getStatus() == LoadStatus.UNLOADING) {
+                return DispatcherDriverStatus.Status.UNLOADING;
+            } else {
+                return DispatcherDriverStatus.Status.ON_ROAD;
+            }
+        }
+        
+        if (driver.isOnDuty()) {
+            if (driver.isAvailableForDispatch()) {
+                return DispatcherDriverStatus.Status.AVAILABLE;
+            } else {
+                return DispatcherDriverStatus.Status.BREAK;
+            }
+        }
+        
+        if (driver.isInSleeper()) {
+            return DispatcherDriverStatus.Status.SLEEPER;
+        }
+        
+        return DispatcherDriverStatus.Status.OFF_DUTY;
+    }
+    
+    /**
+     * Determine driver location based on current assignment and GPS
+     * @param driver The driver to check
+     * @return Current location
+     */
+    private String determineDriverLocation(Driver driver) {
+        // In a real system, this would use GPS tracking data and geofencing
+        
+        // Simulated logic for demo
+        if (driver.getCurrentLoad() != null) {
+            Load load = driver.getCurrentLoad();
+            
+            if (load.getStatus() == LoadStatus.LOADING) {
+                return "At " + load.getOriginName();
+            } else if (load.getStatus() == LoadStatus.UNLOADING) {
+                return "At " + load.getDestName();
+            } else if (load.getStatus() == LoadStatus.IN_TRANSIT) {
+                // Simulate GPS location
+                return "En route to " + load.getDestName();
+            }
+        }
+        
+        return driver.getHomeTerminal();
+    }
+    
+    /**
+     * Determine driver ETA based on current assignment
+     * @param driver The driver to check
+     * @return Estimated time of arrival
+     */
+    private LocalDateTime determineDriverETA(Driver driver) {
+        if (driver.getCurrentLoad() != null) {
+            Load load = driver.getCurrentLoad();
+            
+            if (load.getStatus() == LoadStatus.IN_TRANSIT) {
+                return load.getDeliveryDate().atTime(12, 0);
+            } else if (load.getStatus() == LoadStatus.ASSIGNED) {
+                return load.getPickupDate().atTime(8, 0);
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Get loads for a specific driver in a date range
+     * @param driver The driver
+     * @param startDate Start date
+     * @param endDate End date
+     * @return List of loads for the driver
+     */
+    public List<Load> getLoadsForDriverAndRange(Driver driver, LocalDate startDate, LocalDate endDate) {
+        String driverId = driver.getDriverId();
+        
+        // Check cache first
+        String cacheKey = driverId + "_" + startDate + "_" + endDate;
+        if (driverLoadsCache.containsKey(cacheKey)) {
+            logger.debug("Cache hit for driver loads: {}", cacheKey);
+            return driverLoadsCache.get(cacheKey);
+        }
+        
+        logger.info("Fetching loads for driver {} from {} to {}", 
+            driver.getName(), startDate, endDate);
+        
+        List<Load> loads = dataService.getLoadsForDriver(driver, startDate, endDate);
+        
+        // Cache the result
+        driverLoadsCache.put(cacheKey, new ArrayList<>(loads));
+        
+        return loads;
+    }
+    
+    /**
+     * Update driver status
+     * @param driverStatus The driver status to update
+     * @param newStatus New status
+     * @param location New location (can be null to keep current)
+     * @param eta New ETA (can be null to keep current)
+     * @param notes Notes to add (can be null or empty for no change)
+     */
+    public void updateDriverStatus(DispatcherDriverStatus driverStatus, 
+                                  DispatcherDriverStatus.Status newStatus,
+                                  String location, 
+                                  LocalDateTime eta, 
+                                  String notes) {
+        Driver driver = driverStatus.getDriver();
+        String oldStatus = driverStatus.getStatus().toString();
+        
+        logger.info("Updating driver status: {} from {} to {}", 
+            driver.getName(), oldStatus, newStatus);
+        
+        // Update driver in data service
+        try {
+            // Record previous state for notification
+            DispatcherDriverStatus previousStatus = new DispatcherDriverStatus(
+                driver, driverStatus.getStatus(), 
+                driverStatus.getLocation(), 
+                driverStatus.getETA(),
+                driverStatus.getNotes()
+            );
+            
+            // Update location if provided
+            if (location != null && !location.isEmpty()) {
+                driver.setLocation(location);
+            }
+            
+            // Update notes if provided
+            if (notes != null && !notes.isEmpty()) {
+                String currentNotes = driver.getNotes();
+                if (currentNotes != null && !currentNotes.isEmpty()) {
+                    driver.setNotes(currentNotes + "\n" + notes);
+                } else {
+                    driver.setNotes(notes);
+                }
+            }
+            
+            // Update status in the data service
+            dataService.updateDriverStatus(driver, convertStatus(newStatus));
+            
+            // Update the observable status object
+            driverStatus.setStatus(newStatus);
+            if (location != null && !location.isEmpty()) {
+                driverStatus.setLocation(location);
+            }
+            if (eta != null) {
+                driverStatus.setETA(eta);
+            }
+            if (notes != null && !notes.isEmpty()) {
+                driverStatus.setNotes(driver.getNotes());
+            }
+            
+            // Notify status listeners
+            notifyStatusListeners(previousStatus, driverStatus);
+            
+        } catch (Exception e) {
+            logger.error("Failed to update driver status", e);
+            throw new DispatcherException("Failed to update driver status: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Convert internal status to data service status
+     * @param status Internal status
+     * @return Data service status
+     */
+    private String convertStatus(DispatcherDriverStatus.Status status) {
+        // Map internal status enum to data service status strings
+        switch (status) {
+            case AVAILABLE: return "AVAILABLE";
+            case ON_ROAD: return "ON_ROAD";
+            case LOADING: return "LOADING";
+            case UNLOADING: return "UNLOADING";
+            case BREAK: return "BREAK";
+            case OFF_DUTY: return "OFF_DUTY";
+            case SLEEPER: return "SLEEPER";
+            default: return "UNKNOWN";
+        }
+    }
+    
+    /**
+     * Refresh all data
+     */
+    public void refreshData() {
+        logger.info("Manual data refresh triggered by {}", currentUser);
+        
+        Task<Void> refreshTask = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                updateMessage("Refreshing driver statuses...");
+                loadDriverStatuses();
+                
+                updateMessage("Refreshing active loads...");
+                loadActiveLoads();
+                
+                updateMessage("Clearing cache...");
+                driverLoadsCache.clear();
+                
+                return null;
+            }
+        };
+        
+        refreshTask.setOnSucceeded(e -> {
+            logger.info("Data refresh completed");
+        });
+        
+        refreshTask.setOnFailed(e -> {
+            logger.error("Data refresh failed", refreshTask.getException());
+        });
+        
+        executorService.submit(refreshTask);
+    }
+    
+    /**
+     * Register for real-time updates
+     */
+    private void registerForUpdates() {
+        // In a real system, this would register for push notifications
+        // from the server for real-time updates
+        
+        dataService.registerForUpdates(update -> {
+            if (update.getType().equals("DRIVER_STATUS")) {
+                Platform.runLater(() -> handleDriverStatusUpdate(update));
+            } else if (update.getType().equals("LOAD_UPDATE")) {
+                Platform.runLater(() -> handleLoadUpdate(update));
+            }
         });
     }
     
-    private void refreshDriverStatuses() {
-        driverStatuses.clear();
-        driverStatusMap.clear();
+    /**
+     * Handle driver status update from server
+     * @param update Update data
+     */
+    private void handleDriverStatusUpdate(DataUpdate update) {
+        String driverId = update.getEntityId();
         
-        List<Employee> activeDrivers = employeeDAO.getActive().stream()
-            .filter(Employee::isDriver)
-            .collect(Collectors.toList());
-        
-        for (Employee driver : activeDrivers) {
-            DispatcherDriverStatus status = new DispatcherDriverStatus(driver);
-            
-            // Get current and upcoming loads for this driver
-            List<Load> driverLoads = loadDAO.getByDriver(driver.getId()).stream()
-                .filter(l -> l.getStatus() != Load.Status.CANCELLED)
-                .sorted(Comparator.comparing(Load::getPickUpDate, Comparator.nullsLast(Comparator.naturalOrder()))
-                    .thenComparing(Load::getPickUpTime, Comparator.nullsLast(Comparator.naturalOrder())))
-                .collect(Collectors.toList());
-            
-            status.setAssignedLoads(driverLoads);
-            
-            // Determine current status
-            determineDriverStatus(status, driverLoads);
-            
-            driverStatuses.add(status);
-            driverStatusMap.put(driver.getId(), status);
+        // Find the driver in our list
+        for (DispatcherDriverStatus status : driverStatuses) {
+            if (status.getDriver().getDriverId().equals(driverId)) {
+                // Get updated data
+                Driver updatedDriver = dataService.getDriverById(driverId);
+                
+                // Record previous status for notification
+                DispatcherDriverStatus previousStatus = new DispatcherDriverStatus(
+                    status.getDriver(), status.getStatus(), 
+                    status.getLocation(), status.getETA(), status.getNotes()
+                );
+                
+                // Update the status object
+                status.setStatus(determineDriverStatus(updatedDriver));
+                status.setLocation(determineDriverLocation(updatedDriver));
+                status.setETA(determineDriverETA(updatedDriver));
+                status.setNotes(updatedDriver.getNotes());
+                status.setDriver(updatedDriver);
+                
+                // Notify listeners
+                notifyStatusListeners(previousStatus, status);
+                
+                break;
+            }
         }
-        
-        logger.info("Refreshed {} driver statuses", driverStatuses.size());
     }
     
-    private void determineDriverStatus(DispatcherDriverStatus driverStatus, List<Load> loads) {
-        LocalDateTime now = LocalDateTime.now();
+    /**
+     * Handle load update from server
+     * @param update Update data
+     */
+    private void handleLoadUpdate(DataUpdate update) {
+        String loadId = update.getEntityId();
         
-        // Find current load (in transit or being loaded/unloaded)
-        Optional<Load> currentLoad = loads.stream()
-            .filter(l -> l.getStatus() == Load.Status.IN_TRANSIT || l.getStatus() == Load.Status.ASSIGNED)
-            .findFirst();
-        
-        if (currentLoad.isPresent()) {
-            Load load = currentLoad.get();
-            driverStatus.setCurrentLoad(load);
-            
-            if (load.getStatus() == Load.Status.IN_TRANSIT) {
-                driverStatus.setStatus(DispatcherDriverStatus.Status.ON_ROAD);
-                driverStatus.setCurrentLocation(
-                    String.format("En route to %s", load.getDropLocation())
-                );
+        // Update active loads
+        for (int i = 0; i < activeLoads.size(); i++) {
+            if (activeLoads.get(i).getLoadId().equals(loadId)) {
+                Load updatedLoad = dataService.getLoadById(loadId);
                 
-                // Calculate ETA based on delivery date/time
-                if (load.getDeliveryDate() != null) {
-                    LocalDateTime eta = LocalDateTime.of(
-                        load.getDeliveryDate(),
-                        load.getDeliveryTime() != null ? load.getDeliveryTime() : LocalTime.of(12, 0)
-                    );
-                    driverStatus.setEstimatedAvailableTime(eta);
-                }
-            } else {
-                driverStatus.setStatus(DispatcherDriverStatus.Status.LOADING);
-                driverStatus.setCurrentLocation(load.getPickUpLocation());
-            }
-        } else {
-            // Check for upcoming loads
-            Optional<Load> nextLoad = loads.stream()
-                .filter(l -> l.getStatus() == Load.Status.BOOKED)
-                .filter(l -> l.getPickUpDate() != null)
-                .findFirst();
-            
-            if (nextLoad.isPresent()) {
-                Load load = nextLoad.get();
-                LocalDateTime pickupTime = LocalDateTime.of(
-                    load.getPickUpDate(),
-                    load.getPickUpTime() != null ? load.getPickUpTime() : LocalTime.of(8, 0)
-                );
-                
-                // If pickup is within next 2 hours, mark as preparing
-                if (pickupTime.isBefore(now.plusHours(2))) {
-                    driverStatus.setStatus(DispatcherDriverStatus.Status.PREPARING);
-                    driverStatus.setNextLoad(load);
+                if (updatedLoad != null) {
+                    activeLoads.set(i, updatedLoad);
                 } else {
-                    driverStatus.setStatus(DispatcherDriverStatus.Status.AVAILABLE);
-                    driverStatus.setNextLoad(load);
+                    // Load might have been completed or canceled
+                    activeLoads.remove(i);
                 }
-            } else {
-                // Check last completed load to determine if returning
-                Optional<Load> lastDelivered = loads.stream()
-                    .filter(l -> l.getStatus() == Load.Status.DELIVERED || l.getStatus() == Load.Status.PAID)
-                    .max(Comparator.comparing(Load::getDeliveryDate, Comparator.nullsFirst(Comparator.naturalOrder())));
                 
-                if (lastDelivered.isPresent()) {
-                    Load load = lastDelivered.get();
-                    LocalDateTime deliveryTime = LocalDateTime.of(
-                        load.getDeliveryDate(),
-                        load.getDeliveryTime() != null ? load.getDeliveryTime() : LocalTime.of(17, 0)
+                break;
+            }
+        }
+        
+        // Clear cache for affected drivers
+        String driverId = update.getProperty("driverId");
+        if (driverId != null) {
+            driverLoadsCache.keySet().stream()
+                .filter(key -> key.startsWith(driverId + "_"))
+                .collect(Collectors.toList())
+                .forEach(driverLoadsCache::remove);
+        }
+    }
+    
+    /**
+     * Start auto-refresh timer
+     */
+    private void startAutoRefresh() {
+        int refreshInterval = DispatcherSettings.getInstance().getAutoRefreshInterval();
+        
+        Timer refreshTimer = new Timer("DispatcherRefreshTimer", true);
+        refreshTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                Platform.runLater(() -> {
+                    try {
+                        loadDriverStatuses();
+                        loadActiveLoads();
+                    } catch (Exception e) {
+                        logger.error("Auto-refresh failed", e);
+                    }
+                });
+            }
+        }, refreshInterval * 1000, refreshInterval * 1000);
+        
+        logger.info("Auto-refresh timer started with interval {} seconds", refreshInterval);
+    }
+    
+    /**
+     * Add a listener for status changes
+     * @param listener Listener to add
+     */
+    public void addStatusChangeListener(StatusChangeListener listener) {
+        if (!statusListeners.contains(listener)) {
+            statusListeners.add(listener);
+        }
+    }
+    
+    /**
+     * Remove a status change listener
+     * @param listener Listener to remove
+     */
+    public void removeStatusChangeListener(StatusChangeListener listener) {
+        statusListeners.remove(listener);
+    }
+    
+    /**
+     * Notify all listeners of a status change
+     * @param oldStatus Previous status
+     * @param newStatus Updated status
+     */
+    private void notifyStatusListeners(DispatcherDriverStatus oldStatus, DispatcherDriverStatus newStatus) {
+        for (StatusChangeListener listener : statusListeners) {
+            listener.onStatusChanged(oldStatus, newStatus);
+        }
+    }
+    
+    /**
+     * Send notification about a status update
+     * @param driverStatus Updated driver status
+     * @param reason Reason for update
+     */
+    public void sendStatusNotification(DispatcherDriverStatus driverStatus, String reason) {
+        Driver driver = driverStatus.getDriver();
+        
+        Map<String, String> params = new HashMap<>();
+        params.put("driverName", driver.getName());
+        params.put("status", driverStatus.getStatus().getDisplayName());
+        params.put("location", driverStatus.getLocation());
+        params.put("reason", reason);
+        params.put("timestamp", LocalDateTime.now().format(DATETIME_FORMAT));
+        
+        CompletableFuture.runAsync(() -> {
+            try {
+                notificationService.sendNotification(
+                    "DRIVER_STATUS_UPDATE",
+                    "Driver Status Update: " + driver.getName(),
+                    params,
+                    Arrays.asList("dispatch", "operations")
+                );
+                
+                logger.info("Status notification sent for driver {}", driver.getName());
+            } catch (Exception e) {
+                logger.error("Failed to send status notification", e);
+            }
+        });
+    }
+    
+    /**
+     * Assign a load to a driver
+     * @param driver The driver to assign
+     * @param load The load to assign
+     */
+    public void assignLoad(Driver driver, Load load) {
+        logger.info("Assigning load #{} to driver {}", load.getLoadNumber(), driver.getName());
+        
+        try {
+            // Update the load with the driver assignment
+            dataService.assignLoadToDriver(load.getLoadId(), driver.getDriverId());
+            
+            // Update the driver's current load
+            driver.setCurrentLoad(load);
+            
+            // Update status if driver was available
+            for (DispatcherDriverStatus status : driverStatuses) {
+                if (status.getDriver().equals(driver) && 
+                    status.getStatus() == DispatcherDriverStatus.Status.AVAILABLE) {
+                    
+                    // Update status to assigned/on road
+                    updateDriverStatus(
+                        status, 
+                        DispatcherDriverStatus.Status.ON_ROAD, 
+                        "En route to " + load.getOriginName(), 
+                        load.getPickupDate().atTime(8, 0), 
+                        "Assigned to load #" + load.getLoadNumber()
                     );
                     
-                    // If delivered within last 24 hours, mark as returning
-                    if (deliveryTime.isAfter(now.minusHours(24))) {
-                        driverStatus.setStatus(DispatcherDriverStatus.Status.RETURNING);
-                        driverStatus.setCurrentLocation(load.getDropLocation());
-                        driverStatus.setEstimatedAvailableTime(deliveryTime.plusHours(12)); // Estimate 12 hours to return
-                    } else {
-                        driverStatus.setStatus(DispatcherDriverStatus.Status.AVAILABLE);
-                        driverStatus.setCurrentLocation("Home Base");
-                    }
-                } else {
-                    driverStatus.setStatus(DispatcherDriverStatus.Status.AVAILABLE);
-                    driverStatus.setCurrentLocation("Home Base");
+                    break;
                 }
             }
-        }
-    }
-    
-    private void refreshActiveLoads() {
-        activeLoads.clear();
-        
-        List<Load> loads = loadDAO.getAll().stream()
-            .filter(l -> l.getStatus() != Load.Status.CANCELLED && l.getStatus() != Load.Status.PAID)
-            .sorted(Comparator.comparing(Load::getPickUpDate, Comparator.nullsLast(Comparator.naturalOrder()))
-                .thenComparing(Load::getPickUpTime, Comparator.nullsLast(Comparator.naturalOrder())))
-            .collect(Collectors.toList());
-        
-        activeLoads.addAll(loads);
-        logger.info("Refreshed {} active loads", activeLoads.size());
-    }
-    
-    private void calculateDriverAvailability() {
-        // Calculate availability windows for each driver
-        for (DispatcherDriverStatus status : driverStatuses) {
-            calculateAvailabilityWindows(status);
-        }
-    }
-    
-    private void calculateAvailabilityWindows(DispatcherDriverStatus driverStatus) {
-        List<TimeSlot> availability = new ArrayList<>();
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime endOfWeek = now.plusDays(7).withHour(23).withMinute(59);
-        
-        // Get all assigned loads sorted by pickup time
-        List<Load> assignedLoads = driverStatus.getAssignedLoads().stream()
-            .filter(l -> l.getPickUpDate() != null)
-            .sorted(Comparator.comparing(Load::getPickUpDate)
-                .thenComparing(Load::getPickUpTime, Comparator.nullsFirst(Comparator.naturalOrder())))
-            .collect(Collectors.toList());
-        
-        LocalDateTime currentTime = now;
-        
-        // If driver has current load, start from estimated completion
-        if (driverStatus.getCurrentLoad() != null && driverStatus.getEstimatedAvailableTime() != null) {
-            currentTime = driverStatus.getEstimatedAvailableTime();
-        }
-        
-        // Calculate availability between loads
-        for (Load load : assignedLoads) {
-            LocalDateTime pickupTime = LocalDateTime.of(
-                load.getPickUpDate(),
-                load.getPickUpTime() != null ? load.getPickUpTime() : LocalTime.of(8, 0)
-            );
             
-            // Add buffer time before pickup (2 hours)
-            LocalDateTime bufferStart = pickupTime.minusHours(2);
+            // Refresh active loads
+            loadActiveLoads();
             
-            if (currentTime.isBefore(bufferStart)) {
-                availability.add(new TimeSlot(currentTime, bufferStart));
-            }
-            
-            // Update current time to after delivery
-            if (load.getDeliveryDate() != null) {
-                LocalDateTime deliveryTime = LocalDateTime.of(
-                    load.getDeliveryDate(),
-                    load.getDeliveryTime() != null ? load.getDeliveryTime() : LocalTime.of(17, 0)
-                );
+            // Clear cache for this driver
+            String driverId = driver.getDriverId();
+            driverLoadsCache.keySet().stream()
+                .filter(key -> key.startsWith(driverId + "_"))
+                .collect(Collectors.toList())
+                .forEach(driverLoadsCache::remove);
                 
-                // Add rest time after delivery (10 hours minimum)
-                currentTime = deliveryTime.plusHours(10);
-            } else {
-                // Estimate 24 hours for load completion if no delivery date
-                currentTime = pickupTime.plusHours(24);
-            }
+        } catch (Exception e) {
+            logger.error("Failed to assign load", e);
+            throw new DispatcherException("Failed to assign load: " + e.getMessage(), e);
         }
-        
-        // Add remaining availability until end of week
-        if (currentTime.isBefore(endOfWeek)) {
-            availability.add(new TimeSlot(currentTime, endOfWeek));
-        }
-        
-        driverStatus.setAvailabilityWindows(availability);
     }
     
-    // Getters
-    public ObservableList<DispatcherDriverStatus> getDriverStatuses() {
-        return driverStatuses;
-    }
-    
-    public ObservableList<Load> getActiveLoads() {
-        return activeLoads;
-    }
-    
-    public List<DispatcherDriverStatus> getAvailableDrivers() {
-        return driverStatuses.stream()
-            .filter(d -> d.getStatus() == DispatcherDriverStatus.Status.AVAILABLE)
-            .collect(Collectors.toList());
-    }
-    
-    public List<Load> getUnassignedLoads() {
-        return activeLoads.stream()
-            .filter(l -> l.getDriver() == null)
-            .filter(l -> l.getStatus() == Load.Status.BOOKED)
-            .collect(Collectors.toList());
-    }
-
     /**
-     * Assign a load to a driver and persist the change. This updates the load
-     * record with the selected driver and refreshes dispatcher data.
-     *
-     * @param load   the load to assign
-     * @param driver the driver who will take the load
-     * @param notes  optional assignment notes
-     * @return true if the assignment succeeded
+     * Unassign a load from a driver
+     * @param load The load to unassign
      */
-    public boolean assignLoadToDriver(Load load, Employee driver, String notes) {
-        if (load == null || driver == null) {
-            return false;
+    public void unassignLoad(Load load) {
+        if (load.getDriver() == null) {
+            logger.warn("Attempt to unassign load #{} which has no driver", load.getLoadNumber());
+            return;
         }
-
+        
+        Driver driver = load.getDriver();
+        logger.info("Unassigning load #{} from driver {}", load.getLoadNumber(), driver.getName());
+        
         try {
-            load.setDriver(driver);
-            load.setTruckUnitSnapshot(driver.getTruckUnit());
-
-            if (notes != null && !notes.isBlank()) {
-                String existing = load.getNotes();
-                if (existing == null || existing.isBlank()) {
-                    load.setNotes(notes.trim());
-                } else {
-                    load.setNotes(existing + "\n" + notes.trim());
+            // Update the load to remove driver assignment
+            dataService.unassignLoad(load.getLoadId());
+            
+            // Update the driver's current load if it matches
+            if (driver.getCurrentLoad() != null && 
+                driver.getCurrentLoad().getLoadId().equals(load.getLoadId())) {
+                driver.setCurrentLoad(null);
+                
+                // Update driver status if needed
+                for (DispatcherDriverStatus status : driverStatuses) {
+                    if (status.getDriver().equals(driver)) {
+                        updateDriverStatus(
+                            status,
+                            DispatcherDriverStatus.Status.AVAILABLE,
+                            driver.getHomeTerminal(),
+                            null,
+                            "Unassigned from load #" + load.getLoadNumber()
+                        );
+                        break;
+                    }
                 }
             }
-
-            if (load.getStatus() == Load.Status.BOOKED) {
-                load.setStatus(Load.Status.ASSIGNED);
-            }
-
-            loadDAO.update(load);
-            refreshAll();
-            logger.info("Assigned load {} to driver {}", load.getLoadNumber(), driver.getName());
-            return true;
+            
+            // Refresh active loads
+            loadActiveLoads();
+            
+            // Clear cache for this driver
+            String driverId = driver.getDriverId();
+            driverLoadsCache.keySet().stream()
+                .filter(key -> key.startsWith(driverId + "_"))
+                .collect(Collectors.toList())
+                .forEach(driverLoadsCache::remove);
+                
         } catch (Exception e) {
-            logger.error("Failed to assign load {} to driver {}", load.getLoadNumber(), driver.getName(), e);
-            return false;
+            logger.error("Failed to unassign load", e);
+            throw new DispatcherException("Failed to unassign load: " + e.getMessage(), e);
         }
     }
-
+    
     /**
-     * Update a driver's status information.
+     * Shutdown the controller, releasing resources
      */
-    public void updateDriverStatus(DispatcherDriverStatus driver,
-                                   DispatcherDriverStatus.Status newStatus,
-                                   String location,
-                                   LocalDateTime eta,
-                                   String notes) {
-        if (driver == null) return;
-        driver.setStatus(newStatus);
-        if (location != null && !location.isBlank()) {
-            driver.setCurrentLocation(location.trim());
-        }
-        driver.setEstimatedAvailableTime(eta);
-        if (notes != null && !notes.isBlank()) {
-            String existing = driver.getDriver().getNotes();
-            if (existing == null || existing.isBlank()) {
-                driver.getDriver().setNotes(notes.trim());
-            } else {
-                driver.getDriver().setNotes(existing + "\n" + notes.trim());
-            }
-        }
-        logger.info("Driver {} status updated to {}", driver.getDriverName(), newStatus);
-    }
-
-    public List<Load> getLoadsForDriverAndRange(Employee driver, LocalDate start, LocalDate end) {
-        if (driver == null) return List.of();
-        return loadDAO.getByDriverAndDateRange(driver.getId(), start, end);
-    }
-    
-    // Dialog methods
-    public void showAssignLoadDialog() {
-        logger.info("Showing assign load dialog");
-        new AssignLoadDialog(this).showAndWait();
-    }
-    
-    public void showUpdateStatusDialog() {
-        logger.info("Showing update status dialog");
-        new UpdateStatusDialog(this).showAndWait();
-    }
-    
-    public void showFleetTracking() {
-        logger.info("Showing fleet tracking");
-        new FleetTrackingDialog(this).show();
-    }
-    
-    public void showReports() {
-        logger.info("Showing dispatcher reports");
-        new DispatcherReportsDialog(this).show();
-    }
-    
-    // Inner class for time slots
-    public static class TimeSlot {
-        private final LocalDateTime start;
-        private final LocalDateTime end;
+    public void shutdown() {
+        executorService.shutdown();
         
-        public TimeSlot(LocalDateTime start, LocalDateTime end) {
-            this.start = start;
-            this.end = end;
+        try {
+            dataService.unregisterForUpdates();
+        } catch (Exception e) {
+            logger.error("Error during shutdown", e);
         }
         
-        public LocalDateTime getStart() { return start; }
-        public LocalDateTime getEnd() { return end; }
+        logger.info("DispatcherController shutdown by {}", currentUser);
+    }
+    
+    /**
+     * Show error dialog
+     * @param title Dialog title
+     * @param message Error message
+     */
+    private void showErrorDialog(String title, String message) {
+        Platform.runLater(() -> {
+            Alert alert = new Alert(AlertType.ERROR);
+            alert.setTitle(title);
+            alert.setHeaderText(null);
+            alert.setContentText(message);
+            
+            // Ensure dialog is resizable for long messages
+            alert.getDialogPane().setMinHeight(Region.USE_PREF_SIZE);
+            alert.getDialogPane().setMinWidth(Region.USE_PREF_SIZE);
+            
+            alert.showAndWait();
+        });
+    }
+    
+    /**
+     * Interface for status change listeners
+     */
+    public interface StatusChangeListener {
+        void onStatusChanged(DispatcherDriverStatus oldStatus, DispatcherDriverStatus newStatus);
+    }
+    
+    /**
+     * Data update class for receiving push notifications
+     */
+    private static class DataUpdate {
+        private String type;
+        private String entityId;
+        private Map<String, String> properties;
         
-        public boolean contains(LocalDateTime time) {
-            return !time.isBefore(start) && !time.isAfter(end);
-        }
+        public String getType() { return type; }
+        public String getEntityId() { return entityId; }
         
-        public boolean overlaps(LocalDateTime otherStart, LocalDateTime otherEnd) {
-            return !otherEnd.isBefore(start) && !otherStart.isAfter(end);
+        public String getProperty(String key) {
+            return properties != null ? properties.get(key) : null;
         }
     }
 }
