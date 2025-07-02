@@ -4,6 +4,7 @@ import com.company.payroll.employees.Employee;
 import com.company.payroll.trailers.Trailer;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -47,6 +48,16 @@ public class Load {
     private String deliveryCity;
     private String deliveryState;
     private double driverRate;
+    // Additional placeholder fields
+    private double miles;
+    private double estimatedHours;
+    private double rate;
+    private double accessorials;
+    private double detention;
+    private double fuelSurcharge;
+    private String customerId;
+    private LocalDateTime assignedDate;
+    private String assignedBy;
 
     public Load(int id, String loadNumber, String poNumber, String customer, String pickUpLocation, String dropLocation,
                 Employee driver, String truckUnitSnapshot, Status status, double grossAmount, String notes, 
@@ -269,6 +280,34 @@ public class Load {
     public void setDriverRate(double driverRate) {
         this.driverRate = driverRate;
     }
+
+    // Placeholder getters/setters for additional properties used by dispatcher
+    public double getMiles() { return miles; }
+    public void setMiles(double miles) { this.miles = miles; }
+
+    public double getEstimatedHours() { return estimatedHours; }
+    public void setEstimatedHours(double estimatedHours) { this.estimatedHours = estimatedHours; }
+
+    public double getRate() { return rate; }
+    public void setRate(double rate) { this.rate = rate; }
+
+    public double getAccessorials() { return accessorials; }
+    public void setAccessorials(double accessorials) { this.accessorials = accessorials; }
+
+    public double getDetention() { return detention; }
+    public void setDetention(double detention) { this.detention = detention; }
+
+    public double getFuelSurcharge() { return fuelSurcharge; }
+    public void setFuelSurcharge(double fuelSurcharge) { this.fuelSurcharge = fuelSurcharge; }
+
+    public String getCustomerId() { return customerId; }
+    public void setCustomerId(String customerId) { this.customerId = customerId; }
+
+    public LocalDateTime getAssignedDate() { return assignedDate; }
+    public void setAssignedDate(LocalDateTime assignedDate) { this.assignedDate = assignedDate; }
+
+    public String getAssignedBy() { return assignedBy; }
+    public void setAssignedBy(String assignedBy) { this.assignedBy = assignedBy; }
     
     // Helper methods to update location strings when city/state are set individually
     private void updatePickUpLocation() {
@@ -290,6 +329,47 @@ public class Load {
             }
         }
     }
+
+    // Placeholder getters for extended data used by dispatcher views
+    public String getBolNumber() { return ""; }
+    public String getBrokerContact() { return ""; }
+    public String getBrokerName() { return ""; }
+    public String getBrokerPhone() { return ""; }
+    public String getCommodity() { return ""; }
+    public String getContactEmail() { return ""; }
+    public String getContactName() { return ""; }
+    public String getContactPhone() { return ""; }
+    public String getDestAddress() { return ""; }
+    public String getDestCity() { return deliveryCity; }
+    public String getDestContact() { return ""; }
+    public String getDestName() { return customer; }
+    public String getDestPhone() { return ""; }
+    public String getDestState() { return deliveryState; }
+    public String getDestZip() { return ""; }
+    public double getDriverBonus() { return 0.0; }
+    public double getDriverPay() { return 0.0; }
+    public LocalDate getDueDate() { return null; }
+    public String getHazmatClass() { return ""; }
+    public LocalDate getInvoiceDate() { return null; }
+    public String getInvoiceNumber() { return ""; }
+    public String getMode() { return ""; }
+    public String getOriginAddress() { return ""; }
+    public String getOriginCity() { return pickupCity; }
+    public String getOriginContact() { return ""; }
+    public String getOriginName() { return customer; }
+    public String getOriginPhone() { return ""; }
+    public String getOriginState() { return pickupState; }
+    public String getOriginZip() { return ""; }
+    public String getPackaging() { return ""; }
+    public String getPaymentTerms() { return ""; }
+    public String getPickupNumber() { return ""; }
+    public int getPieces() { return 0; }
+    public String getReference1() { return ""; }
+    public String getReference2() { return ""; }
+    public String getReference3() { return ""; }
+    public String getTemperature() { return ""; }
+    public String getUnNumber() { return ""; }
+    public double getWeight() { return 0.0; }
 
     // Convenience methods
     public LocalDate getLoadDate() { return deliveryDate; }

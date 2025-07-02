@@ -875,62 +875,7 @@ public class DispatcherSettings {
             """;
     }
     
-    // Static accessor methods for backward compatibility
-    public static String getDispatcherName() { 
-        return getInstance().dispatcherName; 
-    }
-    
-    public static void setDispatcherName(String v) { 
-        getInstance().setDispatcherName(v); 
-    }
-    
-    public static String getDispatcherPhone() { 
-        return getInstance().dispatcherPhone; 
-    }
-    
-    public static void setDispatcherPhone(String v) { 
-        getInstance().setDispatcherPhone(v); 
-    }
-    
-    public static String getDispatcherEmail() { 
-        return getInstance().dispatcherEmail; 
-    }
-    
-    public static void setDispatcherEmail(String v) { 
-        getInstance().setDispatcherEmail(v); 
-    }
-    
-    public static String getDispatcherFax() { 
-        return getInstance().dispatcherFax; 
-    }
-    
-    public static void setDispatcherFax(String v) { 
-        getInstance().setDispatcherFax(v); 
-    }
-    
-    public static String getCompanyName() { 
-        return getInstance().companyName; 
-    }
-    
-    public static void setCompanyName(String v) { 
-        getInstance().setCompanyName(v); 
-    }
-    
-    public static String getCompanyLogoPath() { 
-        return getInstance().companyLogoPath; 
-    }
-    
-    public static void setCompanyLogoPath(String v) { 
-        getInstance().setCompanyLogoPath(v); 
-    }
-    
-    public static String getPickupDeliveryPolicy() { 
-        return getInstance().pickupDeliveryPolicy; 
-    }
-    
-    public static void setPickupDeliveryPolicy(String v) { 
-        getInstance().setPickupDeliveryPolicy(v); 
-    }
+    // Static accessor methods for backward compatibility have been removed.
     
     // Inner classes
     
