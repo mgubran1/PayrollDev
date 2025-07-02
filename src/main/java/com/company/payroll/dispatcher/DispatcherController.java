@@ -336,6 +336,36 @@ public class DispatcherController {
             return false;
         }
     }
+
+    /**
+     * Update a driver's status information.
+     */
+    public void updateDriverStatus(DispatcherDriverStatus driver,
+                                   DispatcherDriverStatus.Status newStatus,
+                                   String location,
+                                   LocalDateTime eta,
+                                   String notes) {
+        if (driver == null) return;
+        driver.setStatus(newStatus);
+        if (location != null && !location.isBlank()) {
+            driver.setCurrentLocation(location.trim());
+        }
+        driver.setEstimatedAvailableTime(eta);
+        if (notes != null && !notes.isBlank()) {
+            String existing = driver.getDriver().getNotes();
+            if (existing == null || existing.isBlank()) {
+                driver.getDriver().setNotes(notes.trim());
+            } else {
+                driver.getDriver().setNotes(existing + "\n" + notes.trim());
+            }
+        }
+        logger.info("Driver {} status updated to {}", driver.getDriverName(), newStatus);
+    }
+
+    public List<Load> getLoadsForDriverAndRange(Employee driver, LocalDate start, LocalDate end) {
+        if (driver == null) return List.of();
+        return loadDAO.getByDriverAndDateRange(driver.getId(), start, end);
+    }
     
     // Dialog methods
     public void showAssignLoadDialog() {

@@ -24,7 +24,6 @@ public class DispatcherConfigView extends BorderPane {
     private TextField dispatcherPhoneField;
     private TextField dispatcherEmailField;
     private TextField dispatcherFaxField;
-    private TextField woNumberField;
     private TextField companyNameField;
     private TextField logoPathField;
     private TextArea policyTextArea;
@@ -115,10 +114,6 @@ public class DispatcherConfigView extends BorderPane {
         dispatcherFaxField = new TextField();
         dispatcherFaxField.setPromptText("000-000-0000");
         
-        // WO Number
-        Label woLabel = new Label("WO Number:");
-        woNumberField = new TextField();
-        woNumberField.setPromptText("A-000000");
         
         int row = 0;
         grid.add(nameLabel, 0, row);
@@ -131,10 +126,7 @@ public class DispatcherConfigView extends BorderPane {
         grid.add(dispatcherEmailField, 1, row++);
         
         grid.add(faxLabel, 0, row);
-        grid.add(dispatcherFaxField, 1, row++);
-        
-        grid.add(woLabel, 0, row);
-        grid.add(woNumberField, 1, row);
+        grid.add(dispatcherFaxField, 1, row);
         
         TitledPane pane = new TitledPane("Dispatcher Information", grid);
         pane.setExpanded(true);
@@ -314,7 +306,6 @@ public class DispatcherConfigView extends BorderPane {
         dispatcherPhoneField.setText(DispatcherSettings.getDispatcherPhone());
         dispatcherEmailField.setText(DispatcherSettings.getDispatcherEmail());
         dispatcherFaxField.setText(DispatcherSettings.getDispatcherFax());
-        woNumberField.setText(DispatcherSettings.getWONumber());
         companyNameField.setText(DispatcherSettings.getCompanyName());
         logoPathField.setText(DispatcherSettings.getCompanyLogoPath());
         policyTextArea.setText(DispatcherSettings.getPickupDeliveryPolicy());
@@ -327,7 +318,6 @@ public class DispatcherConfigView extends BorderPane {
         DispatcherSettings.setDispatcherPhone(dispatcherPhoneField.getText());
         DispatcherSettings.setDispatcherEmail(dispatcherEmailField.getText());
         DispatcherSettings.setDispatcherFax(dispatcherFaxField.getText());
-        DispatcherSettings.setWONumber(woNumberField.getText());
         DispatcherSettings.setCompanyName(companyNameField.getText());
         DispatcherSettings.setCompanyLogoPath(logoPathField.getText());
         DispatcherSettings.setPickupDeliveryPolicy(policyTextArea.getText());

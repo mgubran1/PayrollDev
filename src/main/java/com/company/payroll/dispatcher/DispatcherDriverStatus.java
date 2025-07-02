@@ -13,14 +13,14 @@ import java.util.List;
  */
 public class DispatcherDriverStatus {
     public enum Status {
-        AVAILABLE("Available", "#90EE90"),      // Light green
-        PREPARING("Preparing", "#FFE4B5"),      // Moccasin
-        LOADING("Loading", "#FFA500"),          // Orange
-        ON_ROAD("On Road", "#1E90FF"),         // Dodger blue
-        UNLOADING("Unloading", "#FF6347"),     // Tomato
-        RETURNING("Returning", "#87CEEB"),      // Sky blue
-        OFF_DUTY("Off Duty", "#D3D3D3"),       // Light gray
-        ON_BREAK("On Break", "#DDA0DD");       // Plum
+        AVAILABLE("Available", "#28a745"),      // Green
+        PREPARING("Preparing", "#ffc107"),      // Amber
+        LOADING("Loading", "#ffc107"),          // Amber
+        ON_ROAD("On Road", "#007bff"),         // Blue
+        UNLOADING("Unloading", "#ffc107"),     // Amber
+        RETURNING("Returning", "#007bff"),      // Blue
+        OFF_DUTY("Off Duty", "#6c757d"),       // Gray
+        ON_BREAK("On Break", "#17a2b8");       // Cyan
         
         private final String displayName;
         private final String color;
