@@ -91,6 +91,220 @@
     -fx-padding: 5;
 }
 
+/* ===== MODERN DISPATCHER STYLES ===== */
+
+/* Modern Tab Pane for Dispatcher */
+.modern-tab-pane {
+    -fx-background-color: #FFFFFF;
+}
+
+.modern-tab-pane .tab-header-area {
+    -fx-background-color: #FFFFFF;
+    -fx-padding: 0 20px;
+}
+
+.modern-tab-pane .tab-header-background {
+    -fx-background-color: #FFFFFF;
+}
+
+.modern-tab-pane .tab {
+    -fx-background-color: transparent;
+    -fx-padding: 12px 24px;
+    -fx-text-fill: #757575;
+    -fx-font-size: 14px;
+    -fx-font-weight: 500;
+    -fx-background-radius: 0;
+    -fx-background-insets: 0;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+.modern-tab-pane .tab:selected {
+    -fx-background-color: transparent;
+    -fx-text-fill: #2196F3;
+    -fx-border-color: transparent transparent #2196F3 transparent;
+    -fx-border-width: 0 0 3 0;
+}
+
+.modern-tab-pane .tab:hover {
+    -fx-text-fill: #212121;
+}
+
+/* Dispatcher Container */
+.dispatcher-container {
+    -fx-background-color: #FAFAFA;
+}
+
+/* Modern Cards */
+.dispatcher-card {
+    -fx-background-color: #FFFFFF;
+    -fx-background-radius: 8px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 3);
+    -fx-padding: 20px;
+}
+
+.dispatcher-card:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 15, 0, 0, 5);
+}
+
+/* Status Badges */
+.status-badge {
+    -fx-background-radius: 12px;
+    -fx-padding: 4px 12px;
+}
+
+/* Timeline Grid */
+.timeline-grid {
+    -fx-background-color: #FAFAFA;
+}
+
+.timeline-cell {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: #E0E0E0;
+    -fx-border-width: 0 1 1 0;
+}
+
+.timeline-cell:hover {
+    -fx-background-color: #F5F5F5;
+}
+
+.timeline-header {
+    -fx-background-color: #F5F5F5;
+    -fx-font-weight: 600;
+    -fx-text-fill: #424242;
+}
+
+/* Load Blocks */
+.load-block {
+    -fx-background-radius: 6px;
+    -fx-border-radius: 6px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 4, 0, 0, 2);
+    -fx-cursor: hand;
+}
+
+.load-block:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 8, 0, 0, 3);
+}
+
+/* Modern Buttons */
+.modern-button {
+    -fx-background-radius: 5px;
+    -fx-font-weight: 600;
+    -fx-cursor: hand;
+    -fx-effect: none;
+}
+
+.modern-button-primary {
+    -fx-background-color: #2196F3;
+    -fx-text-fill: white;
+}
+
+.modern-button-primary:hover {
+    -fx-background-color: #1976D2;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0, 0, 2);
+}
+
+.modern-button-secondary {
+    -fx-background-color: white;
+    -fx-text-fill: #2196F3;
+    -fx-border-color: #2196F3;
+    -fx-border-width: 1;
+}
+
+.modern-button-secondary:hover {
+    -fx-background-color: #E3F2FD;
+}
+
+/* Fleet Status Cards */
+.fleet-status-card {
+    -fx-background-color: white;
+    -fx-background-radius: 12px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 8, 0, 0, 3);
+    -fx-padding: 20px;
+}
+
+.fleet-status-card:hover {
+    -fx-scale-x: 1.05;
+    -fx-scale-y: 1.05;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 12, 0, 0, 4);
+}
+
+/* Summary Stats */
+.stat-value {
+    -fx-font-size: 32px;
+    -fx-font-weight: 700;
+}
+
+.stat-label {
+    -fx-font-size: 13px;
+    -fx-text-fill: #757575;
+}
+
+/* Modern Table */
+.dispatcher-table {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+}
+
+.dispatcher-table .column-header {
+    -fx-background-color: #F5F5F5;
+    -fx-font-weight: 600;
+    -fx-font-size: 13px;
+    -fx-text-fill: #757575;
+}
+
+.dispatcher-table .table-row-cell {
+    -fx-background-color: white;
+    -fx-border-width: 0;
+}
+
+.dispatcher-table .table-row-cell:hover {
+    -fx-background-color: #F5F5F5;
+    -fx-cursor: hand;
+}
+
+/* Progress Bars for Hours */
+.hours-progress {
+    -fx-accent: #4CAF50;
+    -fx-background-radius: 3px;
+}
+
+.hours-progress .track {
+    -fx-background-color: #E8F5E9;
+    -fx-background-radius: 3px;
+}
+
+/* Event Type Badges */
+.event-pickup {
+    -fx-background-color: #4CAF50;
+    -fx-text-fill: white;
+}
+
+.event-delivery {
+    -fx-background-color: #F44336;
+    -fx-text-fill: white;
+}
+
+.event-transit {
+    -fx-background-color: #2196F3;
+    -fx-text-fill: white;
+}
+
+/* Availability Indicators */
+.availability-available {
+    -fx-text-fill: #4CAF50;
+}
+
+.availability-busy {
+    -fx-text-fill: #2196F3;
+}
+
+.availability-offline {
+    -fx-text-fill: #F44336;
+}
+
+/* ===== EXISTING STYLES CONTINUE BELOW ===== */
+
 /* ===== TABLEVIEW ===== */
 .table-view {
     -fx-background-color: #ffffff;
