@@ -2,7 +2,7 @@ package com.company.payroll.driver;
 
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
-import javafx.geometry.Insets;
+import javafx.geometry.Insets; 
 import javafx.geometry.Pos;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -11,77 +11,94 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.effect.DropShadow;
-import javafx.scene.input.MouseEvent;
 import javafx.beans.property.*;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.control.cell.TextFieldTableCell;
-import javafx.util.StringConverter;
 import javafx.animation.*;
 import javafx.util.Duration;
+import javafx.concurrent.Task;
+import javafx.application.Platform;
+import javafx.stage.FileChooser;
+import javafx.geometry.Orientation;
+import javafx.scene.Node;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.text.NumberFormat;
 import java.util.*;
 import java.util.stream.Collectors;
-import com.company.payroll.payroll.PayrollCalculator;
-import com.company.payroll.payroll.PayrollCalculator.PayrollRow;
-import com.company.payroll.employees.EmployeeDAO;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.io.File;
+
 import com.company.payroll.employees.Employee;
+import com.company.payroll.employees.EmployeeDAO;
 import com.company.payroll.loads.LoadDAO;
 import com.company.payroll.fuel.FuelTransactionDAO;
-import com.company.payroll.payroll.ExcelExporter;
+import com.company.payroll.payroll.PayrollCalculator;
+import com.company.payroll.export.ExcelExporter;
 import com.company.payroll.export.PDFExporter;
-import javafx.stage.FileChooser;
-import java.io.File;
-import javafx.concurrent.Task;
-import javafx.scene.control.Alert.AlertType;
-import javafx.application.Platform;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
-import javafx.geometry.Orientation;
 
+/**
+ * Enhanced Driver Income Tab with real-time data integration
+ */
 public class DriverIncomeTab extends Tab {
-    private TableView<PayrollRow> incomeTable;
-    private ComboBox<String> driverComboBox;
+    private static final Logger logger = LoggerFactory.getLogger(DriverIncomeTab.class);
+    
+    // UI Components
+    private TableView<DriverIncomeData> incomeTable;
+    private ComboBox<Employee> driverComboBox;
     private DatePicker startDatePicker;
     private DatePicker endDatePicker;
     private Label totalIncomeLabel;
     private Label totalMilesLabel;
     private Label averagePerMileLabel;
     private Label totalLoadsLabel;
+    private Label totalFuelLabel;
     private LineChart<String, Number> incomeChart;
     private PieChart expenseBreakdownChart;
     private ProgressIndicator loadingIndicator;
     private VBox contentBox;
+    
+    // Data
+    private final ObservableList<DriverIncomeData> incomeData = FXCollections.observableArrayList();
+    private final ObservableList<Employee> drivers = FXCollections.observableArrayList();
+    
+    // Services
+    private final DriverIncomeService incomeService;
+    private final EmployeeDAO employeeDAO;
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    
+    // Formatters
     private static final NumberFormat CURRENCY_FORMAT = NumberFormat.getCurrencyInstance();
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy");
-
-    private final EmployeeDAO employeeDAO = new EmployeeDAO();
-    private final LoadDAO loadDAO = new LoadDAO();
-    private final FuelTransactionDAO fuelDAO = new FuelTransactionDAO();
-    private final PayrollCalculator payrollCalculator = new PayrollCalculator(employeeDAO, loadDAO, fuelDAO);
     
-    public DriverIncomeTab() {
+    // Auto-refresh settings
+    private static final int AUTO_REFRESH_INTERVAL = 30; // seconds
+    private boolean autoRefreshEnabled = true;
+
+    public DriverIncomeTab(EmployeeDAO employeeDAO, LoadDAO loadDAO, 
+                          FuelTransactionDAO fuelDAO, PayrollCalculator payrollCalculator) {
         setText("Driver Income");
         setClosable(false);
         
-        // Set tab icon, handle missing resource gracefully
-        ImageView tabIcon;
-        var iconStream = getClass().getResourceAsStream("/icons/driver-income.png");
-        if (iconStream != null) {
-            tabIcon = new ImageView(new Image(iconStream));
-        } else {
-            tabIcon = new ImageView();
-        }
-        tabIcon.setFitHeight(16);
-        tabIcon.setFitWidth(16);
-        setGraphic(tabIcon);
+        this.employeeDAO = employeeDAO;
+        this.incomeService = new DriverIncomeService(employeeDAO, loadDAO, fuelDAO, payrollCalculator);
         
+        initializeUI();
+        setupEventHandlers();
+        loadInitialData();
+        startAutoRefresh();
+    }
+    
+    private void initializeUI() {
         contentBox = new VBox(15);
         contentBox.setPadding(new Insets(20));
         contentBox.setStyle("-fx-background-color: #f0f0f0;");
         
-        // Header with gradient
+        // Header
         VBox header = createHeader();
         
         // Control Panel
@@ -111,8 +128,6 @@ public class DriverIncomeTab extends Tab {
         ScrollPane scrollPane = new ScrollPane(contentBox);
         scrollPane.setFitToWidth(true);
         setContent(scrollPane);
-        
-        initializeData();
     }
     
     private VBox createHeader() {
@@ -126,13 +141,12 @@ public class DriverIncomeTab extends Tab {
         titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 28));
         titleLabel.setTextFill(Color.WHITE);
         
-        Label subtitleLabel = new Label("Track and analyze driver earnings and performance");
+        Label subtitleLabel = new Label("Real-time driver earnings and performance tracking");
         subtitleLabel.setFont(Font.font("Arial", 14));
         subtitleLabel.setTextFill(Color.LIGHTGRAY);
         
         header.getChildren().addAll(titleLabel, subtitleLabel);
         
-        // Add shadow effect
         DropShadow shadow = new DropShadow();
         shadow.setOffsetY(5);
         shadow.setColor(Color.color(0, 0, 0, 0.3));
@@ -150,9 +164,22 @@ public class DriverIncomeTab extends Tab {
         // Driver Selection
         Label driverLabel = new Label("Driver:");
         driverLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        driverComboBox = new ComboBox<>();
+        driverComboBox = new ComboBox<>(drivers);
         driverComboBox.setPrefWidth(200);
-        driverComboBox.setPromptText("Select Driver");
+        driverComboBox.setPromptText("All Drivers");
+        driverComboBox.setConverter(new javafx.util.StringConverter<Employee>() {
+            @Override
+            public String toString(Employee employee) {
+                if (employee == null) return "All Drivers";
+                return employee.getName() + 
+                    (employee.getTruckUnit() != null ? " (" + employee.getTruckUnit() + ")" : "");
+            }
+            
+            @Override
+            public Employee fromString(String string) {
+                return null;
+            }
+        });
         
         // Date Range Selection
         Label dateRangeLabel = new Label("Date Range:");
@@ -160,39 +187,41 @@ public class DriverIncomeTab extends Tab {
         startDatePicker = new DatePicker(LocalDate.now().minusMonths(1));
         endDatePicker = new DatePicker(LocalDate.now());
         
-        // Search Button
-        Button searchButton = new Button("Search");
-        searchButton.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; " +
-                            "-fx-font-weight: bold; -fx-background-radius: 5;");
-        searchButton.setPrefWidth(100);
+        // Buttons
+        Button searchButton = createStyledButton("Search", "#3498db", true);
+        Button refreshButton = createStyledButton("Refresh", "#27ae60", false);
+        Button exportExcelButton = createStyledButton("Export Excel", "#27ae60", false);
+        Button exportPdfButton = createStyledButton("Export PDF", "#e74c3c", false);
+        
+        // Set button actions
         searchButton.setOnAction(e -> loadDriverIncome());
-        
-        // Export Buttons
-        Button exportExcelButton = new Button("Export Excel");
-        exportExcelButton.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; " +
-                                 "-fx-font-weight: bold; -fx-background-radius: 5;");
+        refreshButton.setOnAction(e -> loadDriverIncome());
         exportExcelButton.setOnAction(e -> exportToExcel());
+        exportPdfButton.setOnAction(e -> exportToPDF());
         
-        Button exportPdfButton = new Button("Export PDF");
-        exportPdfButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; " +
-                               "-fx-font-weight: bold; -fx-background-radius: 5;");
-        exportPdfButton.setOnAction(e -> exportToPdf());
-        
-        // Add hover effects
-        addHoverEffect(searchButton);
-        addHoverEffect(exportExcelButton);
-        addHoverEffect(exportPdfButton);
+        // Auto-refresh toggle
+        CheckBox autoRefreshCheck = new CheckBox("Auto Refresh");
+        autoRefreshCheck.setSelected(autoRefreshEnabled);
+        autoRefreshCheck.setOnAction(e -> {
+            autoRefreshEnabled = autoRefreshCheck.isSelected();
+            if (autoRefreshEnabled) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
+        });
         
         controlPanel.getChildren().addAll(
             driverLabel, driverComboBox,
             new Separator(Orientation.VERTICAL),
             dateRangeLabel, startDatePicker, new Label("to"), endDatePicker,
-            searchButton,
+            searchButton, refreshButton,
             new Separator(Orientation.VERTICAL),
-            exportExcelButton, exportPdfButton
+            exportExcelButton, exportPdfButton,
+            new Separator(Orientation.VERTICAL),
+            autoRefreshCheck
         );
         
-        // Add shadow
         DropShadow shadow = new DropShadow();
         shadow.setOffsetY(2);
         shadow.setColor(Color.color(0, 0, 0, 0.1));
@@ -206,77 +235,41 @@ public class DriverIncomeTab extends Tab {
         summaryCards.setPadding(new Insets(10));
         summaryCards.setAlignment(Pos.CENTER);
         
-        // Total Income Card
-        VBox incomeCard = createSummaryCard("Total Income", "$0.00", "#3498db", "income-icon.png");
-        totalIncomeLabel = (Label) incomeCard.getChildren().get(1);
+        VBox incomeCard = createSummaryCard("Total Income", "$0.00", "#3498db", totalIncomeLabel = new Label());
+        VBox milesCard = createSummaryCard("Total Miles", "0", "#e74c3c", totalMilesLabel = new Label());
+        VBox avgCard = createSummaryCard("Avg Per Mile", "$0.00", "#f39c12", averagePerMileLabel = new Label());
+        VBox loadsCard = createSummaryCard("Total Loads", "0", "#27ae60", totalLoadsLabel = new Label());
+        VBox fuelCard = createSummaryCard("Total Fuel", "$0.00", "#9b59b6", totalFuelLabel = new Label());
         
-        // Total Miles Card
-        VBox milesCard = createSummaryCard("Total Miles", "0", "#e74c3c", "miles-icon.png");
-        totalMilesLabel = (Label) milesCard.getChildren().get(1);
-        
-        // Average Per Mile Card
-        VBox avgCard = createSummaryCard("Avg Per Mile", "$0.00", "#f39c12", "average-icon.png");
-        averagePerMileLabel = (Label) avgCard.getChildren().get(1);
-        
-        // Total Loads Card
-        VBox loadsCard = createSummaryCard("Total Loads", "0", "#27ae60", "loads-icon.png");
-        totalLoadsLabel = (Label) loadsCard.getChildren().get(1);
-        
-        summaryCards.getChildren().addAll(incomeCard, milesCard, avgCard, loadsCard);
+        summaryCards.getChildren().addAll(incomeCard, milesCard, avgCard, loadsCard, fuelCard);
         
         return summaryCards;
     }
     
-    private VBox createSummaryCard(String title, String value, String color, String iconPath) {
+    private VBox createSummaryCard(String title, String initialValue, String color, Label valueLabel) {
         VBox card = new VBox(10);
         card.setPadding(new Insets(20));
-        card.setPrefWidth(200);
+        card.setPrefWidth(180);
         card.setAlignment(Pos.CENTER);
         card.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
-        
-        // Title with icon
-        HBox titleBox = new HBox(10);
-        titleBox.setAlignment(Pos.CENTER);
-        
-        try {
-            ImageView icon = new ImageView(new Image(getClass().getResourceAsStream("/icons/" + iconPath)));
-            icon.setFitHeight(24);
-            icon.setFitWidth(24);
-            titleBox.getChildren().add(icon);
-        } catch (Exception e) {
-            // Icon not found, continue without it
-        }
         
         Label titleLabel = new Label(title);
         titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
         titleLabel.setTextFill(Color.web(color));
-        titleBox.getChildren().add(titleLabel);
         
-        Label valueLabel = new Label(value);
+        valueLabel.setText(initialValue);
         valueLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
         valueLabel.setTextFill(Color.web("#2c3e50"));
         
-        card.getChildren().addAll(titleBox, valueLabel);
+        card.getChildren().addAll(titleLabel, valueLabel);
         
-        // Add shadow and hover effect
         DropShadow shadow = new DropShadow();
         shadow.setOffsetY(3);
         shadow.setColor(Color.color(0, 0, 0, 0.1));
         card.setEffect(shadow);
         
-        card.setOnMouseEntered(e -> {
-            ScaleTransition st = new ScaleTransition(Duration.millis(200), card);
-            st.setToX(1.05);
-            st.setToY(1.05);
-            st.play();
-        });
-        
-        card.setOnMouseExited(e -> {
-            ScaleTransition st = new ScaleTransition(Duration.millis(200), card);
-            st.setToX(1);
-            st.setToY(1);
-            st.play();
-        });
+        card.setOnMouseEntered(e -> animateCard(card, 1.05));
+        card.setOnMouseExited(e -> animateCard(card, 1.0));
         
         return card;
     }
@@ -286,98 +279,123 @@ public class DriverIncomeTab extends Tab {
         tableSection.setPadding(new Insets(15));
         tableSection.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
         
-        Label tableTitle = new Label("Income Details");
+        Label tableTitle = new Label("Driver Income Details");
         tableTitle.setFont(Font.font("Arial", FontWeight.BOLD, 18));
         
-        incomeTable = new TableView<>();
-        incomeTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        incomeTable.setPrefHeight(400);
+        incomeTable = createIncomeTable();
         
-        // Create columns for aggregated payroll data
-        TableColumn<PayrollRow, String> driverCol = new TableColumn<>("Driver");
-        driverCol.setCellValueFactory(new PropertyValueFactory<>("driverName"));
-
-        TableColumn<PayrollRow, String> truckCol = new TableColumn<>("Truck");
-        truckCol.setCellValueFactory(new PropertyValueFactory<>("truckUnit"));
-
-        TableColumn<PayrollRow, Integer> loadsCol = new TableColumn<>("Loads");
-        loadsCol.setCellValueFactory(new PropertyValueFactory<>("loadCount"));
-
-        TableColumn<PayrollRow, Double> grossCol = new TableColumn<>("Gross");
-        grossCol.setCellValueFactory(new PropertyValueFactory<>("gross"));
-        grossCol.setCellFactory(column -> new TableCell<PayrollRow, Double>() {
-            @Override
-            protected void updateItem(Double amount, boolean empty) {
-                super.updateItem(amount, empty);
-                if (empty || amount == null) {
-                    setText(null);
-                } else {
-                    setText(CURRENCY_FORMAT.format(amount));
-                    if (amount < 0) {
-                        setTextFill(Color.RED);
-                    } else {
-                        setTextFill(Color.BLACK);
-                    }
-                }
-            }
-        });
-        
-        TableColumn<PayrollRow, Double> fuelCol = new TableColumn<>("Fuel");
-        fuelCol.setCellValueFactory(new PropertyValueFactory<>("fuel"));
-        fuelCol.setCellFactory(column -> new TableCell<PayrollRow, Double>() {
-            @Override
-            protected void updateItem(Double amount, boolean empty) {
-                super.updateItem(amount, empty);
-                if (empty || amount == null) {
-                    setText(null);
-                } else {
-                    setText(CURRENCY_FORMAT.format(amount));
-                    setTextFill(Color.RED);
-                }
-            }
-        });
-
-        TableColumn<PayrollRow, Double> netCol = new TableColumn<>("Net Pay");
-        netCol.setCellValueFactory(new PropertyValueFactory<>("netPay"));
-        netCol.setCellFactory(column -> new TableCell<PayrollRow, Double>() {
-            @Override
-            protected void updateItem(Double amount, boolean empty) {
-                super.updateItem(amount, empty);
-                if (empty || amount == null) {
-                    setText(null);
-                } else {
-                    setText(CURRENCY_FORMAT.format(amount));
-                    if (amount < 0) {
-                        setTextFill(Color.RED);
-                        setStyle("-fx-font-weight: bold;");
-                    } else {
-                        setTextFill(Color.web("#27ae60"));
-                        setStyle("-fx-font-weight: bold;");
-                    }
-                }
-            }
-        });
-        
-        incomeTable.getColumns().addAll(driverCol, truckCol, loadsCol, grossCol, fuelCol, netCol);
-        
-        // Add context menu
-        ContextMenu contextMenu = new ContextMenu();
-        MenuItem viewDetailsItem = new MenuItem("View Details");
-        viewDetailsItem.setOnAction(e -> viewLoadDetails());
-        MenuItem printItem = new MenuItem("Print");
-        printItem.setOnAction(e -> printSelectedRow());
-        contextMenu.getItems().addAll(viewDetailsItem, printItem);
-        incomeTable.setContextMenu(contextMenu);
-        
-        // Add shadow
         DropShadow shadow = new DropShadow();
         shadow.setOffsetY(2);
         shadow.setColor(Color.color(0, 0, 0, 0.1));
         tableSection.setEffect(shadow);
         
         tableSection.getChildren().addAll(tableTitle, incomeTable);
+        VBox.setVgrow(incomeTable, Priority.ALWAYS);
         
         return tableSection;
+    }
+    
+    private TableView<DriverIncomeData> createIncomeTable() {
+        TableView<DriverIncomeData> table = new TableView<>(incomeData);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setPrefHeight(400);
+        
+        // Driver column
+        TableColumn<DriverIncomeData, String> driverCol = new TableColumn<>("Driver");
+        driverCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getDriverName()));
+        driverCol.setPrefWidth(150);
+        
+        // Truck/Unit column
+        TableColumn<DriverIncomeData, String> truckCol = new TableColumn<>("Truck/Unit");
+        truckCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getTruckUnit()));
+        truckCol.setPrefWidth(100);
+        
+        // Loads column
+        TableColumn<DriverIncomeData, Integer> loadsCol = new TableColumn<>("Loads");
+        loadsCol.setCellValueFactory(data -> new SimpleIntegerProperty(data.getValue().getTotalLoads()).asObject());
+        loadsCol.setPrefWidth(80);
+        loadsCol.setStyle("-fx-alignment: CENTER;");
+        
+        // Total Gross column
+        TableColumn<DriverIncomeData, String> grossCol = new TableColumn<>("Total Gross");
+        grossCol.setCellValueFactory(data -> 
+            new SimpleStringProperty(CURRENCY_FORMAT.format(data.getValue().getTotalGross())));
+        grossCol.setPrefWidth(120);
+        grossCol.setStyle("-fx-alignment: CENTER-RIGHT;");
+        
+        // Total Miles column
+        TableColumn<DriverIncomeData, String> milesCol = new TableColumn<>("Total Miles");
+        milesCol.setCellValueFactory(data -> 
+            new SimpleStringProperty(String.format("%.1f", data.getValue().getTotalMiles())));
+        milesCol.setPrefWidth(100);
+        milesCol.setStyle("-fx-alignment: CENTER-RIGHT;");
+        
+        // Fuel column
+        TableColumn<DriverIncomeData, String> fuelCol = new TableColumn<>("Fuel Cost");
+        fuelCol.setCellValueFactory(data -> 
+            new SimpleStringProperty(CURRENCY_FORMAT.format(data.getValue().getTotalFuelAmount())));
+        fuelCol.setPrefWidth(100);
+        fuelCol.setStyle("-fx-alignment: CENTER-RIGHT;");
+        
+        // Avg Per Mile column
+        TableColumn<DriverIncomeData, String> avgPerMileCol = new TableColumn<>("Avg/Mile");
+        avgPerMileCol.setCellValueFactory(data -> 
+            new SimpleStringProperty(String.format("$%.3f", data.getValue().getAveragePerMile())));
+        avgPerMileCol.setPrefWidth(100);
+        avgPerMileCol.setStyle("-fx-alignment: CENTER-RIGHT;");
+        
+        // Net Pay column
+        TableColumn<DriverIncomeData, String> netPayCol = new TableColumn<>("Net Pay");
+        netPayCol.setCellValueFactory(data -> 
+            new SimpleStringProperty(CURRENCY_FORMAT.format(data.getValue().getNetPay())));
+        netPayCol.setPrefWidth(120);
+        netPayCol.setStyle("-fx-alignment: CENTER-RIGHT; -fx-font-weight: bold;");
+        netPayCol.setCellFactory(column -> new TableCell<DriverIncomeData, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText(item);
+                    DriverIncomeData data = getTableRow().getItem();
+                    if (data != null && data.getNetPay() < 0) {
+                        setTextFill(Color.RED);
+                    } else {
+                        setTextFill(Color.web("#27ae60"));
+                    }
+                    setStyle("-fx-alignment: CENTER-RIGHT; -fx-font-weight: bold;");
+                }
+            }
+        });
+        
+        table.getColumns().addAll(driverCol, truckCol, loadsCol, grossCol, 
+                                 milesCol, fuelCol, avgPerMileCol, netPayCol);
+        
+        // Add context menu
+        ContextMenu contextMenu = new ContextMenu();
+        MenuItem viewDetailsItem = new MenuItem("View Details");
+        viewDetailsItem.setOnAction(e -> viewDriverDetails(table.getSelectionModel().getSelectedItem()));
+        
+        MenuItem exportDriverItem = new MenuItem("Export Driver Report");
+        exportDriverItem.setOnAction(e -> exportDriverReport(table.getSelectionModel().getSelectedItem()));
+        
+        contextMenu.getItems().addAll(viewDetailsItem, exportDriverItem);
+        table.setContextMenu(contextMenu);
+        
+        // Double-click to view details
+        table.setRowFactory(tv -> {
+            TableRow<DriverIncomeData> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && !row.isEmpty()) {
+                    viewDriverDetails(row.getItem());
+                }
+            });
+            return row;
+        });
+        
+        return table;
     }
     
     private VBox createChartsSection() {
@@ -385,90 +403,125 @@ public class DriverIncomeTab extends Tab {
         chartsSection.setPadding(new Insets(15));
         
         // Income Trend Chart
-        VBox trendChartBox = new VBox(10);
-        trendChartBox.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
-        trendChartBox.setPadding(new Insets(15));
-        
-        Label trendTitle = new Label("Income Trend");
-        trendTitle.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        
-        CategoryAxis xAxis = new CategoryAxis();
-        xAxis.setLabel("Period");
-        NumberAxis yAxis = new NumberAxis();
-        yAxis.setLabel("Income ($)");
-        
-        incomeChart = new LineChart<>(xAxis, yAxis);
-        incomeChart.setTitle("Monthly Income Trend");
-        incomeChart.setPrefHeight(250);
-        incomeChart.setCreateSymbols(true);
-        incomeChart.setAnimated(true);
-        
-        trendChartBox.getChildren().addAll(trendTitle, incomeChart);
+        VBox trendChartBox = createChartBox("Income Trend", createIncomeChart());
         
         // Expense Breakdown Chart
-        VBox pieChartBox = new VBox(10);
-        pieChartBox.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
-        pieChartBox.setPadding(new Insets(15));
-        
-        Label pieTitle = new Label("Deduction Breakdown");
-        pieTitle.setFont(Font.font("Arial", FontWeight.BOLD, 16));
-        
-        expenseBreakdownChart = new PieChart();
-        expenseBreakdownChart.setTitle("Deduction Categories");
-        expenseBreakdownChart.setPrefHeight(250);
-        expenseBreakdownChart.setAnimated(true);
-        expenseBreakdownChart.setLabelsVisible(true);
-        
-        pieChartBox.getChildren().addAll(pieTitle, expenseBreakdownChart);
-        
-        // Add shadows
-        DropShadow shadow = new DropShadow();
-        shadow.setOffsetY(2);
-        shadow.setColor(Color.color(0, 0, 0, 0.1));
-        trendChartBox.setEffect(shadow);
-        pieChartBox.setEffect(shadow);
+        VBox pieChartBox = createChartBox("Expense Breakdown", createExpenseChart());
         
         chartsSection.getChildren().addAll(trendChartBox, pieChartBox);
         
         return chartsSection;
     }
     
-    private void addHoverEffect(Button button) {
-        button.setOnMouseEntered(e -> {
-            button.setStyle(button.getStyle() + "-fx-cursor: hand; -fx-opacity: 0.8;");
+    private VBox createChartBox(String title, Node chart) {
+        VBox box = new VBox(10);
+        box.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
+        box.setPadding(new Insets(15));
+        
+        Label titleLabel = new Label(title);
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        
+        box.getChildren().addAll(titleLabel, chart);
+        
+        DropShadow shadow = new DropShadow();
+        shadow.setOffsetY(2);
+        shadow.setColor(Color.color(0, 0, 0, 0.1));
+        box.setEffect(shadow);
+        
+        return box;
+    }
+    
+    private LineChart<String, Number> createIncomeChart() {
+        CategoryAxis xAxis = new CategoryAxis();
+        xAxis.setLabel("Period");
+        NumberAxis yAxis = new NumberAxis();
+        yAxis.setLabel("Income ($)");
+        
+        incomeChart = new LineChart<>(xAxis, yAxis);
+        incomeChart.setTitle("Income Over Time");
+        incomeChart.setPrefHeight(250);
+        incomeChart.setCreateSymbols(true);
+        incomeChart.setAnimated(true);
+        
+        return incomeChart;
+    }
+    
+    private PieChart createExpenseChart() {
+        expenseBreakdownChart = new PieChart();
+        expenseBreakdownChart.setTitle("Expense Categories");
+        expenseBreakdownChart.setPrefHeight(250);
+        expenseBreakdownChart.setAnimated(true);
+        expenseBreakdownChart.setLabelsVisible(true);
+        
+        return expenseBreakdownChart;
+    }
+    
+    private void setupEventHandlers() {
+        // Date range changes
+        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (autoRefreshEnabled && newVal != null) {
+                loadDriverIncome();
+            }
         });
-        button.setOnMouseExited(e -> {
-            button.setStyle(button.getStyle().replace("-fx-cursor: hand; -fx-opacity: 0.8;", ""));
+        
+        endDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (autoRefreshEnabled && newVal != null) {
+                loadDriverIncome();
+            }
+        });
+        
+        // Driver selection change
+        driverComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (autoRefreshEnabled) {
+                loadDriverIncome();
+            }
         });
     }
     
+    private void loadInitialData() {
+        // Load active drivers
+        List<Employee> activeDrivers = employeeDAO.getActive().stream()
+            .filter(Employee::isDriver)
+            .collect(Collectors.toList());
+        
+        drivers.clear();
+        drivers.add(null); // All drivers option
+        drivers.addAll(activeDrivers);
+        
+        // Load initial income data
+        loadDriverIncome();
+    }
+    
     private void loadDriverIncome() {
-        String selectedDriver = driverComboBox.getValue();
-        if (selectedDriver == null) {
-            showAlert(AlertType.WARNING, "No Driver Selected", "Please select a driver to view income.");
+        Employee selectedDriver = driverComboBox.getValue();
+        LocalDate startDate = startDatePicker.getValue();
+        LocalDate endDate = endDatePicker.getValue();
+        
+        if (startDate == null || endDate == null) {
+            showAlert(Alert.AlertType.WARNING, "Invalid Date Range", 
+                     "Please select both start and end dates.");
             return;
         }
         
         loadingIndicator.setVisible(true);
         
-        Task<List<PayrollRow>> task = new Task<List<PayrollRow>>() {
+        Task<List<DriverIncomeData>> task = new Task<List<DriverIncomeData>>() {
             @Override
-            protected List<PayrollRow> call() throws Exception {
-                Employee driver = employeeDAO.getActive().stream()
-                    .filter(d -> d.getName().equals(selectedDriver))
-                    .findFirst()
-                    .orElse(null);
-                if (driver == null) {
-                    return Collections.emptyList();
+            protected List<DriverIncomeData> call() throws Exception {
+                if (selectedDriver != null) {
+                    // Load single driver
+                    DriverIncomeData data = incomeService.getDriverIncomeData(
+                        selectedDriver, startDate, endDate).get();
+                    return Collections.singletonList(data);
+                } else {
+                    // Load all drivers
+                    return incomeService.getAllDriversIncomeData(startDate, endDate).get();
                 }
-                return payrollCalculator.calculatePayrollRows(
-                    Collections.singletonList(driver),
-                    startDatePicker.getValue(), endDatePicker.getValue());
             }
         };
         
         task.setOnSucceeded(e -> {
-            List<PayrollRow> data = task.getValue();
+            List<DriverIncomeData> data = task.getValue();
             updateTable(data);
             updateSummaryCards(data);
             updateCharts(data);
@@ -477,40 +530,195 @@ public class DriverIncomeTab extends Tab {
         
         task.setOnFailed(e -> {
             loadingIndicator.setVisible(false);
-            showAlert(AlertType.ERROR, "Error", "Failed to load driver income data.");
+            logger.error("Failed to load driver income data", task.getException());
+            showAlert(Alert.AlertType.ERROR, "Error", 
+                     "Failed to load driver income data: " + task.getException().getMessage());
         });
         
         new Thread(task).start();
     }
     
-    private void updateTable(List<PayrollRow> data) {
-        ObservableList<PayrollRow> tableData = FXCollections.observableArrayList(data);
-        incomeTable.setItems(tableData);
+    private void updateTable(List<DriverIncomeData> data) {
+        incomeData.clear();
+        incomeData.addAll(data);
         
-        // Add animation
-        FadeTransition ft = new FadeTransition(Duration.millis(500), incomeTable);
-        ft.setFromValue(0.0);
+        // Sort by net pay descending
+        incomeData.sort((a, b) -> Double.compare(b.getNetPay(), a.getNetPay()));
+        
+        // Animate table update
+        FadeTransition ft = new FadeTransition(Duration.millis(300), incomeTable);
+        ft.setFromValue(0.3);
         ft.setToValue(1.0);
         ft.play();
     }
     
-    private void updateSummaryCards(List<PayrollRow> data) {
-        double totalIncome = data.stream().mapToDouble(r -> r.netPay).sum();
-        int totalLoads = data.stream().mapToInt(r -> r.loadCount).sum();
-
+    private void updateSummaryCards(List<DriverIncomeData> data) {
+        double totalIncome = data.stream().mapToDouble(DriverIncomeData::getNetPay).sum();
+        double totalMiles = data.stream().mapToDouble(DriverIncomeData::getTotalMiles).sum();
+        int totalLoads = data.stream().mapToInt(DriverIncomeData::getTotalLoads).sum();
+        double totalFuel = data.stream().mapToDouble(DriverIncomeData::getTotalFuelAmount).sum();
+        double avgPerMile = totalMiles > 0 ? totalIncome / totalMiles : 0;
+        
         animateLabel(totalIncomeLabel, CURRENCY_FORMAT.format(totalIncome));
-        animateLabel(totalMilesLabel, "N/A");
-        animateLabel(averagePerMileLabel, "N/A");
+        animateLabel(totalMilesLabel, String.format("%.1f", totalMiles));
+        animateLabel(averagePerMileLabel, String.format("$%.3f", avgPerMile));
         animateLabel(totalLoadsLabel, String.valueOf(totalLoads));
+        animateLabel(totalFuelLabel, CURRENCY_FORMAT.format(totalFuel));
+    }
+    
+    private void updateCharts(List<DriverIncomeData> data) {
+        // Update line chart
+        updateIncomeChart(data);
+        
+        // Update pie chart
+        updateExpenseChart(data);
+    }
+    
+    private void updateIncomeChart(List<DriverIncomeData> data) {
+        incomeChart.getData().clear();
+        
+        if (data.isEmpty()) return;
+        
+        XYChart.Series<String, Number> series = new XYChart.Series<>();
+        series.setName("Net Income");
+        
+        // Group by driver for chart
+        data.forEach(d -> {
+            series.getData().add(new XYChart.Data<>(d.getDriverName(), d.getNetPay()));
+        });
+        
+        incomeChart.getData().add(series);
+    }
+    
+    private void updateExpenseChart(List<DriverIncomeData> data) {
+        ObservableList<PieChart.Data> pieChartData = FXCollections.observableArrayList();
+        
+        double totalFuel = data.stream().mapToDouble(DriverIncomeData::getTotalFuelAmount).sum();
+        double totalService = data.stream().mapToDouble(DriverIncomeData::getServiceFee).sum();
+        double totalRecurring = data.stream().mapToDouble(DriverIncomeData::getRecurringFees).sum();
+        double totalAdvances = data.stream().mapToDouble(DriverIncomeData::getAdvanceRepayments).sum();
+        double totalEscrow = data.stream().mapToDouble(DriverIncomeData::getEscrowDeposits).sum();
+        double totalOther = data.stream().mapToDouble(DriverIncomeData::getOtherDeductions).sum();
+        
+        if (totalFuel > 0) pieChartData.add(new PieChart.Data("Fuel", totalFuel));
+        if (totalService > 0) pieChartData.add(new PieChart.Data("Service Fees", totalService));
+        if (totalRecurring > 0) pieChartData.add(new PieChart.Data("Recurring Fees", totalRecurring));
+        if (totalAdvances > 0) pieChartData.add(new PieChart.Data("Advance Repayments", totalAdvances));
+        if (totalEscrow > 0) pieChartData.add(new PieChart.Data("Escrow", totalEscrow));
+        if (totalOther > 0) pieChartData.add(new PieChart.Data("Other", totalOther));
+        
+        expenseBreakdownChart.setData(pieChartData);
+    }
+    
+    private void startAutoRefresh() {
+        scheduler.scheduleAtFixedRate(() -> {
+            if (autoRefreshEnabled) {
+                Platform.runLater(this::loadDriverIncome);
+            }
+        }, AUTO_REFRESH_INTERVAL, AUTO_REFRESH_INTERVAL, TimeUnit.SECONDS);
+    }
+    
+    private void stopAutoRefresh() {
+        scheduler.shutdown();
+    }
+    
+    private void viewDriverDetails(DriverIncomeData data) {
+        if (data == null) return;
+        
+        DriverDetailsDialog dialog = new DriverDetailsDialog(data);
+        dialog.showAndWait();
+    }
+    
+    private void exportDriverReport(DriverIncomeData data) {
+        if (data == null) return;
+        
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Driver Report");
+        fileChooser.setInitialFileName(String.format("DriverReport_%s_%s.pdf",
+            data.getDriverName().replace(" ", "_"),
+            LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
+        fileChooser.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
+        
+        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
+        if (file != null) {
+            exportToPDF(Collections.singletonList(data), file);
+        }
+    }
+    
+    private void exportToExcel() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export to Excel");
+        fileChooser.setInitialFileName("DriverIncome_" + 
+            LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ".xlsx");
+        fileChooser.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("Excel Files", "*.xlsx"));
+        
+        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
+        if (file != null) {
+            try {
+                ExcelExporter exporter = new ExcelExporter();
+                exporter.exportDriverIncome(new ArrayList<>(incomeData), file);
+                showAlert(Alert.AlertType.INFORMATION, "Export Successful", 
+                         "Driver income data exported to Excel successfully!");
+            } catch (Exception e) {
+                logger.error("Failed to export to Excel", e);
+                showAlert(Alert.AlertType.ERROR, "Export Failed", 
+                         "Failed to export to Excel: " + e.getMessage());
+            }
+        }
+    }
+    
+    private void exportToPDF() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export to PDF");
+        fileChooser.setInitialFileName("DriverIncome_" + 
+            LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ".pdf");
+        fileChooser.getExtensionFilters().add(
+            new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
+        
+        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
+        if (file != null) {
+            exportToPDF(new ArrayList<>(incomeData), file);
+        }
+    }
+    
+    private void exportToPDF(List<DriverIncomeData> data, File file) {
+        try {
+            PDFExporter exporter = new PDFExporter();
+            exporter.exportDriverIncome(data, file);
+            showAlert(Alert.AlertType.INFORMATION, "Export Successful", 
+                     "Driver income report exported to PDF successfully!");
+        } catch (Exception e) {
+            logger.error("Failed to export to PDF", e);
+            showAlert(Alert.AlertType.ERROR, "Export Failed", 
+                     "Failed to export to PDF: " + e.getMessage());
+        }
+    }
+    
+    private Button createStyledButton(String text, String color, boolean primary) {
+        Button button = new Button(text);
+        if (primary) {
+            button.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: white; " +
+                "-fx-font-weight: bold; -fx-cursor: hand; -fx-background-radius: 5;", color));
+        } else {
+            button.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: white; " +
+                "-fx-cursor: hand; -fx-background-radius: 5;", color));
+        }
+        
+        button.setOnMouseEntered(e -> button.setOpacity(0.8));
+        button.setOnMouseExited(e -> button.setOpacity(1.0));
+        
+        return button;
     }
     
     private void animateLabel(Label label, String newValue) {
-        FadeTransition ft = new FadeTransition(Duration.millis(300), label);
+        FadeTransition ft = new FadeTransition(Duration.millis(200), label);
         ft.setFromValue(1.0);
         ft.setToValue(0.0);
         ft.setOnFinished(e -> {
             label.setText(newValue);
-            FadeTransition ft2 = new FadeTransition(Duration.millis(300), label);
+            FadeTransition ft2 = new FadeTransition(Duration.millis(200), label);
             ft2.setFromValue(0.0);
             ft2.setToValue(1.0);
             ft2.play();
@@ -518,61 +726,14 @@ public class DriverIncomeTab extends Tab {
         ft.play();
     }
     
-    private void updateCharts(List<PayrollRow> data) {
-        incomeChart.getData().clear();
-        expenseBreakdownChart.setData(FXCollections.observableArrayList());
+    private void animateCard(VBox card, double scale) {
+        ScaleTransition st = new ScaleTransition(Duration.millis(200), card);
+        st.setToX(scale);
+        st.setToY(scale);
+        st.play();
     }
     
-    private void exportToExcel() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Save Excel File");
-        fileChooser.getExtensionFilters().add(
-            new FileChooser.ExtensionFilter("Excel Files", "*.xlsx")
-        );
-        fileChooser.setInitialFileName("driver_income_" + LocalDate.now() + ".xlsx");
-        
-        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
-        if (file != null) {
-            // Export logic here
-            showAlert(AlertType.INFORMATION, "Export Successful", "Income data exported to Excel successfully!");
-        }
-    }
-    
-    private void exportToPdf() {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Save PDF File");
-        fileChooser.getExtensionFilters().add(
-            new FileChooser.ExtensionFilter("PDF Files", "*.pdf")
-        );
-        fileChooser.setInitialFileName("driver_income_" + LocalDate.now() + ".pdf");
-        
-        File file = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
-        if (file != null) {
-            // Export logic here
-            showAlert(AlertType.INFORMATION, "Export Successful", "Income data exported to PDF successfully!");
-        }
-    }
-    
-    private void viewLoadDetails() {
-        PayrollRow selected = incomeTable.getSelectionModel().getSelectedItem();
-        if (selected != null) {
-            Alert alert = new Alert(AlertType.INFORMATION);
-            alert.setTitle("Load Details");
-            alert.setHeaderText(selected.driverName);
-            alert.setContentText("Net Pay: " + CURRENCY_FORMAT.format(selected.netPay));
-            alert.showAndWait();
-        }
-    }
-    
-    private void printSelectedRow() {
-        PayrollRow selected = incomeTable.getSelectionModel().getSelectedItem();
-        if (selected != null) {
-            // Print logic here
-            showAlert(AlertType.INFORMATION, "Print", "Printing load details...");
-        }
-    }
-    
-    private void showAlert(AlertType type, String title, String content) {
+    private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);
         alert.setHeaderText(null);
@@ -580,11 +741,17 @@ public class DriverIncomeTab extends Tab {
         alert.showAndWait();
     }
     
-    private void initializeData() {
-        List<Employee> drivers = employeeDAO.getActive();
-        ObservableList<String> names = FXCollections.observableArrayList(
-            drivers.stream().map(Employee::getName).collect(Collectors.toList()));
-        driverComboBox.setItems(names);
+    /**
+     * Clean up resources when tab is closed
+     */
+    public void cleanup() {
+        stopAutoRefresh();
+        try {
+            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            scheduler.shutdownNow();
+        }
     }
-
 }

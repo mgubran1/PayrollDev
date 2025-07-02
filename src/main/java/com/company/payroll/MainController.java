@@ -175,9 +175,9 @@ public class MainController extends BorderPane {
             revenueTab.setGraphic(createEnhancedTabIcon("📈", "#3498db"));
             logger.info("Revenue tab created successfully");
 
-            // Driver Income tab
+            // Driver Income tab - NOW WITH REQUIRED PARAMETERS
             logger.debug("Creating Driver Income tab");
-            DriverIncomeTab driverIncomeTab = new DriverIncomeTab();
+            DriverIncomeTab driverIncomeTab = new DriverIncomeTab(employeeDAO, loadDAO, fuelDAO, payrollCalculator);
             driverIncomeTab.setText("Driver Income");
             driverIncomeTab.setClosable(false);
             driverIncomeTab.setGraphic(createEnhancedTabIcon("🚗", "#16a085"));

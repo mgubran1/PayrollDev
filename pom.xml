@@ -68,8 +68,13 @@
         <!-- Apache POI for Excel/XLSX support -->
         <dependency>
             <groupId>org.apache.poi</groupId>
+            <artifactId>poi</artifactId>
+            <version>5.2.4</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
-            <version>5.2.3</version>
+            <version>5.2.4</version>
         </dependency>
         
         <!-- Log4j-to-SLF4J bridge to redirect Apache POI's Log4j2 calls -->
@@ -98,6 +103,13 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>3.14.0</version>
+        </dependency>
+        
+        <!-- Jackson for JSON parsing (NEW) -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.15.2</version>
         </dependency>
         
         <!-- For better date/time handling (optional but recommended) -->
