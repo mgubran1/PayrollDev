@@ -8,4 +8,11 @@ public class NotificationService {
     public void sendNotification(String subject, String body) {
         // no-op
     }
+
+    // Overloaded variant used in DispatcherController
+    public void sendNotification(String subject, String body,
+                                 java.util.Map<String, String> params,
+                                 java.util.List<String> recipients) {
+        // no-op
+    }
 }
