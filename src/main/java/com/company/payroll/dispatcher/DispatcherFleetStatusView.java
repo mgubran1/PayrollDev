@@ -7,6 +7,12 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import com.company.payroll.driver.DriverDetailsDialog;
+import com.company.payroll.driver.DriverIncomeData;
+import com.company.payroll.driver.DriverIncomeService;
+import com.company.payroll.employees.EmployeeDAO;
+import com.company.payroll.fuel.FuelTransactionDAO;
+import com.company.payroll.loads.LoadDAO;
+import com.company.payroll.payroll.PayrollCalculator;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -14,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.format.DateTimeFormatter;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -335,7 +342,30 @@ public class DispatcherFleetStatusView extends BorderPane {
     
     private void showDriverDetails(DispatcherDriverStatus driver) {
         logger.info("Showing details for driver: {}", driver.getDriverName());
-        new DriverDetailsDialog(driver).showAndWait();
+
+        // Build the services needed to fetch income data on demand
+        EmployeeDAO employeeDAO = new EmployeeDAO();
+        LoadDAO loadDAO = new LoadDAO();
+        FuelTransactionDAO fuelDAO = new FuelTransactionDAO();
+        PayrollCalculator payrollCalculator = new PayrollCalculator(employeeDAO, loadDAO, fuelDAO);
+        DriverIncomeService incomeService = new DriverIncomeService(employeeDAO, loadDAO, fuelDAO, payrollCalculator);
+
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(30);
+
+        try {
+            DriverIncomeData data = incomeService
+                .getDriverIncomeData(driver.getDriver(), startDate, endDate)
+                .get();
+            new DriverDetailsDialog(data).showAndWait();
+        } catch (Exception e) {
+            logger.error("Failed to load driver details", e);
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("Failed to load driver details");
+            alert.setContentText(e.getMessage());
+            alert.showAndWait();
+        }
     }
     
     private void updateDriverStatus(DispatcherDriverStatus driver) {
