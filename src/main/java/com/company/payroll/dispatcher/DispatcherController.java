@@ -332,14 +332,22 @@ public class DispatcherController {
      */
     private LoadStatus convertStatus(DispatcherDriverStatus.Status status) {
         switch (status) {
-            case AVAILABLE: return LoadStatus.ASSIGNED;
-            case ON_ROAD: return LoadStatus.IN_TRANSIT;
-            case LOADING: return LoadStatus.LOADING;
-    public void refreshAll() { refreshData(); }
-
-            case UNLOADING: return LoadStatus.UNLOADING;
-            default: return LoadStatus.BOOKED;
+            case AVAILABLE:
+                return LoadStatus.ASSIGNED;
+            case ON_ROAD:
+                return LoadStatus.IN_TRANSIT;
+            case LOADING:
+                return LoadStatus.LOADING;
+            case UNLOADING:
+                return LoadStatus.UNLOADING;
+            default:
+                return LoadStatus.BOOKED;
         }
+    }
+
+    /** Convenience method to trigger a full data refresh. */
+    public void refreshAll() {
+        refreshData();
     }
     
     /**

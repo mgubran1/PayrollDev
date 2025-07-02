@@ -605,8 +605,13 @@ public class DispatcherFleetStatusView extends BorderPane {
             }
         }
     }
-        private boolean isGPSEnabled(String loc) { return loc.matches(".*\d+\.\d+.*"); }
-        private void openMapLocation(String loc) { }
+        private boolean isGPSEnabled(String loc) {
+            return loc != null && loc.matches(".*\\d+\\.\\d+.*");
+        }
+
+        private void openMapLocation(String loc) {
+            // Placeholder for future map integration
+        }
     
     private class HoursProgressCell extends TableCell<DispatcherDriverStatus, String> {
         @Override
@@ -1201,6 +1206,12 @@ public class DispatcherFleetStatusView extends BorderPane {
                     
             } catch (IOException e) {
                 logger.error("Failed to export fleet status", e);
+                showErrorAlert("Export Failed",
+                    "Failed to export fleet status: " + e.getMessage());
+            }
+        }
+    }
+
     private void refreshSelectedDrivers() {}
     private void exportSelectedDrivers() {}
     private void showDriverHistory(DispatcherDriverStatus d) {}
@@ -1209,12 +1220,6 @@ public class DispatcherFleetStatusView extends BorderPane {
     private void emailFleetReport() {}
     private void toggleCompactView(boolean v) {}
     private void configureColumns() {}
-
-                showErrorAlert("Export Failed", 
-                    "Failed to export fleet status: " + e.getMessage());
-            }
-        }
-    }
     
     private void showErrorAlert(String title, String content) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
