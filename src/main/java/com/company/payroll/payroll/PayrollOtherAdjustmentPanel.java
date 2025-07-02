@@ -118,7 +118,7 @@ public class PayrollOtherAdjustmentPanel extends VBox {
         TableColumn<PayrollOtherAdjustments.OtherAdjustment, String> descCol = new TableColumn<>("Description");
         descCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().description == null ? "" : cell.getValue().description));
         
-        adjustmentTable.getColumns().setAll(typeCol, catCol, amtCol, descCol);
+        adjustmentTable.getColumns().setAll(java.util.List.of(typeCol, catCol, amtCol, descCol));
     }
 
     public void updateAdjustmentTable() {

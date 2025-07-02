@@ -322,7 +322,7 @@ public class MaintenanceTab extends Tab {
         
         // Maintenance Table
         maintenanceTable = new TableView<>();
-        maintenanceTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        maintenanceTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         maintenanceTable.setPrefHeight(400);
         
         TableColumn<MaintenanceRecord, LocalDate> dateCol = new TableColumn<>("Date");
@@ -399,8 +399,9 @@ public class MaintenanceTab extends Tab {
         notesCol.setCellValueFactory(new PropertyValueFactory<>("notes"));
         notesCol.setPrefWidth(200);
         
-        maintenanceTable.getColumns().addAll(dateCol, unitTypeCol, unitNumberCol, serviceTypeCol,
-                                            mileageCol, costCol, vendorCol, invoiceCol, notesCol);
+        maintenanceTable.getColumns().setAll(java.util.List.of(
+                dateCol, unitTypeCol, unitNumberCol, serviceTypeCol,
+                mileageCol, costCol, vendorCol, invoiceCol, notesCol));
         
         // Double-click to edit
         maintenanceTable.setRowFactory(tv -> {

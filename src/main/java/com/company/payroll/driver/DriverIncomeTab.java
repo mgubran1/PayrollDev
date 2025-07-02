@@ -313,7 +313,7 @@ public class DriverIncomeTab extends Tab {
     
     private TableView<DriverIncomeData> createIncomeTable() {
         TableView<DriverIncomeData> table = new TableView<>(incomeData);
-        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setPrefHeight(400);
         
         // Driver column
@@ -386,8 +386,9 @@ public class DriverIncomeTab extends Tab {
             }
         });
         
-        table.getColumns().addAll(driverCol, truckCol, loadsCol, grossCol, 
-                                 milesCol, fuelCol, avgPerMileCol, netPayCol);
+        table.getColumns().setAll(java.util.List.of(
+                driverCol, truckCol, loadsCol, grossCol,
+                milesCol, fuelCol, avgPerMileCol, netPayCol));
         
         // Add context menu
         ContextMenu contextMenu = new ContextMenu();

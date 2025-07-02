@@ -79,7 +79,7 @@ public class PayrollRecurringPanel extends VBox {
         amountCol.setCellValueFactory(cell -> new SimpleDoubleProperty(cell.getValue().amount()).asObject());
         TableColumn<PayrollRecurring.RecurringDeduction, String> descCol = new TableColumn<>("Description");
         descCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().description() == null ? "" : cell.getValue().description()));
-        recurringTable.getColumns().setAll(typeCol, amountCol, descCol);
+        recurringTable.getColumns().setAll(java.util.List.of(typeCol, amountCol, descCol));
     }
 
     public void updateRecurringTable() {

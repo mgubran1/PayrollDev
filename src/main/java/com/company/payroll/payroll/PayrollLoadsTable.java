@@ -43,6 +43,7 @@ public class PayrollLoadsTable extends TableView<Load> {
         TableColumn<Load, String> deliveryDateCol = new TableColumn<>("Delivery Date");
         deliveryDateCol.setCellValueFactory(cell -> new SimpleStringProperty(
                 cell.getValue().getDeliveryDate() != null ? cell.getValue().getDeliveryDate().format(dtf) : ""));
-        getColumns().addAll(loadNumCol, customerCol, pickUpCol, dropCol, driverCol, trailerCol, statusCol, grossCol, notesCol, deliveryDateCol);
+        getColumns().setAll(java.util.List.of(loadNumCol, customerCol, pickUpCol, dropCol,
+                driverCol, trailerCol, statusCol, grossCol, notesCol, deliveryDateCol));
     }
 }

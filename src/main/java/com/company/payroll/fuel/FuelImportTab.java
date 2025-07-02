@@ -318,7 +318,9 @@ public class FuelImportTab extends BorderPane {
         colAmt.setPrefWidth(100);
 
         // Add only the specified columns in order
-        table.getColumns().addAll(colDate, colTime, colInv, colUnit, colDriver, colLoc, colState, colFees, colAmt);
+        table.getColumns().setAll(java.util.List.of(
+                colDate, colTime, colInv, colUnit, colDriver,
+                colLoc, colState, colFees, colAmt));
         
         return table;
     }

@@ -1910,8 +1910,9 @@ public class PayrollTab extends BorderPane implements
         statusCol.setPrefWidth(100);
         statusCol.setStyle("-fx-alignment: CENTER;");
         
-        table.getColumns().addAll(dateCol, driverCol, truckCol, loadsCol, grossCol, 
-                                 deductionsCol, netCol, statusCol);
+        table.getColumns().setAll(java.util.List.of(
+                dateCol, driverCol, truckCol, loadsCol, grossCol,
+                deductionsCol, netCol, statusCol));
         
         // Enable sorting
         table.getSortOrder().add(dateCol);

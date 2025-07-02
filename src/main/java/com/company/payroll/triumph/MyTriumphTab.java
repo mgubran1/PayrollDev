@@ -176,7 +176,8 @@ public class MyTriumphTab extends Tab {
         colDriver.setCellValueFactory(param -> new ReadOnlyStringWrapper(param.getValue().getDriverName() == null ? "" : param.getValue().getDriverName()));
         colDriver.setPrefWidth(120);
 
-        table.getColumns().addAll(colDTR, colINV, colDATE, colPO, colAMT, colSource, colStatus, colDriver);
+        table.getColumns().setAll(java.util.List.of(
+                colDTR, colINV, colDATE, colPO, colAMT, colSource, colStatus, colDriver));
         table.setEditable(true);
         table.setItems(makeFilteredList());
 

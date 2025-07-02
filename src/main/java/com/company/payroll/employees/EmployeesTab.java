@@ -110,11 +110,11 @@ public class EmployeesTab extends BorderPane {
         statusCol.setCellValueFactory(e -> new SimpleStringProperty(
                 e.getValue().getStatus() != null ? e.getValue().getStatus().name().replace("_", " ") : ""));
 
-        table.getColumns().addAll(
+        table.getColumns().setAll(java.util.List.of(
             nameCol, truckCol, trailerCol, phoneCol, emailCol, driverPctCol, companyPctCol, serviceFeeCol,
             dobCol, licenseCol, driverTypeCol, llcCol,
             cdlExpiryCol, medExpiryCol, statusCol
-        );
+        ));
 
         // --- FILTERED/SORTED VIEW ---
         FilteredList<Employee> filtered = new FilteredList<>(employees, p -> true);

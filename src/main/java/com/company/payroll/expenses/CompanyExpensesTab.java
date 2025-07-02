@@ -362,7 +362,7 @@ public class CompanyExpensesTab extends Tab {
         
         // Expense Table
         expenseTable = new TableView<>();
-        expenseTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        expenseTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         expenseTable.setPrefHeight(400);
         
         TableColumn<CompanyExpense, LocalDate> dateCol = new TableColumn<>("Date");
@@ -477,9 +477,10 @@ public class CompanyExpensesTab extends Tab {
         });
         recurringCol.setPrefWidth(80);
         
-        expenseTable.getColumns().addAll(dateCol, vendorCol, categoryCol, departmentCol,
-                                       descriptionCol, amountCol, paymentMethodCol, 
-                                       receiptCol, statusCol, recurringCol);
+        expenseTable.getColumns().setAll(java.util.List.of(
+                dateCol, vendorCol, categoryCol, departmentCol,
+                descriptionCol, amountCol, paymentMethodCol,
+                receiptCol, statusCol, recurringCol));
         
         // Double-click to edit
         expenseTable.setRowFactory(tv -> {
@@ -610,7 +611,7 @@ public class CompanyExpensesTab extends Tab {
         vendorTitle.setFont(Font.font("Arial", FontWeight.BOLD, 18));
         
         TableView<VendorSummary> vendorTable = new TableView<>();
-        vendorTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        vendorTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         vendorTable.setPrefHeight(300);
         
         TableColumn<VendorSummary, String> vendorNameCol = new TableColumn<>("Vendor Name");
@@ -651,8 +652,9 @@ public class CompanyExpensesTab extends Tab {
         TableColumn<VendorSummary, String> lastTransactionCol = new TableColumn<>("Last Transaction");
         lastTransactionCol.setCellValueFactory(new PropertyValueFactory<>("lastTransactionDate"));
         
-        vendorTable.getColumns().addAll(vendorNameCol, transactionCountCol, 
-                                       totalAmountCol, avgAmountCol, lastTransactionCol);
+        vendorTable.getColumns().setAll(java.util.List.of(
+                vendorNameCol, transactionCountCol,
+                totalAmountCol, avgAmountCol, lastTransactionCol));
         
         // Vendor management buttons
         HBox vendorButtons = new HBox(10);

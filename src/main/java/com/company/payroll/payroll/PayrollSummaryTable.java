@@ -411,7 +411,7 @@ public class PayrollSummaryTable extends VBox {
         netCol.setMinWidth(140);
 
         // Add all columns
-        table.getColumns().addAll(
+        table.getColumns().setAll(java.util.List.of(
             driverCol,
             truckUnitCol,
             loadCountCol,
@@ -429,7 +429,7 @@ public class PayrollSummaryTable extends VBox {
             otherDeductionsCol,
             reimbursementsCol,
             netCol
-        );
+        ));
     }
     
     /**
@@ -911,10 +911,11 @@ public class PayrollSummaryTable extends VBox {
     /**
      * Get the current filter predicate
      */
+    @SuppressWarnings("unchecked")
     public Predicate<PayrollCalculator.PayrollRow> getFilterPredicate() {
-		Predicate<? super PayrollCalculator.PayrollRow> predicate = filteredData.getPredicate();
-		return predicate != null ? (Predicate<PayrollCalculator.PayrollRow>) predicate : null;
-	}
+        Predicate<? super PayrollCalculator.PayrollRow> predicate = filteredData.getPredicate();
+        return predicate != null ? (Predicate<PayrollCalculator.PayrollRow>) predicate : null;
+    }
     /**
      * Set a custom filter predicate
      */

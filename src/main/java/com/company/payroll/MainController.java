@@ -41,7 +41,7 @@ import com.company.payroll.maintenance.MaintenanceTab;
 import com.company.payroll.expenses.CompanyExpensesTab;
 import com.company.payroll.revenue.RevenueTab;
 import com.company.payroll.driver.DriverIncomeTab;
-import com.company.payroll.dispatcher.DispatcherController;
+import com.company.payroll.dispatcher.DispatcherTab;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -185,20 +185,17 @@ public class MainController extends BorderPane {
             logger.info("Driver Income tab created successfully");
 
 			// Dispatcher tab
-			logger.debug("Creating Dispatcher tab");
-			DispatcherController dispatcherController = new DispatcherController(employeeDAO, loadDAO);
-			Tab dispatcherTab = new Tab("Dispatcher", dispatcherController.getView());
-			dispatcherTab.setClosable(false);
-			dispatcherTab.setGraphic(createEnhancedTabIcon("📍", "#8e44ad"));
+                        logger.debug("Creating Dispatcher tab");
+                        DispatcherTab dispatcherTab = new DispatcherTab();
+                        dispatcherTab.setGraphic(createEnhancedTabIcon("📍", "#8e44ad"));
 
-			// Initialize and refresh when tab is selected
-			dispatcherTab.setOnSelectionChanged(event -> {
-				if (dispatcherTab.isSelected()) {
-					logger.debug("Dispatcher tab selected, refreshing data");
-					dispatcherController.refreshAll();
-				}
-			});
-			logger.info("Dispatcher tab created successfully");
+                        dispatcherTab.setOnSelectionChanged(event -> {
+                                if (dispatcherTab.isSelected()) {
+                                        logger.debug("Dispatcher tab selected, refreshing data");
+                                        dispatcherTab.refresh();
+                                }
+                        });
+                        logger.info("Dispatcher tab created successfully");
 
             // Register PayrollTab as a listener for load data changes
             logger.debug("Registering PayrollTab as LoadDataChangeListener");
@@ -212,17 +209,17 @@ public class MainController extends BorderPane {
 
 			// Register loads tab to update dispatcher when loads change
 			logger.debug("Registering Dispatcher for load updates");
-			loadsTab.addLoadDataChangeListener(() -> {
-				logger.debug("Load data changed, updating dispatcher");
-				dispatcherController.refreshAll();
-			});
+                        loadsTab.addLoadDataChangeListener(() -> {
+                                logger.debug("Load data changed, updating dispatcher");
+                                dispatcherTab.refresh();
+                        });
 
 			// Also register employee changes to update dispatcher
 			logger.debug("Registering Dispatcher for employee updates");
-			employeesTabContent.addDataChangeListener(() -> {
-				logger.debug("Employee data changed, updating dispatcher");
-				dispatcherController.refreshAll();
-			});
+                        employeesTabContent.addEmployeeDataChangeListener(list -> {
+                                logger.debug("Employee data changed, updating dispatcher");
+                                dispatcherTab.refresh();
+                        });
 
             logger.info("MyTriumph Audit tab created successfully");
 
