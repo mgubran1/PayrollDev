@@ -7,8 +7,8 @@ import com.company.payroll.loads.LoadDAO;
 import com.company.payroll.fuel.FuelTransaction;
 import com.company.payroll.fuel.FuelTransactionDAO;
 import com.company.payroll.payroll.PayrollCalculator;
-import com.company.payroll.geocoding.GeocodingService;
-import com.company.payroll.geocoding.MileageCalculator;
+import com.company.payroll.driver.GeocodingService;
+import com.company.payroll.driver.MileageCalculator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
