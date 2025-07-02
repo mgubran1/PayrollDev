@@ -154,7 +154,8 @@ public class DispatcherManager {
         availabilityDAO.save(availability);
         
         // Update load with driver assignment
-        load.setDriverId(driverId);
+        // Attach the driver object and update load status
+        load.setDriver(employeeDAO.getById(driverId));
         load.setStatus(Load.Status.ASSIGNED);
         loadDAO.update(load);
         
