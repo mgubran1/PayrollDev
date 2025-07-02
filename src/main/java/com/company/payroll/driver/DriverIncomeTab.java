@@ -24,7 +24,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
+import java.time.DayOfWeek;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.text.NumberFormat;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -52,6 +54,8 @@ public class DriverIncomeTab extends Tab {
     private ComboBox<Employee> driverComboBox;
     private DatePicker startDatePicker;
     private DatePicker endDatePicker;
+    private ComboBox<String> periodComboBox;
+    private HBox dateBox;
     private Label totalIncomeLabel;
     private Label totalMilesLabel;
     private Label averagePerMileLabel;
@@ -181,11 +185,22 @@ public class DriverIncomeTab extends Tab {
             }
         });
         
+        // Period Selection
+        Label periodLabel = new Label("Period:");
+        periodLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        periodComboBox = new ComboBox<>();
+        periodComboBox.getItems().addAll("This Week", "This Month", "This Year", "Custom Range");
+        periodComboBox.setValue("This Month");
+        periodComboBox.setPrefWidth(120);
+
         // Date Range Selection
         Label dateRangeLabel = new Label("Date Range:");
         dateRangeLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-        startDatePicker = new DatePicker(LocalDate.now().minusMonths(1));
+        startDatePicker = new DatePicker(LocalDate.now().withDayOfMonth(1));
         endDatePicker = new DatePicker(LocalDate.now());
+        dateBox = new HBox(5, dateRangeLabel, startDatePicker, new Label("to"), endDatePicker);
+        dateBox.setVisible(false);
+        updateDateRange();
         
         // Buttons
         Button searchButton = createStyledButton("Search", "#3498db", true);
@@ -214,7 +229,8 @@ public class DriverIncomeTab extends Tab {
         controlPanel.getChildren().addAll(
             driverLabel, driverComboBox,
             new Separator(Orientation.VERTICAL),
-            dateRangeLabel, startDatePicker, new Label("to"), endDatePicker,
+            periodLabel, periodComboBox,
+            dateBox,
             searchButton, refreshButton,
             new Separator(Orientation.VERTICAL),
             exportExcelButton, exportPdfButton,
@@ -452,8 +468,28 @@ public class DriverIncomeTab extends Tab {
         expenseBreakdownChart.setPrefHeight(250);
         expenseBreakdownChart.setAnimated(true);
         expenseBreakdownChart.setLabelsVisible(true);
-        
+
         return expenseBreakdownChart;
+    }
+
+    private void updateDateRange() {
+        String period = periodComboBox.getValue();
+        LocalDate now = LocalDate.now();
+
+        switch (period) {
+            case "This Week":
+                startDatePicker.setValue(now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)));
+                endDatePicker.setValue(now.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)));
+                break;
+            case "This Month":
+                startDatePicker.setValue(now.withDayOfMonth(1));
+                endDatePicker.setValue(now);
+                break;
+            case "This Year":
+                startDatePicker.setValue(now.withDayOfYear(1));
+                endDatePicker.setValue(now);
+                break;
+        }
     }
     
     private void setupEventHandlers() {
@@ -469,7 +505,15 @@ public class DriverIncomeTab extends Tab {
                 loadDriverIncome();
             }
         });
-        
+
+        periodComboBox.setOnAction(e -> {
+            dateBox.setVisible("Custom Range".equals(periodComboBox.getValue()));
+            updateDateRange();
+            if (autoRefreshEnabled) {
+                loadDriverIncome();
+            }
+        });
+
         // Driver selection change
         driverComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
             if (autoRefreshEnabled) {
