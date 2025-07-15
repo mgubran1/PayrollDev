@@ -82,6 +82,23 @@ task fatJar(type: Jar) {
     with jar
 }
 
+// Task to build a Windows installer using jpackage
+task packageExe(type: Exec) {
+    dependsOn fatJar
+    onlyIf { org.gradle.internal.os.OperatingSystem.current().isWindows() }
+    def jarName = "${project.name}-${version}-all.jar"
+    commandLine 'jpackage',
+        '--type', 'exe',
+        '--input', "$buildDir/libs",
+        '--dest', "$buildDir/installer",
+        '--name', 'PayrollDesktop',
+        '--main-jar', jarName,
+        '--main-class', 'com.company.payroll.Main',
+        '--icon', 'src/main/resources/icon.ico',
+        '--app-version', version,
+        '--vendor', 'Company Inc.'
+}
+
 // Clean task enhancement
 clean {
     doLast {
