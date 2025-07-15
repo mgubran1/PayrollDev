@@ -185,6 +185,16 @@
                 </configuration>
             </plugin>
             
+            <!-- Exec plugin for running the application -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.1</version>
+                <configuration>
+                    <mainClass>com.company.payroll.Main</mainClass>
+                </configuration>
+            </plugin>
+            
             <!-- Surefire plugin for running tests -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

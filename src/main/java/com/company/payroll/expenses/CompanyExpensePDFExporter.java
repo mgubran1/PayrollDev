@@ -1,0 +1,506 @@
+package com.company.payroll.expenses;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.awt.Color;
+import java.io.File;
+import java.io.IOException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.text.NumberFormat;
+import java.util.stream.Collectors;
+
+public class CompanyExpensePDFExporter {
+    private static final Logger logger = LoggerFactory.getLogger(CompanyExpensePDFExporter.class);
+    
+    // Formatting
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+    private static final NumberFormat CURRENCY_FORMAT = NumberFormat.getCurrencyInstance();
+    
+    // PDF Layout Constants
+    private static final float MARGIN = 50;
+    private static final float PAGE_WIDTH = PDRectangle.LETTER.getWidth();
+    private static final float PAGE_HEIGHT = PDRectangle.LETTER.getHeight();
+    private static final float CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN;
+    
+    // Font sizes
+    private static final float TITLE_FONT_SIZE = 24;
+    private static final float HEADER_FONT_SIZE = 18;
+    private static final float SUBHEADER_FONT_SIZE = 14;
+    private static final float NORMAL_FONT_SIZE = 11;
+    private static final float SMALL_FONT_SIZE = 9;
+    
+    // Colors
+    private static final Color HEADER_COLOR = new Color(52, 73, 94); // #34495e
+    private static final Color ACCENT_COLOR = new Color(52, 152, 219); // #3498db
+    private static final Color LIGHT_GRAY = new Color(245, 245, 245);
+    private static final Color DARK_GRAY = new Color(66, 66, 66);
+    
+    private final String companyName;
+    private final List<CompanyExpense> expenses;
+    private final LocalDate startDate;
+    private final LocalDate endDate;
+    
+    public CompanyExpensePDFExporter(String companyName, List<CompanyExpense> expenses, 
+                                  LocalDate startDate, LocalDate endDate) {
+        this.companyName = companyName;
+        this.expenses = new ArrayList<>(expenses);
+        this.startDate = startDate;
+        this.endDate = endDate;
+    }
+    
+    public void exportToPDF(File file) throws IOException {
+        try (PDDocument document = new PDDocument()) {
+            // First page - Title and Summary
+            PDPage firstPage = new PDPage(PDRectangle.LETTER);
+            document.addPage(firstPage);
+            float currentY = writeTitlePage(document, firstPage);
+            
+            // Detail pages
+            currentY = writeDetailedExpenses(document, firstPage, currentY);
+            
+            // Analytics page
+            writeAnalyticsPage(document);
+            
+            // Save document
+            document.save(file);
+            logger.info("PDF exported successfully to: {}", file.getAbsolutePath());
+        }
+    }
+    
+    private float writeTitlePage(PDDocument document, PDPage page) throws IOException {
+        try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+            float y = PAGE_HEIGHT - MARGIN;
+            
+            // Company Name
+            stream.setNonStrokingColor(HEADER_COLOR);
+            stream.beginText();
+            stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), TITLE_FONT_SIZE);
+            stream.newLineAtOffset(MARGIN, y);
+            stream.showText(companyName);
+            stream.endText();
+            y -= 35;
+            
+            // Report Title
+            stream.setNonStrokingColor(DARK_GRAY);
+            stream.beginText();
+            stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), HEADER_FONT_SIZE);
+            stream.newLineAtOffset(MARGIN, y);
+            stream.showText("Company Expense Report");
+            stream.endText();
+            y -= 25;
+            
+            // Date Range
+            stream.beginText();
+            stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), NORMAL_FONT_SIZE);
+            stream.newLineAtOffset(MARGIN, y);
+            String dateRange = String.format("%s to %s", 
+                startDate.format(DATE_FORMAT), 
+                endDate.format(DATE_FORMAT));
+            stream.showText(dateRange);
+            stream.endText();
+            y -= 30;
+            
+            // Summary Section
+            y = drawSummarySection(stream, y);
+            
+            return y;
+        }
+    }
+    
+    private float drawSummarySection(PDPageContentStream stream, float startY) throws IOException {
+        float y = startY;
+        
+        // Calculate summary statistics
+        double totalExpenses = expenses.stream().mapToDouble(CompanyExpense::getAmount).sum();
+        long totalRecords = expenses.size();
+        double avgExpense = totalRecords > 0 ? totalExpenses / totalRecords : 0;
+        
+        // Operating vs Administrative breakdown
+        Set<String> operatingCategories = Set.of("Fuel", "Permits & Licenses", "Insurance", 
+                                               "Equipment Purchase", "Communications");
+        double operatingExpenses = expenses.stream()
+            .filter(e -> operatingCategories.contains(e.getCategory()))
+            .mapToDouble(CompanyExpense::getAmount)
+            .sum();
+        
+        double administrativeExpenses = expenses.stream()
+            .filter(e -> !operatingCategories.contains(e.getCategory()))
+            .mapToDouble(CompanyExpense::getAmount)
+            .sum();
+        
+        // Draw summary box
+        stream.setNonStrokingColor(LIGHT_GRAY);
+        stream.addRect(MARGIN, y - 120, CONTENT_WIDTH, 100);
+        stream.fill();
+        
+        // Summary title
+        y -= 20;
+        stream.setNonStrokingColor(HEADER_COLOR);
+        stream.beginText();
+        stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), SUBHEADER_FONT_SIZE);
+        stream.newLineAtOffset(MARGIN + 10, y);
+        stream.showText("Summary");
+        stream.endText();
+        y -= 25;
+        
+        // Summary data in columns
+        float col1X = MARGIN + 10;
+        float col2X = MARGIN + CONTENT_WIDTH/2;
+        
+        stream.setNonStrokingColor(DARK_GRAY);
+        stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), NORMAL_FONT_SIZE);
+        
+        // Total expenses
+        stream.beginText();
+        stream.newLineAtOffset(col1X, y);
+        stream.showText("Total Expenses: " + CURRENCY_FORMAT.format(totalExpenses));
+        stream.endText();
+        
+        // Total records
+        stream.beginText();
+        stream.newLineAtOffset(col2X, y);
+        stream.showText("Total Records: " + totalRecords);
+        stream.endText();
+        y -= 20;
+        
+        // Average expense
+        stream.beginText();
+        stream.newLineAtOffset(col1X, y);
+        stream.showText("Average Expense: " + CURRENCY_FORMAT.format(avgExpense));
+        stream.endText();
+        
+        // Operating expenses
+        stream.beginText();
+        stream.newLineAtOffset(col2X, y);
+        stream.showText("Operating Expenses: " + CURRENCY_FORMAT.format(operatingExpenses));
+        stream.endText();
+        y -= 20;
+        
+        // Administrative expenses
+        stream.beginText();
+        stream.newLineAtOffset(col1X, y);
+        stream.showText("Administrative Expenses: " + CURRENCY_FORMAT.format(administrativeExpenses));
+        stream.endText();
+        
+        return y - 40;
+    }
+    
+    private float writeDetailedExpenses(PDDocument document, PDPage currentPage, float startY) throws IOException {
+        PDPageContentStream stream = new PDPageContentStream(document, currentPage, 
+            PDPageContentStream.AppendMode.APPEND, true);
+        
+        float y = startY;
+        
+        // Section header
+        stream.setNonStrokingColor(HEADER_COLOR);
+        stream.beginText();
+        stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), SUBHEADER_FONT_SIZE);
+        stream.newLineAtOffset(MARGIN, y);
+        stream.showText("Detailed Expense Records");
+        stream.endText();
+        y -= 25;
+        
+        // Table headers
+        float[] columnWidths = {70, 90, 90, 80, 140, 70};
+        String[] headers = {"Date", "Vendor", "Category", "Department", "Description", "Amount"};
+        
+        // Draw header row
+        stream.setNonStrokingColor(ACCENT_COLOR);
+        stream.addRect(MARGIN, y - 20, CONTENT_WIDTH, 20);
+        stream.fill();
+        
+        stream.setNonStrokingColor(Color.WHITE);
+        stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), SMALL_FONT_SIZE);
+        float xPos = MARGIN + 5;
+        for (int i = 0; i < headers.length; i++) {
+            stream.beginText();
+            stream.newLineAtOffset(xPos, y - 15);
+            stream.showText(headers[i]);
+            stream.endText();
+            xPos += columnWidths[i];
+        }
+        y -= 25;
+        
+        // Table rows
+        stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), SMALL_FONT_SIZE);
+        boolean alternateRow = false;
+        
+        // Sort expenses by date descending
+        List<CompanyExpense> sortedExpenses = expenses.stream()
+            .sorted((e1, e2) -> e2.getExpenseDate().compareTo(e1.getExpenseDate()))
+            .collect(Collectors.toList());
+        
+        for (CompanyExpense expense : sortedExpenses) {
+            // Check if we need a new page
+            if (y < 100) {
+                stream.close();
+                PDPage newPage = new PDPage(PDRectangle.LETTER);
+                document.addPage(newPage);
+                stream = new PDPageContentStream(document, newPage);
+                y = PAGE_HEIGHT - MARGIN;
+                
+                // Repeat headers on new page
+                stream.setNonStrokingColor(ACCENT_COLOR);
+                stream.addRect(MARGIN, y - 20, CONTENT_WIDTH, 20);
+                stream.fill();
+                
+                stream.setNonStrokingColor(Color.WHITE);
+                stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), SMALL_FONT_SIZE);
+                xPos = MARGIN + 5;
+                for (int i = 0; i < headers.length; i++) {
+                    stream.beginText();
+                    stream.newLineAtOffset(xPos, y - 15);
+                    stream.showText(headers[i]);
+                    stream.endText();
+                    xPos += columnWidths[i];
+                }
+                y -= 25;
+                stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), SMALL_FONT_SIZE);
+            }
+            
+            // Alternate row background
+            if (alternateRow) {
+                stream.setNonStrokingColor(new Color(250, 250, 250));
+                stream.addRect(MARGIN, y - 15, CONTENT_WIDTH, 15);
+                stream.fill();
+            }
+            alternateRow = !alternateRow;
+            
+            // Row data
+            stream.setNonStrokingColor(DARK_GRAY);
+            xPos = MARGIN + 5;
+            
+            String[] rowData = {
+                expense.getExpenseDate().format(DATE_FORMAT),
+                truncateText(expense.getVendor(), 15),
+                truncateText(expense.getCategory(), 15),
+                truncateText(expense.getDepartment(), 12),
+                truncateText(expense.getDescription(), 25),
+                CURRENCY_FORMAT.format(expense.getAmount())
+            };
+            
+            for (int i = 0; i < rowData.length; i++) {
+                stream.beginText();
+                stream.newLineAtOffset(xPos, y - 12);
+                stream.showText(rowData[i]);
+                stream.endText();
+                xPos += columnWidths[i];
+            }
+            y -= 15;
+        }
+        
+        stream.close();
+        return y;
+    }
+    
+    private void writeAnalyticsPage(PDDocument document) throws IOException {
+        PDPage page = new PDPage(PDRectangle.LETTER);
+        document.addPage(page);
+        
+        try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+            float y = PAGE_HEIGHT - MARGIN;
+            
+            // Page title
+            stream.setNonStrokingColor(HEADER_COLOR);
+            stream.beginText();
+            stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), HEADER_FONT_SIZE);
+            stream.newLineAtOffset(MARGIN, y);
+            stream.showText("Expense Analytics");
+            stream.endText();
+            y -= 40;
+            
+            // Category Analysis
+            y = drawCategoryAnalysis(stream, y);
+            
+            // Department Analysis
+            y = drawDepartmentAnalysis(stream, y);
+            
+            // Monthly Trend
+            drawMonthlyTrend(stream, y);
+        }
+    }
+    
+    private float drawCategoryAnalysis(PDPageContentStream stream, float startY) throws IOException {
+        float y = startY;
+        
+        // Calculate category distribution
+        Map<String, Double> categoryCosts = expenses.stream()
+            .filter(expense -> expense.getCategory() != null)
+            .collect(Collectors.groupingBy(
+                CompanyExpense::getCategory,
+                Collectors.summingDouble(CompanyExpense::getAmount)
+            ));
+        
+        // Sort by cost descending
+        List<Map.Entry<String, Double>> sortedCategories = categoryCosts.entrySet().stream()
+            .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+            .limit(10)
+            .collect(Collectors.toList());
+        
+        // Section title
+        stream.setNonStrokingColor(ACCENT_COLOR);
+        stream.beginText();
+        stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), SUBHEADER_FONT_SIZE);
+        stream.newLineAtOffset(MARGIN, y);
+        stream.showText("Top Expense Categories");
+        stream.endText();
+        y -= 25;
+        
+        // Draw bars
+        float maxCost = sortedCategories.isEmpty() ? 0 : sortedCategories.get(0).getValue().floatValue();
+        float barMaxWidth = CONTENT_WIDTH * 0.6f;
+        
+        stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), SMALL_FONT_SIZE);
+        
+        for (Map.Entry<String, Double> entry : sortedCategories) {
+            // Category name
+            stream.setNonStrokingColor(DARK_GRAY);
+            stream.beginText();
+            stream.newLineAtOffset(MARGIN, y);
+            stream.showText(truncateText(entry.getKey(), 25));
+            stream.endText();
+            
+            // Bar
+            float barWidth = maxCost > 0 ? (float)(entry.getValue() / maxCost * barMaxWidth) : 0;
+            stream.setNonStrokingColor(ACCENT_COLOR);
+            stream.addRect(MARGIN + 180, y - 2, barWidth, 12);
+            stream.fill();
+            
+            // Value
+            stream.setNonStrokingColor(DARK_GRAY);
+            stream.beginText();
+            stream.newLineAtOffset(MARGIN + 190 + barWidth, y);
+            stream.showText(CURRENCY_FORMAT.format(entry.getValue()));
+            stream.endText();
+            
+            y -= 18;
+        }
+        
+        return y - 20;
+    }
+    
+    private float drawDepartmentAnalysis(PDPageContentStream stream, float startY) throws IOException {
+        float y = startY;
+        
+        // Calculate department distribution
+        Map<String, Double> departmentCosts = expenses.stream()
+            .filter(expense -> expense.getDepartment() != null)
+            .collect(Collectors.groupingBy(
+                CompanyExpense::getDepartment,
+                Collectors.summingDouble(CompanyExpense::getAmount)
+            ));
+        
+        List<Map.Entry<String, Double>> sortedDepartments = departmentCosts.entrySet().stream()
+            .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+            .collect(Collectors.toList());
+        
+        // Section title
+        stream.setNonStrokingColor(ACCENT_COLOR);
+        stream.beginText();
+        stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), SUBHEADER_FONT_SIZE);
+        stream.newLineAtOffset(MARGIN, y);
+        stream.showText("Department Expense Breakdown");
+        stream.endText();
+        y -= 25;
+        
+        // Draw table
+        stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), NORMAL_FONT_SIZE);
+        
+        for (Map.Entry<String, Double> entry : sortedDepartments) {
+            stream.setNonStrokingColor(DARK_GRAY);
+            stream.beginText();
+            stream.newLineAtOffset(MARGIN, y);
+            stream.showText(entry.getKey() + ": " + CURRENCY_FORMAT.format(entry.getValue()));
+            stream.endText();
+            y -= 20;
+        }
+        
+        return y - 20;
+    }
+    
+    private void drawMonthlyTrend(PDPageContentStream stream, float startY) throws IOException {
+        float y = startY;
+        
+        // Section title
+        stream.setNonStrokingColor(ACCENT_COLOR);
+        stream.beginText();
+        stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), SUBHEADER_FONT_SIZE);
+        stream.newLineAtOffset(MARGIN, y);
+        stream.showText("Monthly Expense Trend");
+        stream.endText();
+        y -= 30;
+        
+        // Calculate monthly totals
+        Map<String, Double> monthlyTotals = expenses.stream()
+            .filter(expense -> expense.getExpenseDate() != null)
+            .collect(Collectors.groupingBy(
+                expense -> expense.getExpenseDate().format(DateTimeFormatter.ofPattern("yyyy-MM")),
+                Collectors.summingDouble(CompanyExpense::getAmount)
+            ));
+        
+        // Sort by month
+        List<Map.Entry<String, Double>> sortedMonths = monthlyTotals.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .collect(Collectors.toList());
+        
+        if (!sortedMonths.isEmpty()) {
+            // Find max for scaling
+            double maxMonthly = sortedMonths.stream()
+                .mapToDouble(Map.Entry::getValue)
+                .max()
+                .orElse(0);
+            
+            // Draw simple bar chart
+            float barWidth = 40;
+            float maxBarHeight = 100;
+            float chartX = MARGIN;
+            
+            stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), SMALL_FONT_SIZE);
+            
+            for (Map.Entry<String, Double> entry : sortedMonths) {
+                // Bar
+                float barHeight = maxMonthly > 0 ? (float)(entry.getValue() / maxMonthly * maxBarHeight) : 0;
+                stream.setNonStrokingColor(ACCENT_COLOR);
+                stream.addRect(chartX, y - barHeight, barWidth - 5, barHeight);
+                stream.fill();
+                
+                // Month label
+                stream.setNonStrokingColor(DARK_GRAY);
+                stream.beginText();
+                stream.newLineAtOffset(chartX, y - barHeight - 15);
+                String monthLabel = entry.getKey().substring(5); // Just MM
+                stream.showText(monthLabel);
+                stream.endText();
+                
+                // Value on top
+                stream.beginText();
+                stream.newLineAtOffset(chartX - 5, y - barHeight + 5);
+                stream.showText(formatCurrency(entry.getValue()));
+                stream.endText();
+                
+                chartX += barWidth;
+            }
+        }
+    }
+    
+    private String truncateText(String text, int maxLength) {
+        if (text == null) return "";
+        return text.length() <= maxLength ? text : text.substring(0, maxLength - 3) + "...";
+    }
+    
+    private String formatCurrency(double amount) {
+        if (amount >= 1000) {
+            return String.format("$%.1fK", amount / 1000);
+        }
+        return CURRENCY_FORMAT.format(amount);
+    }
+}
