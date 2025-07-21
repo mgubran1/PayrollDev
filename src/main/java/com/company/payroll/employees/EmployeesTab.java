@@ -30,6 +30,9 @@ import javafx.util.Duration;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.geometry.Orientation;
+import javafx.concurrent.Task;
+import javafx.application.Platform;
+import javafx.stage.Stage;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -38,6 +41,8 @@ import java.util.Locale;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import com.company.payroll.employees.EmployeeDocumentManager;
+import com.company.payroll.config.DOTComplianceConfigDialog;
 
 public class EmployeesTab extends BorderPane {
     private static final Logger logger = LoggerFactory.getLogger(EmployeesTab.class);
@@ -503,21 +508,37 @@ public class EmployeesTab extends BorderPane {
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == ButtonType.OK) {
                 try {
-                    String name = nameField.getText().trim();
-                    String truck = extractTruckUnit(truckComboBox.getValue());
-                    String trailer = extractTrailerNumber(trailerComboBox.getValue());
-                    String phone = phoneField.getText().trim();
-                    String email = emailField.getText().trim();
-                    double driverPct = parseDouble(driverPctField.getText());
-                    double companyPct = parseDouble(companyPctField.getText());
-                    double serviceFee = parseDouble(serviceFeeField.getText());
-                    LocalDate dob = dobPicker.getValue();
-                    String license = licenseField.getText().trim();
-                    Employee.DriverType driverType = driverTypeBox.getValue();
-                    String llc = llcField.getText().trim();
-                    LocalDate cdlExp = cdlPicker.getValue();
-                    LocalDate medExp = medPicker.getValue();
-                    Employee.Status status = statusBox.getValue();
+                    // Safe text extraction with null checks
+                    String name = nameField != null ? nameField.getText() : "";
+                    if (name != null) name = name.trim();
+                    
+                    String truck = truckComboBox != null ? extractTruckUnit(truckComboBox.getValue()) : "";
+                    String trailer = trailerComboBox != null ? extractTrailerNumber(trailerComboBox.getValue()) : "";
+                    
+                    String phone = phoneField != null ? phoneField.getText() : "";
+                    if (phone != null) phone = phone.trim();
+                    
+                    String email = emailField != null ? emailField.getText() : "";
+                    if (email != null) email = email.trim();
+                    
+                    double driverPct = driverPctField != null ? parseDouble(driverPctField.getText()) : 0.0;
+                    double companyPct = companyPctField != null ? parseDouble(companyPctField.getText()) : 0.0;
+                    double serviceFee = serviceFeeField != null ? parseDouble(serviceFeeField.getText()) : 0.0;
+                    
+                    LocalDate dob = dobPicker != null ? dobPicker.getValue() : null;
+                    
+                    String license = licenseField != null ? licenseField.getText() : "";
+                    if (license != null) license = license.trim();
+                    
+                    Employee.DriverType driverType = driverTypeBox != null ? driverTypeBox.getValue() : null;
+                    
+                    String llc = llcField != null ? llcField.getText() : "";
+                    if (llc != null) llc = llc.trim();
+                    
+                    LocalDate cdlExp = cdlPicker != null ? cdlPicker.getValue() : null;
+                    LocalDate medExp = medPicker != null ? medPicker.getValue() : null;
+                    
+                    Employee.Status status = statusBox != null ? statusBox.getValue() : null;
 
                     if (isAdd) {
                         logger.info("Adding new employee: {}", name);
@@ -529,6 +550,12 @@ public class EmployeesTab extends BorderPane {
                         employees.setAll(dao.getAll());
                         notifyEmployeeDataChanged();
                         logger.info("Employee added successfully: {} (ID: {})", name, newId);
+                        
+                        // Force table refresh to show changes immediately
+                        if (table != null) {
+                            table.refresh();
+                        }
+                        
                         return emp;
                     } else {
                         logger.info("Updating employee: {} (ID: {})", name, employee.getId());
@@ -550,7 +577,13 @@ public class EmployeesTab extends BorderPane {
                         dao.update(employee);
                         employees.setAll(dao.getAll());
                         notifyEmployeeDataChanged();
-                        logger.info("Employee updated successfully: {}", name);
+                        logger.info("Employee updated successfully: {} (ID: {})", name, employee.getId());
+                        
+                        // Force table refresh to show changes immediately
+                        if (table != null) {
+                            table.refresh();
+                        }
+                        
                         return employee;
                     }
                 } catch (Exception ex) {
@@ -717,17 +750,25 @@ public class EmployeesTab extends BorderPane {
         Button editBtn = createStyledButton("✏️ Edit", "#2196F3");
         Button deleteBtn = createStyledButton("🗑️ Delete", "#F44336");
         Button refreshBtn = createStyledButton("🔄 Refresh", "#00BCD4");
+        Button importBtn = createStyledButton("📥 Import CSV/XLSX", "#FF9800");
         Button percentageBtn = createStyledButton("💰 Configure Percentages", "#FF9800");
         Button exportBtn = createStyledButton("📊 Export", "#9C27B0");
         
         // Setup button actions
-        setupButtonActions(addBtn, editBtn, deleteBtn, refreshBtn, percentageBtn, exportBtn);
+        setupButtonActions(addBtn, editBtn, deleteBtn, refreshBtn, importBtn, percentageBtn, exportBtn);
         
-        Separator separator = new Separator(Orientation.VERTICAL);
-        separator.setPadding(new Insets(0, 5, 0, 5));
+        Separator separator1 = new Separator(Orientation.VERTICAL);
+        separator1.setPadding(new Insets(0, 5, 0, 5));
         
-        actionBar.getChildren().addAll(addBtn, editBtn, deleteBtn, separator, 
-                                      percentageBtn, exportBtn, refreshBtn);
+        Separator separator2 = new Separator(Orientation.VERTICAL);
+        separator2.setPadding(new Insets(0, 5, 0, 5));
+        
+        // Add configure button for DOT compliance
+        Button configureBtn = createStyledButton("⚙️ Configure", "#6c757d");
+        configureBtn.setOnAction(e -> showDOTComplianceConfiguration());
+        
+        actionBar.getChildren().addAll(addBtn, editBtn, deleteBtn, separator1, 
+                                      importBtn, percentageBtn, exportBtn, refreshBtn, separator2, configureBtn);
         
         return actionBar;
     }
@@ -1029,13 +1070,12 @@ public class EmployeesTab extends BorderPane {
         TableColumn<Employee, Void> docCol = new TableColumn<>("Documents");
         
         docCol.setCellFactory(col -> new TableCell<Employee, Void>() {
-            private final Button uploadBtn = createSmallButton("📤 Upload", "#4CAF50");
-            private final Button viewBtn = createSmallButton("👁️ View", "#2196F3");
-            private final HBox btnBox = new HBox(5, uploadBtn, viewBtn);
+            private final Button docManagerBtn = createSmallButton("📋 Doc Manager", "#17a2b8");
+            private final HBox btnBox = new HBox(5, docManagerBtn);
             
             {
                 btnBox.setAlignment(Pos.CENTER);
-                setupDocumentButtons();
+                setupDocumentButton();
             }
             
             private Button createSmallButton(String text, String color) {
@@ -1053,15 +1093,10 @@ public class EmployeesTab extends BorderPane {
                 return btn;
             }
             
-            private void setupDocumentButtons() {
-                uploadBtn.setOnAction(e -> {
+            private void setupDocumentButton() {
+                docManagerBtn.setOnAction(e -> {
                     Employee emp = getTableView().getItems().get(getIndex());
-                    handleDocumentUpload(emp);
-                });
-                
-                viewBtn.setOnAction(e -> {
-                    Employee emp = getTableView().getItems().get(getIndex());
-                    handleDocumentView(emp);
+                    showEmployeeDocumentManager(emp);
                 });
             }
             
@@ -1235,7 +1270,7 @@ public class EmployeesTab extends BorderPane {
      * Setup button actions
      */
     private void setupButtonActions(Button addBtn, Button editBtn, Button deleteBtn, 
-                                   Button refreshBtn, Button percentageBtn, Button exportBtn) {
+                                   Button refreshBtn, Button importBtn, Button percentageBtn, Button exportBtn) {
         addBtn.setOnAction(e -> {
             logger.info("Add employee button clicked");
             showEmployeeDialog(null, true);
@@ -1266,6 +1301,11 @@ public class EmployeesTab extends BorderPane {
         refreshBtn.setOnAction(e -> {
             logger.info("Refresh button clicked");
             refreshData();
+        });
+        
+        importBtn.setOnAction(e -> {
+            logger.info("Import button clicked");
+            showImportDialog();
         });
         
         percentageBtn.setOnAction(e -> {
@@ -1353,150 +1393,254 @@ public class EmployeesTab extends BorderPane {
     }
     
     /**
-     * Handle document upload
+     * Show Employee Document Manager
      */
-    private void handleDocumentUpload(Employee emp) {
-        // Reuse existing document upload logic
-        ChoiceDialog<String> typeDialog = new ChoiceDialog<>("Driver License", 
-            "Driver License", "Medical", "IRP", "IFTA", "Other");
-        typeDialog.setTitle("Select Document Type");
-        typeDialog.setHeaderText("Select Document Type for " + emp.getName());
-        typeDialog.setContentText("Document Type:");
+    private void showEmployeeDocumentManager(Employee employee) {
+        if (employee == null) {
+            showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                     "Please select an employee to manage documents");
+            return;
+        }
         
-        typeDialog.showAndWait().ifPresent(docType -> {
-            FileChooser fc = new FileChooser();
-            fc.setTitle("Upload " + docType + " for " + emp.getName());
-            fc.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("All Files", "*.*"),
-                new FileChooser.ExtensionFilter("PDF Files", "*.pdf"),
-                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg")
-            );
-            
-            File file = fc.showOpenDialog(getScene().getWindow());
-            if (file != null) {
-                try {
-                    String safeName = emp.getName().replaceAll("[^a-zA-Z0-9_\\- ]", "_");
-                    String safeType = docType.replaceAll("[^a-zA-Z0-9_\\- ]", "_");
-                    String ext = "";
-                    int dot = file.getName().lastIndexOf('.');
-                    if (dot > 0) ext = file.getName().substring(dot);
-                    
-                    Path folder = Path.of("Employee_Doc", safeName, "AllDocuments");
-                    Files.createDirectories(folder);
-                    
-                    String ts = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
-                        .format(java.time.LocalDateTime.now());
-                    Path dest = folder.resolve(safeName + "_" + safeType + "_" + ts + ext);
-                    
-                    Files.copy(file.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
-                    
-                    statusLabel.setText("Document uploaded for " + emp.getName());
-                    showAlert(Alert.AlertType.INFORMATION, "Upload Successful", 
-                             "Document uploaded to:\n" + dest.toString());
-                } catch (IOException ex) {
-                    logger.error("Failed to upload document", ex);
-                    showAlert(Alert.AlertType.ERROR, "Upload Error", 
-                             "Failed to upload: " + ex.getMessage());
-                }
-            }
-        });
+        EmployeeDocumentManager docManager = new EmployeeDocumentManager((Stage) getScene().getWindow());
+        docManager.showDocumentManager(employee);
     }
     
     /**
-     * Handle document view
+     * Show DOT Compliance Configuration Dialog
      */
-    private void handleDocumentView(Employee emp) {
-        String safeName = emp.getName().replaceAll("[^a-zA-Z0-9_\\- ]", "_");
-        Path folder = Path.of("Employee_Doc", safeName, "AllDocuments");
-        List<Path> files = new ArrayList<>();
-        
-        if (Files.exists(folder) && Files.isDirectory(folder)) {
-            try (var stream = Files.list(folder)) {
-                stream.filter(Files::isRegularFile).forEach(files::add);
-            } catch (IOException ex) {
-                files.clear();
-            }
+    private void showDOTComplianceConfiguration() {
+        try {
+            DOTComplianceConfigDialog configDialog = new DOTComplianceConfigDialog();
+            configDialog.showAndWait();
+            
+            // Refresh the table to reflect any configuration changes
+            refreshData();
+            statusLabel.setText("DOT compliance configuration updated");
+            
+        } catch (Exception e) {
+            logger.error("Error showing DOT compliance configuration", e);
+            showAlert(Alert.AlertType.ERROR, "Configuration Error", 
+                     "Failed to open DOT compliance configuration: " + e.getMessage());
         }
+    }
+
+    /**
+     * Show import dialog for CSV/XLSX files.
+     */
+    private void showImportDialog() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Import Employee Data");
+        fileChooser.getExtensionFilters().addAll(
+            new FileChooser.ExtensionFilter("CSV Files", "*.csv"),
+            new FileChooser.ExtensionFilter("Excel Files", "*.xlsx", "*.xls")
+        );
+
+        File selectedFile = fileChooser.showOpenDialog(getScene().getWindow());
+        if (selectedFile != null) {
+            // Show progress dialog
+            showImportProgressDialog(selectedFile);
+        }
+    }
+    
+    /**
+     * Show import progress dialog with detailed feedback
+     */
+    private void showImportProgressDialog(File selectedFile) {
+        Dialog<Void> progressDialog = new Dialog<>();
+        progressDialog.setTitle("Importing Employees");
+        progressDialog.setHeaderText("Importing employee data from " + selectedFile.getName());
+        progressDialog.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
         
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Documents for " + emp.getName());
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.getDialogPane().setPrefWidth(600);
-        dialog.getDialogPane().setPrefHeight(400);
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(20));
         
-        VBox vbox = new VBox(10);
-        vbox.setPadding(new Insets(10));
+        Label statusLabel = new Label("Reading file...");
+        statusLabel.setFont(Font.font("Arial", 14));
         
-        if (files.isEmpty()) {
-            Label emptyLabel = new Label("No documents found.");
-            emptyLabel.setFont(Font.font("Arial", 14));
-            vbox.getChildren().add(emptyLabel);
-        } else {
-            GridPane grid = new GridPane();
-            grid.setHgap(10);
-            grid.setVgap(10);
-            grid.setPadding(new Insets(10));
-            
-            // Headers
-            Label fileHeader = new Label("File Name");
-            fileHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-            Label typeHeader = new Label("Type");
-            typeHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-            Label dateHeader = new Label("Modified");
-            dateHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-            Label actionHeader = new Label("Actions");
-            actionHeader.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-            
-            grid.add(fileHeader, 0, 0);
-            grid.add(typeHeader, 1, 0);
-            grid.add(dateHeader, 2, 0);
-            grid.add(actionHeader, 3, 0);
-            
-            int row = 1;
-            for (Path file : files) {
-                String fname = file.getFileName().toString();
-                String docType = "Unknown";
-                String[] parts = fname.split("_");
-                if (parts.length >= 2) docType = parts[1];
+        ProgressBar progressBar = new ProgressBar();
+        progressBar.setPrefWidth(400);
+        progressBar.setVisible(false);
+        
+        Label detailLabel = new Label("");
+        detailLabel.setFont(Font.font("Arial", 12));
+        detailLabel.setTextFill(Color.web("#666666"));
+        
+        content.getChildren().addAll(statusLabel, progressBar, detailLabel);
+        progressDialog.getDialogPane().setContent(content);
+        
+        // Create import task
+        Task<ImportResult> importTask = new Task<ImportResult>() {
+            @Override
+            protected ImportResult call() throws Exception {
+                ImportResult result = new ImportResult();
                 
-                String date = "";
                 try {
-                    date = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
-                        .format(Files.getLastModifiedTime(file).toInstant()
-                        .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
-                } catch (IOException ignored) {}
-                
-                Label nameLbl = new Label(fname);
-                nameLbl.setMaxWidth(250);
-                nameLbl.setEllipsisString("...");
-                
-                Label typeLbl = new Label(docType);
-                Label dateLbl = new Label(date);
-                
-                Button openBtn = createStyledButton("Open", "#2196F3");
-                openBtn.setOnAction(ev -> {
-                    try {
-                        java.awt.Desktop.getDesktop().open(file.toFile());
-                    } catch (Exception ex) {
-                        showAlert(Alert.AlertType.ERROR, "Open Error", 
-                                 "Failed to open: " + ex.getMessage());
+                    updateMessage("Reading file...");
+                    updateProgress(0, 100);
+                    
+                    List<Employee> employees = EmployeeCSVImporter.importEmployees(selectedFile.toPath());
+                    result.totalFound = employees.size();
+                    
+                    updateMessage("Processing employees...");
+                    updateProgress(50, 100);
+                    
+                    if (!employees.isEmpty()) {
+                        updateMessage("Saving to database...");
+                        updateProgress(75, 100);
+                        
+                        List<Employee> savedEmployees = dao.addOrUpdateAll(employees);
+                        result.imported = savedEmployees.size();
+                        result.savedEmployees = savedEmployees; // Store the list with IDs
+                        
+                        updateMessage("Import completed successfully!");
+                        updateProgress(100, 100);
+                    } else {
+                        updateMessage("No valid employees found in file");
+                        result.errors.add("No valid employee data found in the file");
                     }
-                });
+                    
+                } catch (Exception e) {
+                    logger.error("Import failed", e);
+                    result.errors.add("Import failed: " + e.getMessage());
+                    throw e;
+                }
                 
-                grid.add(nameLbl, 0, row);
-                grid.add(typeLbl, 1, row);
-                grid.add(dateLbl, 2, row);
-                grid.add(openBtn, 3, row);
-                row++;
+                return result;
+            }
+        };
+        
+        // Update UI based on task progress
+        importTask.messageProperty().addListener((obs, oldVal, newVal) -> {
+            statusLabel.setText(newVal);
+        });
+        
+        importTask.progressProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                progressBar.setVisible(true);
+                progressBar.setProgress(newVal.doubleValue());
+            }
+        });
+        
+        // Handle completion
+        importTask.setOnSucceeded(e -> {
+            ImportResult result = importTask.getValue();
+            progressDialog.close();
+            
+            // Use the saved employees that already have proper IDs
+            List<Employee> savedEmployees = result.savedEmployees;
+            logger.info("Import completed with {} employees, refreshing UI", savedEmployees.size());
+            
+            // Log IDs for debugging
+            for (Employee emp : savedEmployees) {
+                logger.debug("Employee in result: {} (ID: {})", emp.getName(), emp.getId());
             }
             
-            ScrollPane scrollPane = new ScrollPane(grid);
-            scrollPane.setFitToWidth(true);
-            vbox.getChildren().add(scrollPane);
-            VBox.setVgrow(scrollPane, Priority.ALWAYS);
+            // Clear and reload the observable list with the correct data
+            employees.clear();
+            employees.addAll(savedEmployees);
+            logger.info("Updated observable list with {} employees", employees.size());
+            
+            // Force table refresh to show changes immediately
+            if (table != null) {
+                table.refresh();
+            }
+            
+            // Notify data change listeners
+            notifyEmployeeDataChanged();
+            
+            // Update record count
+            updateRecordCount();
+            
+            // Show results
+            showImportResults(result, selectedFile.getName());
+        });
+        
+        importTask.setOnFailed(e -> {
+            progressDialog.close();
+            Throwable error = importTask.getException();
+            logger.error("Import failed", error);
+            
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Import Error");
+            alert.setHeaderText("Failed to import employees");
+            alert.setContentText("Error: " + error.getMessage());
+            alert.showAndWait();
+        });
+        
+        // Handle cancellation
+        progressDialog.setOnCloseRequest(e -> {
+            if (importTask.isRunning()) {
+                importTask.cancel();
+            }
+        });
+        
+        // Start import
+        Thread importThread = new Thread(importTask);
+        importThread.setDaemon(true);
+        importThread.start();
+        
+        progressDialog.showAndWait();
+    }
+    
+    /**
+     * Show import results dialog
+     */
+    private void showImportResults(ImportResult result, String fileName) {
+        Dialog<Void> resultsDialog = new Dialog<>();
+        resultsDialog.setTitle("Import Results");
+        resultsDialog.setHeaderText("Import completed for " + fileName);
+        resultsDialog.getDialogPane().getButtonTypes().add(ButtonType.OK);
+        
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(20));
+        
+        Label summaryLabel = new Label();
+        summaryLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        
+        if (result.imported > 0) {
+            summaryLabel.setText("✓ Successfully imported " + result.imported + " employees");
+            summaryLabel.setTextFill(Color.web("#4CAF50"));
+        } else {
+            summaryLabel.setText("⚠ No employees were imported");
+            summaryLabel.setTextFill(Color.web("#FF9800"));
         }
         
-        dialog.getDialogPane().setContent(vbox);
-        dialog.showAndWait();
+        Label detailsLabel = new Label();
+        detailsLabel.setFont(Font.font("Arial", 12));
+        detailsLabel.setTextFill(Color.web("#666666"));
+        
+        StringBuilder details = new StringBuilder();
+        details.append("Total records found: ").append(result.totalFound).append("\n");
+        details.append("Successfully imported: ").append(result.imported).append("\n");
+        
+        if (!result.errors.isEmpty()) {
+            details.append("\nErrors:\n");
+            for (String error : result.errors) {
+                details.append("• ").append(error).append("\n");
+            }
+        }
+        
+        detailsLabel.setText(details.toString());
+        
+        content.getChildren().addAll(summaryLabel, detailsLabel);
+        resultsDialog.getDialogPane().setContent(content);
+        
+        resultsDialog.showAndWait();
+        
+        // Update status
+        if (result.imported > 0) {
+            statusLabel.setText("Imported " + result.imported + " employees from " + fileName);
+        }
+    }
+    
+    /**
+     * Import result class
+     */
+    private static class ImportResult {
+        int totalFound = 0;
+        int imported = 0;
+        List<String> errors = new ArrayList<>();
+        List<Employee> savedEmployees = new ArrayList<>(); // Added this field
     }
 }

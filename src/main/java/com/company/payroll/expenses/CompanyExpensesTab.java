@@ -17,6 +17,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 import javafx.util.Callback;
 import javafx.util.StringConverter;
 import org.slf4j.Logger;
@@ -26,6 +27,9 @@ import com.company.payroll.payroll.ModernButtonStyles;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.FileInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -35,7 +39,16 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.io.FileInputStream;
+import javafx.concurrent.Task;
+import javafx.scene.control.ProgressIndicator;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Cell;
+import com.company.payroll.config.FilterConfig;
+import com.company.payroll.config.DocumentManagerConfig;
+import com.company.payroll.config.DocumentManagerSettingsDialog;
 
 /**
  * Enhanced Company Expenses Tab for tracking all business expenses in the trucking fleet management system
@@ -84,7 +97,7 @@ public class CompanyExpensesTab extends Tab {
     private ListView<String> departmentBreakdownList;
     
     // Document storage path
-    private final String docStoragePath = "expense_documents";
+    private String docStoragePath = DocumentManagerConfig.getExpenseStoragePath();
     
     // Expense categories specific to trucking business
     private final ObservableList<String> expenseCategories = FXCollections.observableArrayList(
@@ -232,8 +245,10 @@ public class CompanyExpensesTab extends Tab {
         HBox actionRow = new HBox(15);
         actionRow.setAlignment(Pos.CENTER_LEFT);
         
-        startDatePicker = new DatePicker(LocalDate.now().withDayOfYear(1)); // First day of current year
-        endDatePicker = new DatePicker(LocalDate.now());
+        // Load saved date range or use defaults
+        FilterConfig.DateRange savedRange = FilterConfig.loadExpenseDateRange();
+        startDatePicker = new DatePicker(savedRange.getStartDate());
+        endDatePicker = new DatePicker(savedRange.getEndDate());
         
         // Style the date pickers
         configureDatePicker(startDatePicker);
@@ -251,6 +266,9 @@ public class CompanyExpensesTab extends Tab {
         Button generateReportButton = ModernButtonStyles.createDangerButton("📊 Generate Report");
         generateReportButton.setOnAction(e -> generateReport());
         
+        Button importButton = ModernButtonStyles.createInfoButton("📥 Import CSV/XLSX");
+        importButton.setOnAction(e -> showImportDialog());
+        
         Button exportButton = ModernButtonStyles.createWarningButton("📤 Export");
         exportButton.setOnAction(e -> showExportMenu(exportButton));
         
@@ -259,7 +277,7 @@ public class CompanyExpensesTab extends Tab {
             new Label("Date Range:"), startDatePicker, new Label("to"), endDatePicker,
             new Separator(Orientation.VERTICAL),
             refreshButton, addExpenseButton, documentManagerButton,
-            generateReportButton, exportButton
+            importButton, generateReportButton, exportButton
         );
         
         controlPanel.getChildren().addAll(searchRow, new Separator(), actionRow);
@@ -269,8 +287,22 @@ public class CompanyExpensesTab extends Tab {
         categoryFilter.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
         departmentFilter.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
         paymentMethodFilter.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
-        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
-        endDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        
+        // Add auto-save listeners for date filters
+        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            applyFilters();
+            // Auto-save date range
+            if (newVal != null && endDatePicker.getValue() != null) {
+                FilterConfig.saveExpenseDateRange(newVal, endDatePicker.getValue());
+            }
+        });
+        endDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            applyFilters();
+            // Auto-save date range
+            if (newVal != null && startDatePicker.getValue() != null) {
+                FilterConfig.saveExpenseDateRange(startDatePicker.getValue(), newVal);
+            }
+        });
         
         return controlPanel;
     }
@@ -1303,59 +1335,143 @@ public class CompanyExpensesTab extends Tab {
         }
         
         Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Document Manager - " + selected.getVendor() + " - " + 
+        dialog.setTitle("Company Expense Document Manager - " + selected.getVendor() + " - " + 
                        selected.getExpenseDate().format(DATE_FORMAT));
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         
+        // Create main content
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(800);
+        content.setPrefHeight(600);
+        
+        // Header with expense info
+        HBox headerBox = new HBox(15);
+        headerBox.setAlignment(Pos.CENTER_LEFT);
+        
+        Label titleLabel = new Label("Documents for " + selected.getVendor());
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        
+        Label dateLabel = new Label("Expense Date: " + selected.getExpenseDate().format(DATE_FORMAT));
+        dateLabel.setStyle("-fx-text-fill: #666;");
+        
+        headerBox.getChildren().addAll(titleLabel, new Separator(Orientation.VERTICAL), dateLabel);
+        
+        // Document list section
+        VBox documentSection = createDocumentListSection(selected);
+        
+        // Action buttons section
+        HBox actionButtons = createDocumentActionButtons(selected, documentSection);
+        
+        // Settings button
+        Button settingsButton = ModernButtonStyles.createSecondaryButton("⚙️ Settings");
+        settingsButton.setOnAction(e -> {
+            DocumentManagerSettingsDialog settingsDialog = 
+                new DocumentManagerSettingsDialog((Stage) expenseTable.getScene().getWindow());
+            settingsDialog.showAndWait();
+            // Refresh storage path after settings change
+            docStoragePath = DocumentManagerConfig.getExpenseStoragePath();
+        });
+        
+        HBox topButtons = new HBox(10, settingsButton);
+        topButtons.setAlignment(Pos.CENTER_RIGHT);
+        
+        content.getChildren().addAll(headerBox, documentSection, actionButtons, topButtons);
+        VBox.setVgrow(documentSection, Priority.ALWAYS);
+        
+        dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
+    }
+    
+    /**
+     * Create document list section
+     */
+    private VBox createDocumentListSection(CompanyExpense expense) {
+        VBox section = new VBox(10);
+        section.setPadding(new Insets(10));
+        section.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 5;");
+        
+        Label sectionTitle = new Label("📄 Documents");
+        sectionTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #34495e;");
+        
         ListView<String> docListView = new ListView<>();
-        updateDocumentList(docListView, selected.getId());
+        docListView.setPrefHeight(300);
+        updateDocumentList(docListView, expense.getId());
+        
+        // Folder info
+        Path folderPath = DocumentManagerConfig.getExpenseFolderPath(
+            expense.getCategory(), expense.getDepartment());
+        
+        Label folderInfo = new Label("Storage: " + folderPath.toString());
+        folderInfo.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
+        
+        section.getChildren().addAll(sectionTitle, docListView, folderInfo);
+        
+        return section;
+    }
+    
+    /**
+     * Create document action buttons
+     */
+    private HBox createDocumentActionButtons(CompanyExpense expense, VBox documentSection) {
+        HBox buttonBox = new HBox(10);
+        buttonBox.setAlignment(Pos.CENTER);
+        buttonBox.setPadding(new Insets(10, 0, 0, 0));
         
         Button uploadBtn = ModernButtonStyles.createPrimaryButton("📤 Upload");
         Button viewBtn = ModernButtonStyles.createInfoButton("👁️ View");
         Button printBtn = ModernButtonStyles.createSecondaryButton("🖨️ Print");
         Button deleteBtn = ModernButtonStyles.createDangerButton("🗑️ Delete");
+        Button openFolderBtn = ModernButtonStyles.createSuccessButton("📁 Open Folder");
+        
+        // Get document list view from the section
+        ListView<String> docListView = (ListView<String>) documentSection.getChildren().get(1);
         
         uploadBtn.setOnAction(e -> {
-            uploadDocumentForExpense(selected.getId());
-            updateDocumentList(docListView, selected.getId());
+            uploadDocumentForExpense(expense.getId());
+            updateDocumentList(docListView, expense.getId());
         });
         
         viewBtn.setOnAction(e -> {
             String selectedDoc = docListView.getSelectionModel().getSelectedItem();
             if (selectedDoc != null) {
-                viewDocument(selected.getId(), selectedDoc);
+                viewDocument(expense.getId(), selectedDoc);
+            } else {
+                showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                         "Please select a document to view");
             }
         });
         
         printBtn.setOnAction(e -> {
             String selectedDoc = docListView.getSelectionModel().getSelectedItem();
             if (selectedDoc != null) {
-                printDocument(selected.getId(), selectedDoc);
+                printDocument(expense.getId(), selectedDoc);
+            } else {
+                showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                         "Please select a document to print");
             }
         });
         
         deleteBtn.setOnAction(e -> {
             String selectedDoc = docListView.getSelectionModel().getSelectedItem();
             if (selectedDoc != null) {
-                deleteDocument(selected.getId(), selectedDoc);
-                updateDocumentList(docListView, selected.getId());
+                deleteDocument(expense.getId(), selectedDoc);
+                updateDocumentList(docListView, expense.getId());
+            } else {
+                showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                         "Please select a document to delete");
             }
         });
         
-        HBox buttonBox = new HBox(10, uploadBtn, viewBtn, printBtn, deleteBtn);
-        buttonBox.setAlignment(Pos.CENTER);
-        buttonBox.setPadding(new Insets(10, 0, 0, 0));
+        openFolderBtn.setOnAction(e -> {
+            Path folderPath = DocumentManagerConfig.getExpenseFolderPath(
+                expense.getCategory(), expense.getDepartment());
+            DocumentManagerConfig.openFolder(folderPath);
+        });
         
-        VBox content = new VBox(10, 
-                               new Label("Documents for this expense"), 
-                               docListView, 
-                               buttonBox);
-        content.setPadding(new Insets(20));
-        content.setPrefWidth(500);
-        content.setPrefHeight(400);
+        buttonBox.getChildren().addAll(uploadBtn, viewBtn, printBtn, deleteBtn, openFolderBtn);
         
-        dialog.getDialogPane().setContent(content);
-        dialog.showAndWait();
+        return buttonBox;
     }
     
     private void uploadDocument() {
@@ -1370,51 +1486,60 @@ public class CompanyExpensesTab extends Tab {
     }
     
     private void uploadDocumentForExpense(int expenseId) {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Select Document to Upload");
-        fileChooser.getExtensionFilters().addAll(
+        try {
+            CompanyExpense expense = expenseDAO.findById(expenseId);
+            if (expense == null) {
+                showAlert(Alert.AlertType.ERROR, "Error", "Expense record not found");
+                return;
+            }
+            
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Upload Document for " + expense.getVendor());
+            fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("All Files", "*.*"),
                 new FileChooser.ExtensionFilter("PDF Files", "*.pdf"),
-                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg"),
-                new FileChooser.ExtensionFilter("All Files", "*.*"));
-        
-        File selectedFile = fileChooser.showOpenDialog(getTabPane().getScene().getWindow());
-        if (selectedFile != null) {
-            try {
-                Path expenseDir = Paths.get(docStoragePath, String.valueOf(expenseId));
-                Files.createDirectories(expenseDir);
+                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif"),
+                new FileChooser.ExtensionFilter("Document Files", "*.doc", "*.docx", "*.txt")
+            );
+            
+            File selectedFile = fileChooser.showOpenDialog(getTabPane().getScene().getWindow());
+            if (selectedFile != null) {
+                // Create organized path structure
+                Path documentPath = DocumentManagerConfig.createExpenseDocumentPath(
+                    expense.getCategory(),
+                    expense.getDepartment(),
+                    expense.getReceiptNumber() != null ? expense.getReceiptNumber() : "EXP" + expense.getId(),
+                    selectedFile.getName()
+                );
                 
-                String timestamp = String.valueOf(System.currentTimeMillis());
-                String extension = selectedFile.getName().substring(
-                        selectedFile.getName().lastIndexOf('.'));
-                String newFileName = "receipt_" + timestamp + extension;
+                // Copy file to organized location
+                Files.copy(selectedFile.toPath(), documentPath, StandardCopyOption.REPLACE_EXISTING);
+                logger.info("Uploaded document to: {}", documentPath);
                 
-                Path destPath = expenseDir.resolve(newFileName);
-                Files.copy(selectedFile.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
-                
-                logger.info("Uploaded document for expense {}: {}", expenseId, newFileName);
                 showAlert(Alert.AlertType.INFORMATION, "Success", 
                          "Document uploaded successfully");
-                
-            } catch (Exception e) {
-                logger.error("Failed to upload document", e);
-                showAlert(Alert.AlertType.ERROR, "Error", 
-                         "Failed to upload document: " + e.getMessage());
             }
+        } catch (Exception e) {
+            logger.error("Failed to upload document", e);
+            showAlert(Alert.AlertType.ERROR, "Error", 
+                     "Failed to upload document: " + e.getMessage());
         }
     }
     
     private void updateDocumentList(ListView<String> listView, int expenseId) {
         try {
-            Path expenseDir = Paths.get(docStoragePath, String.valueOf(expenseId));
-            if (Files.exists(expenseDir)) {
-                List<String> files = Files.list(expenseDir)
-                    .map(p -> p.getFileName().toString())
-                    .sorted()
-                    .collect(Collectors.toList());
-                listView.setItems(FXCollections.observableArrayList(files));
-            } else {
+            CompanyExpense expense = expenseDAO.findById(expenseId);
+            if (expense == null) {
                 listView.setItems(FXCollections.observableArrayList());
+                return;
             }
+            
+            // Use the new organized folder structure
+            List<String> documents = DocumentManagerConfig.listExpenseDocuments(
+                expense.getCategory(), expense.getDepartment());
+            
+            listView.setItems(FXCollections.observableArrayList(documents));
+            
         } catch (Exception e) {
             logger.error("Failed to list documents", e);
             listView.setItems(FXCollections.observableArrayList());
@@ -1423,28 +1548,22 @@ public class CompanyExpensesTab extends Tab {
     
     private void viewDocument(int expenseId, String document) {
         try {
-            Path expenseDir = Paths.get(docStoragePath, String.valueOf(expenseId));
-            
-            if (document == null && Files.exists(expenseDir)) {
-                // Try to find the first document
-                List<Path> docs = Files.list(expenseDir).collect(Collectors.toList());
-                if (!docs.isEmpty()) {
-                    document = docs.get(0).getFileName().toString();
-                }
+            CompanyExpense expense = expenseDAO.findById(expenseId);
+            if (expense == null) {
+                showAlert(Alert.AlertType.ERROR, "Error", "Expense record not found");
+                return;
             }
             
-            if (document != null) {
-                Path docPath = expenseDir.resolve(document);
-                File file = docPath.toFile();
-                if (java.awt.Desktop.isDesktopSupported()) {
-                    java.awt.Desktop.getDesktop().open(file);
-                } else {
-                    showAlert(Alert.AlertType.INFORMATION, "Cannot Open", 
-                             "Cannot open file. File is saved at: " + docPath);
-                }
+            Path folderPath = DocumentManagerConfig.getExpenseFolderPath(
+                expense.getCategory(), expense.getDepartment());
+            Path docPath = folderPath.resolve(document);
+            
+            File file = docPath.toFile();
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop.getDesktop().open(file);
             } else {
-                showAlert(Alert.AlertType.INFORMATION, "No Document", 
-                         "No receipt/document attached to this expense");
+                showAlert(Alert.AlertType.INFORMATION, "Cannot Open", 
+                         "Cannot open file. File is saved at: " + docPath);
             }
         } catch (Exception e) {
             logger.error("Failed to open document", e);
@@ -1455,14 +1574,23 @@ public class CompanyExpensesTab extends Tab {
     
     private void printDocument(int expenseId, String document) {
         try {
-            Path docPath = Paths.get(docStoragePath, String.valueOf(expenseId), document);
+            CompanyExpense expense = expenseDAO.findById(expenseId);
+            if (expense == null) {
+                showAlert(Alert.AlertType.ERROR, "Error", "Expense record not found");
+                return;
+            }
+            
+            Path folderPath = DocumentManagerConfig.getExpenseFolderPath(
+                expense.getCategory(), expense.getDepartment());
+            Path docPath = folderPath.resolve(document);
+            
             File file = docPath.toFile();
             if (java.awt.Desktop.isDesktopSupported() && 
                 java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.PRINT)) {
                 java.awt.Desktop.getDesktop().print(file);
                 logger.info("Printing document: {}", docPath);
             } else {
-                                showAlert(Alert.AlertType.INFORMATION, "Print Not Supported", 
+                showAlert(Alert.AlertType.INFORMATION, "Print Not Supported", 
                          "Printing is not supported. Please open the file first.");
                 viewDocument(expenseId, document);
             }
@@ -1482,7 +1610,16 @@ public class CompanyExpensesTab extends Tab {
         confirm.showAndWait().ifPresent(response -> {
             if (response == ButtonType.YES) {
                 try {
-                    Path docPath = Paths.get(docStoragePath, String.valueOf(expenseId), document);
+                    CompanyExpense expense = expenseDAO.findById(expenseId);
+                    if (expense == null) {
+                        showAlert(Alert.AlertType.ERROR, "Error", "Expense record not found");
+                        return;
+                    }
+                    
+                    Path folderPath = DocumentManagerConfig.getExpenseFolderPath(
+                        expense.getCategory(), expense.getDepartment());
+                    Path docPath = folderPath.resolve(document);
+                    
                     Files.delete(docPath);
                     logger.info("Deleted document: {}", docPath);
                 } catch (Exception e) {
@@ -1838,5 +1975,499 @@ public class CompanyExpensesTab extends Tab {
                 setStyle("-fx-text-fill: black; -fx-font-family: Arial;");
             }
         });
+    }
+    
+    /**
+     * Show import dialog for CSV/XLSX files
+     */
+    private void showImportDialog() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Import Company Expenses");
+        fileChooser.getExtensionFilters().addAll(
+            new FileChooser.ExtensionFilter("CSV Files", "*.csv"),
+            new FileChooser.ExtensionFilter("Excel Files", "*.xlsx", "*.xls"),
+            new FileChooser.ExtensionFilter("All Files", "*.*")
+        );
+        
+        File selectedFile = fileChooser.showOpenDialog(getTabPane().getScene().getWindow());
+        if (selectedFile != null) {
+            showImportProgressDialog(selectedFile);
+        }
+    }
+    
+    /**
+     * Show import progress dialog with better error handling
+     */
+    private void showImportProgressDialog(File selectedFile) {
+        Dialog<Void> progressDialog = new Dialog<>();
+        progressDialog.setTitle("Importing Expenses");
+        progressDialog.setHeaderText("Processing " + selectedFile.getName());
+        
+        // Create progress indicator
+        ProgressIndicator progressIndicator = new ProgressIndicator();
+        progressIndicator.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+        progressIndicator.setPrefSize(50, 50);
+        
+        // Create status label
+        Label statusLabel = new Label("Validating file...");
+        statusLabel.setStyle("-fx-font-weight: bold;");
+        
+        VBox content = new VBox(15, progressIndicator, statusLabel);
+        content.setAlignment(Pos.CENTER);
+        content.setPadding(new Insets(20));
+        progressDialog.getDialogPane().setContent(content);
+        progressDialog.getDialogPane().getButtonTypes().clear();
+        
+        // Add cancel button
+        Button cancelButton = new Button("Cancel");
+        cancelButton.setOnAction(e -> progressDialog.close());
+        progressDialog.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
+        
+        Task<ImportResult> importTask = new Task<ImportResult>() {
+            @Override
+            protected ImportResult call() throws Exception {
+                updateMessage("Reading file...");
+                Thread.sleep(100); // Give UI time to update
+                
+                updateMessage("Validating headers...");
+                Thread.sleep(100);
+                
+                updateMessage("Processing data...");
+                Thread.sleep(100);
+                
+                return importExpensesFromFile(selectedFile);
+            }
+        };
+        
+        // Update status label based on task message
+        importTask.messageProperty().addListener((obs, oldMsg, newMsg) -> {
+            if (newMsg != null) {
+                statusLabel.setText(newMsg);
+            }
+        });
+        
+        importTask.setOnSucceeded(event -> {
+            progressDialog.close();
+            ImportResult result = importTask.getValue();
+            showImportResults(result, selectedFile.getName());
+        });
+        
+        importTask.setOnFailed(event -> {
+            progressDialog.close();
+            Throwable exception = importTask.getException();
+            logger.error("Import failed", exception);
+            
+            Alert errorAlert = new Alert(Alert.AlertType.ERROR);
+            errorAlert.setTitle("Import Failed");
+            errorAlert.setHeaderText("Failed to import expenses");
+            errorAlert.setContentText("Error: " + exception.getMessage());
+            errorAlert.showAndWait();
+        });
+        
+        importTask.setOnCancelled(event -> {
+            progressDialog.close();
+            showAlert(Alert.AlertType.INFORMATION, "Import Cancelled", 
+                     "Import was cancelled by user.");
+        });
+        
+        // Start the task
+        new Thread(importTask).start();
+        progressDialog.showAndWait();
+    }
+    
+    /**
+     * Import expenses from CSV/XLSX file
+     */
+    private ImportResult importExpensesFromFile(File file) throws Exception {
+        ImportResult result = new ImportResult();
+        
+        try {
+            String fileName = file.getName().toLowerCase();
+            if (fileName.endsWith(".csv")) {
+                importFromCSV(file, result);
+            } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
+                importFromExcel(file, result);
+            } else {
+                throw new IllegalArgumentException("Unsupported file format. Please use CSV or Excel files.");
+            }
+        } catch (Exception e) {
+            logger.error("Import failed", e);
+            result.errors.add("Import failed: " + e.getMessage());
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Import from CSV file with better error handling
+     */
+    private void importFromCSV(File file, ImportResult result) throws Exception {
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line = reader.readLine(); // Read header
+            if (line == null) {
+                throw new IllegalArgumentException("File is empty or invalid");
+            }
+            
+            // Validate header
+            String[] headers = parseCSVLine(line);
+            validateHeaders(headers);
+            
+            int lineNumber = 1;
+            Set<String> existingReceiptNumbers = getExistingReceiptNumbers();
+            int processedLines = 0;
+            
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                processedLines++;
+                
+                // Skip empty lines
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+                
+                try {
+                    String[] values = parseCSVLine(line);
+                    
+                    // Ensure we have enough columns
+                    if (values.length < 10) {
+                        result.errors.add("Line " + lineNumber + ": Expected 10 columns, found " + values.length + " - skipped");
+                        continue;
+                    }
+                    
+                    // Validate required fields
+                    if (values[0].trim().isEmpty()) {
+                        result.errors.add("Line " + lineNumber + ": Date is required - skipped");
+                        continue;
+                    }
+                    
+                    if (values[1].trim().isEmpty()) {
+                        result.errors.add("Line " + lineNumber + ": Vendor is required - skipped");
+                        continue;
+                    }
+                    
+                    if (values[5].trim().isEmpty()) {
+                        result.errors.add("Line " + lineNumber + ": Amount is required - skipped");
+                        continue;
+                    }
+                    
+                    CompanyExpense expense = createExpenseFromValues(values);
+                    
+                    // Check for duplicate receipt number
+                    if (expense.getReceiptNumber() != null && !expense.getReceiptNumber().trim().isEmpty()) {
+                        if (existingReceiptNumbers.contains(expense.getReceiptNumber().trim())) {
+                            result.skipped++;
+                            result.errors.add("Line " + lineNumber + ": Duplicate receipt number '" + 
+                                           expense.getReceiptNumber() + "' - skipped");
+                            continue;
+                        }
+                        existingReceiptNumbers.add(expense.getReceiptNumber().trim());
+                    }
+                    
+                    expenseDAO.save(expense);
+                    result.imported++;
+                    result.totalFound++;
+                    
+                } catch (Exception e) {
+                    result.errors.add("Line " + lineNumber + ": " + e.getMessage());
+                }
+            }
+            
+            if (processedLines == 0) {
+                throw new IllegalArgumentException("No data rows found in file");
+            }
+        }
+    }
+    
+    /**
+     * Import from Excel file
+     */
+    private void importFromExcel(File file, ImportResult result) throws Exception {
+        try (FileInputStream fis = new FileInputStream(file);
+             Workbook workbook = WorkbookFactory.create(fis)) {
+            
+            Sheet sheet = workbook.getSheetAt(0);
+            if (sheet == null) {
+                throw new IllegalArgumentException("No data found in Excel file");
+            }
+            
+            // Validate header
+            Row headerRow = sheet.getRow(0);
+            if (headerRow == null) {
+                throw new IllegalArgumentException("No header row found");
+            }
+            
+            String[] headers = new String[headerRow.getLastCellNum()];
+            for (int i = 0; i < headerRow.getLastCellNum(); i++) {
+                Cell cell = headerRow.getCell(i);
+                headers[i] = cell != null ? cell.toString().trim() : "";
+            }
+            validateHeaders(headers);
+            
+            Set<String> existingReceiptNumbers = getExistingReceiptNumbers();
+            
+            for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
+                Row row = sheet.getRow(rowNum);
+                if (row == null) continue;
+                
+                try {
+                    String[] values = new String[10];
+                    for (int i = 0; i < 10 && i < row.getLastCellNum(); i++) {
+                        Cell cell = row.getCell(i);
+                        values[i] = cell != null ? cell.toString().trim() : "";
+                    }
+                    
+                    CompanyExpense expense = createExpenseFromValues(values);
+                    
+                    // Check for duplicate receipt number
+                    if (expense.getReceiptNumber() != null && !expense.getReceiptNumber().trim().isEmpty()) {
+                        if (existingReceiptNumbers.contains(expense.getReceiptNumber().trim())) {
+                            result.skipped++;
+                            result.errors.add("Row " + (rowNum + 1) + ": Duplicate receipt number '" + 
+                                           expense.getReceiptNumber() + "' - skipped");
+                            continue;
+                        }
+                        existingReceiptNumbers.add(expense.getReceiptNumber().trim());
+                    }
+                    
+                    expenseDAO.save(expense);
+                    result.imported++;
+                    result.totalFound++;
+                } catch (Exception e) {
+                    result.errors.add("Row " + (rowNum + 1) + ": " + e.getMessage());
+                }
+            }
+        }
+    }
+    
+    /**
+     * Validate CSV/Excel headers
+     */
+    private void validateHeaders(String[] headers) throws Exception {
+        String[] expectedHeaders = {"Date", "Vendor", "Category", "Department", "Description", 
+                                  "Amount", "Payment Method", "Receipt #", "Status", "Recurring"};
+        
+        if (headers.length < expectedHeaders.length) {
+            throw new IllegalArgumentException("Invalid header format. Expected columns: " + 
+                                           String.join(", ", expectedHeaders));
+        }
+        
+        for (int i = 0; i < expectedHeaders.length; i++) {
+            if (!headers[i].trim().equalsIgnoreCase(expectedHeaders[i])) {
+                throw new IllegalArgumentException("Invalid header at column " + (i + 1) + 
+                                               ". Expected: " + expectedHeaders[i] + 
+                                               ", Found: " + headers[i]);
+            }
+        }
+    }
+    
+    /**
+     * Parse CSV line handling quoted values and edge cases
+     */
+    private String[] parseCSVLine(String line) {
+        List<String> values = new ArrayList<>();
+        StringBuilder currentValue = new StringBuilder();
+        boolean inQuotes = false;
+        
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            } else if (c == ',' && !inQuotes) {
+                values.add(currentValue.toString().trim());
+                currentValue = new StringBuilder();
+            } else {
+                currentValue.append(c);
+            }
+        }
+        
+        // Add the last value
+        values.add(currentValue.toString().trim());
+        
+        // Ensure we have exactly 10 values
+        while (values.size() < 10) {
+            values.add("");
+        }
+        
+        // Trim all values and handle nulls
+        for (int i = 0; i < values.size(); i++) {
+            String value = values.get(i);
+            if (value == null) {
+                values.set(i, "");
+            } else {
+                values.set(i, value.trim());
+            }
+        }
+        
+        return values.toArray(new String[0]);
+    }
+    
+    /**
+     * Create CompanyExpense from CSV/Excel values
+     */
+    private CompanyExpense createExpenseFromValues(String[] values) throws Exception {
+        CompanyExpense expense = new CompanyExpense();
+        
+        // Date
+        try {
+            String dateStr = values[0].trim();
+            if (!dateStr.isEmpty()) {
+                LocalDate date = parseDateFlexible(dateStr);
+                expense.setExpenseDate(date);
+            } else {
+                expense.setExpenseDate(LocalDate.now());
+            }
+        } catch (Exception e) {
+            throw new Exception("Invalid date format: " + values[0] + ". Expected MM/dd/yyyy, MM-dd-yyyy, or MM/dd/yy");
+        }
+        
+        // Vendor
+        expense.setVendor(values[1].trim());
+        
+        // Category
+        String category = values[2].trim();
+        if (!expenseCategories.contains(category)) {
+            category = "Other";
+        }
+        expense.setCategory(category);
+        
+        // Department
+        String department = values[3].trim();
+        if (!departments.contains(department)) {
+            department = "Operations";
+        }
+        expense.setDepartment(department);
+        
+        // Description
+        expense.setDescription(values[4].trim());
+        
+        // Amount
+        try {
+            String amountStr = values[5].trim();
+            // Remove currency symbols, commas, and spaces
+            amountStr = amountStr.replaceAll("[$,€£¥\\s]", "");
+            // Handle negative amounts in parentheses
+            if (amountStr.startsWith("(") && amountStr.endsWith(")")) {
+                amountStr = "-" + amountStr.substring(1, amountStr.length() - 1);
+            }
+            expense.setAmount(Double.parseDouble(amountStr));
+        } catch (NumberFormatException e) {
+            throw new Exception("Invalid amount: " + values[5]);
+        }
+        
+        // Payment Method
+        String paymentMethod = values[6].trim();
+        if (!paymentMethods.contains(paymentMethod)) {
+            paymentMethod = "Other";
+        }
+        expense.setPaymentMethod(paymentMethod);
+        
+        // Receipt Number
+        expense.setReceiptNumber(values[7].trim());
+        
+        // Status
+        String status = values[8].trim();
+        if (status.isEmpty()) {
+            status = "Pending";
+        }
+        expense.setStatus(status);
+        
+        // Recurring
+        String recurringStr = values[9].trim().toLowerCase();
+        expense.setRecurring(recurringStr.equals("yes") || recurringStr.equals("true") || 
+                           recurringStr.equals("1") || recurringStr.equals("y"));
+        
+        return expense;
+    }
+    
+    /**
+     * Get existing receipt numbers to prevent duplicates
+     */
+    private Set<String> getExistingReceiptNumbers() {
+        Set<String> receiptNumbers = new HashSet<>();
+        try {
+            List<CompanyExpense> existingExpenses = expenseDAO.getAll();
+            for (CompanyExpense expense : existingExpenses) {
+                if (expense.getReceiptNumber() != null && !expense.getReceiptNumber().trim().isEmpty()) {
+                    receiptNumbers.add(expense.getReceiptNumber().trim());
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Failed to get existing receipt numbers", e);
+        }
+        return receiptNumbers;
+    }
+    
+    /**
+     * Show import results dialog
+     */
+    private void showImportResults(ImportResult result, String fileName) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Import Results");
+        alert.setHeaderText("Import completed for " + fileName);
+        
+        StringBuilder content = new StringBuilder();
+        content.append("Total records found: ").append(result.totalFound).append("\n");
+        content.append("Successfully imported: ").append(result.imported).append("\n");
+        content.append("Skipped (duplicates): ").append(result.skipped).append("\n");
+        
+        if (!result.errors.isEmpty()) {
+            content.append("\nErrors:\n");
+            for (String error : result.errors) {
+                content.append("• ").append(error).append("\n");
+            }
+        }
+        
+        alert.setContentText(content.toString());
+        
+        // Add scrollable text area for errors if there are many
+        if (result.errors.size() > 10) {
+            TextArea errorArea = new TextArea(content.toString());
+            errorArea.setEditable(false);
+            errorArea.setPrefRowCount(15);
+            errorArea.setPrefColumnCount(80);
+            alert.getDialogPane().setContent(errorArea);
+        }
+        
+        alert.showAndWait();
+        
+        // Refresh data after import
+        loadData();
+    }
+    
+    /**
+     * Parse date with multiple format support
+     */
+    private LocalDate parseDateFlexible(String dateStr) throws Exception {
+        String[] patterns = {
+            "MM/dd/yyyy",
+            "MM-dd-yyyy", 
+            "MM/dd/yy",
+            "MM-dd-yy",
+            "M/d/yyyy",
+            "M-d-yyyy",
+            "M/d/yy",
+            "M-d-yy"
+        };
+        
+        for (String pattern : patterns) {
+            try {
+                return LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern));
+            } catch (Exception e) {
+                // Continue to next pattern
+            }
+        }
+        
+        throw new Exception("Unable to parse date: " + dateStr);
+    }
+    
+    /**
+     * Import result class
+     */
+    private static class ImportResult {
+        int totalFound = 0;
+        int imported = 0;
+        int skipped = 0;
+        List<String> errors = new ArrayList<>();
     }
 }

@@ -235,6 +235,153 @@ public class EmployeeDAO {
         return null;
     }
 
+    /**
+     * Add or update multiple employees from import
+     * Checks for existing employees by name and updates them, or adds new ones
+     * Returns the list of employees with proper IDs assigned
+     */
+    public List<Employee> addOrUpdateAll(List<Employee> employees) {
+        logger.info("Processing {} employees for import", employees.size());
+        List<Employee> resultEmployees = new ArrayList<>();
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            conn.setAutoCommit(false);
+            
+            try {
+                int added = 0;
+                int updated = 0;
+                
+                for (Employee importedEmp : employees) {
+                    // Check if employee exists by name
+                    Employee existing = getByName(importedEmp.getName());
+                    
+                    if (existing != null) {
+                        // Merge imported data with existing data
+                        mergeEmployeeData(existing, importedEmp);
+                        update(existing);
+                        resultEmployees.add(existing); // Use existing employee with proper ID
+                        updated++;
+                        logger.debug("Updated existing employee: {} (ID: {})", existing.getName(), existing.getId());
+                    } else {
+                        // Add new employee
+                        int newId = add(importedEmp);
+                        importedEmp.setId(newId); // Set the ID from the database
+                        resultEmployees.add(importedEmp); // Use imported employee with proper ID
+                        added++;
+                        logger.debug("Added new employee: {} (ID: {})", importedEmp.getName(), importedEmp.getId());
+                    }
+                }
+                
+                conn.commit();
+                logger.info("Import completed - Added: {}, Updated: {}", added, updated);
+                
+                // Validate that all result employees have proper IDs
+                for (Employee emp : resultEmployees) {
+                    if (emp.getId() <= 0) {
+                        logger.error("CRITICAL: Employee {} has invalid ID: {}", emp.getName(), emp.getId());
+                    } else {
+                        logger.debug("Employee {} has valid ID: {}", emp.getName(), emp.getId());
+                    }
+                }
+                
+            } catch (Exception e) {
+                conn.rollback();
+                logger.error("Error during import, rolling back: {}", e.getMessage(), e);
+                throw new DataAccessException("Error during employee import", e);
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            logger.error("Database error during import: {}", e.getMessage(), e);
+            throw new DataAccessException("Database error during import", e);
+        }
+        
+        return resultEmployees;
+    }
+    
+    /**
+     * Merge imported employee data with existing employee data
+     * Preserves existing fields that are not provided in the import
+     */
+    private void mergeEmployeeData(Employee existing, Employee imported) {
+        // Only update fields that are provided in the import (not null/empty)
+        if (imported.getTruckUnit() != null && !imported.getTruckUnit().trim().isEmpty()) {
+            existing.setTruckUnit(imported.getTruckUnit());
+        }
+        if (imported.getTrailerNumber() != null && !imported.getTrailerNumber().trim().isEmpty()) {
+            existing.setTrailerNumber(imported.getTrailerNumber());
+        }
+        if (imported.getPhone() != null && !imported.getPhone().trim().isEmpty()) {
+            existing.setPhone(imported.getPhone());
+        }
+        if (imported.getEmail() != null && !imported.getEmail().trim().isEmpty()) {
+            existing.setEmail(imported.getEmail());
+        }
+        if (imported.getDriverPercent() > 0) {
+            existing.setDriverPercent(imported.getDriverPercent());
+        }
+        if (imported.getCompanyPercent() > 0) {
+            existing.setCompanyPercent(imported.getCompanyPercent());
+        }
+        if (imported.getServiceFeePercent() > 0) {
+            existing.setServiceFeePercent(imported.getServiceFeePercent());
+        }
+        if (imported.getDob() != null) {
+            existing.setDob(imported.getDob());
+        }
+        if (imported.getLicenseNumber() != null && !imported.getLicenseNumber().trim().isEmpty()) {
+            existing.setLicenseNumber(imported.getLicenseNumber());
+        }
+        if (imported.getDriverType() != null) {
+            existing.setDriverType(imported.getDriverType());
+        }
+        if (imported.getEmployeeLLC() != null && !imported.getEmployeeLLC().trim().isEmpty()) {
+            existing.setEmployeeLLC(imported.getEmployeeLLC());
+        }
+        if (imported.getCdlExpiry() != null) {
+            existing.setCdlExpiry(imported.getCdlExpiry());
+        }
+        if (imported.getMedicalExpiry() != null) {
+            existing.setMedicalExpiry(imported.getMedicalExpiry());
+        }
+        if (imported.getStatus() != null) {
+            existing.setStatus(imported.getStatus());
+        }
+        
+        // Set default values for new employees if not already set
+        if (existing.getStatus() == null) {
+            existing.setStatus(Employee.Status.ACTIVE);
+        }
+        if (existing.getDriverType() == null) {
+            existing.setDriverType(Employee.DriverType.COMPANY_DRIVER);
+        }
+    }
+    
+    /**
+     * Get employee by name (case-insensitive)
+     */
+    public Employee getByName(String name) {
+        logger.debug("Getting employee by name: {}", name);
+        if (name == null || name.trim().isEmpty()) return null;
+        
+        String sql = "SELECT * FROM employees WHERE LOWER(name) = LOWER(?)";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, name.trim());
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                Employee emp = mapRow(rs);
+                logger.debug("Found employee: {} (ID: {})", emp.getName(), emp.getId());
+                return emp;
+            }
+            logger.debug("No employee found with name: {}", name);
+        } catch (SQLException e) {
+            logger.error("Error getting employee by name {}: {}", name, e.getMessage(), e);
+            throw new DataAccessException("Error getting employee by name", e);
+        }
+        return null;
+    }
+
     private Employee mapRow(ResultSet rs) throws SQLException {
         String trailerNumber = "";
         try {

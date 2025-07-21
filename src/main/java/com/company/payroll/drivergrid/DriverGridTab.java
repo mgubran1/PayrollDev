@@ -1,37 +1,60 @@
 package com.company.payroll.drivergrid;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Predicate;
+
 import com.company.payroll.employees.Employee;
 import com.company.payroll.employees.EmployeeDAO;
 import com.company.payroll.loads.Load;
 import com.company.payroll.loads.LoadDAO;
+import com.company.payroll.loads.LoadLocation;
 import com.company.payroll.loads.LoadsTab;
-import javafx.animation.PauseTransition;
+
 import javafx.application.Platform;
-import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.control.*;
-import javafx.scene.input.MouseButton;
-import javafx.scene.layout.*;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.DatePicker;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.util.Duration;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
-import java.util.function.Predicate;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.FormatStyle;
-import java.util.Locale;
 
 public class DriverGridTab extends Tab {
     private final BorderPane mainLayout = new BorderPane();
@@ -401,15 +424,7 @@ public class DriverGridTab extends Tab {
                 bar.setPrefHeight(barHeight);
                 bar.setTranslateY(barMargin);
                 
-                String tooltipText = STATUS_ICON.getOrDefault(loadRow.load.getStatus(), "") + " " + loadRow.load.getLoadNumber() + "\n" +
-                    "Status: " + loadRow.load.getStatus() + "\n" +
-                    "Customer: " + loadRow.load.getCustomer() + "\n" +
-                    "Pickup: " + loadRow.load.getPickUpLocation() + " " + loadRow.load.getPickUpDate() + " " + loadRow.load.getPickUpTime() + "\n" +
-                    "Delivery: " + loadRow.load.getDropLocation() + " " + loadRow.load.getDeliveryDate() + " " + loadRow.load.getDeliveryTime();
-                
-                if (hasConflict) {
-                    tooltipText += "\n⚠️ SCHEDULING CONFLICT DETECTED";
-                }
+                String tooltipText = buildLoadTooltipText(loadRow.load, hasConflict);
                 
                 Tooltip tip = new Tooltip(tooltipText);
                 Tooltip.install(bar, tip);
@@ -713,6 +728,49 @@ public class DriverGridTab extends Tab {
         conflictItem.getChildren().addAll(conflictRect, conflictLbl);
         legend.getChildren().add(conflictItem);
         return legend;
+    }
+    
+    private String buildLoadTooltipText(Load load, boolean hasConflict) {
+        StringBuilder tooltip = new StringBuilder();
+        tooltip.append(STATUS_ICON.getOrDefault(load.getStatus(), "")).append(" ").append(load.getLoadNumber()).append("\n")
+               .append("Status: ").append(load.getStatus()).append("\n")
+               .append("Customer: ").append(load.getCustomer()).append("\n")
+               .append("Pickup: ").append(load.getPickUpLocation()).append(" ").append(load.getPickUpDate()).append(" ").append(load.getPickUpTime()).append("\n")
+               .append("Delivery: ").append(load.getDropLocation()).append(" ").append(load.getDeliveryDate()).append(" ").append(load.getDeliveryTime());
+        
+        // Add additional locations if they exist
+        List<LoadLocation> locations = load.getLocations();
+        if (locations != null && !locations.isEmpty()) {
+            List<LoadLocation> additionalPickups = locations.stream()
+                .filter(loc -> loc.getType() == LoadLocation.LocationType.PICKUP)
+                .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
+                .collect(java.util.stream.Collectors.toList());
+                
+            List<LoadLocation> additionalDrops = locations.stream()
+                .filter(loc -> loc.getType() == LoadLocation.LocationType.DROP)
+                .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
+                .collect(java.util.stream.Collectors.toList());
+            
+            if (!additionalPickups.isEmpty()) {
+                tooltip.append("\nAdditional Pickups:");
+                for (LoadLocation pickup : additionalPickups) {
+                    tooltip.append("\n  • ").append(pickup.getCustomer()).append(" - ").append(pickup.getAddress());
+                }
+            }
+            
+            if (!additionalDrops.isEmpty()) {
+                tooltip.append("\nAdditional Drops:");
+                for (LoadLocation drop : additionalDrops) {
+                    tooltip.append("\n  • ").append(drop.getCustomer()).append(" - ").append(drop.getAddress());
+                }
+            }
+        }
+        
+        if (hasConflict) {
+            tooltip.append("\n⚠️ SCHEDULING CONFLICT DETECTED");
+        }
+        
+        return tooltip.toString();
     }
 
     private static class LoadRow {

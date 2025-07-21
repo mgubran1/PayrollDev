@@ -1720,6 +1720,12 @@ public class DriverGridTabEnhanced extends DriverGridTab {
     }
     
     private void showInfo(String message) {
+        // Don't show dialogs during jpackage testing
+        if ("true".equals(System.getProperty("jpackage.testing"))) {
+            logger.info("Suppressing dialog during jpackage testing: {}", message);
+            return;
+        }
+        
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Information");
         alert.setHeaderText(null);
