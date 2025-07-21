@@ -18,6 +18,7 @@ public class Truck {
     private LocalDate registrationExpiryDate;
     private LocalDate insuranceExpiryDate;
     private LocalDate nextInspectionDue;
+    private LocalDate inspection; // Last inspection date
     private String permitNumbers;
     private String driver;
     private boolean assigned;
@@ -119,6 +120,14 @@ public class Truck {
 
     public void setNextInspectionDue(LocalDate nextInspectionDue) {
         this.nextInspectionDue = nextInspectionDue;
+    }
+
+    public LocalDate getInspection() {
+        return inspection;
+    }
+
+    public void setInspection(LocalDate inspection) {
+        this.inspection = inspection;
     }
 
     public String getPermitNumbers() {

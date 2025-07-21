@@ -13,6 +13,7 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -30,6 +31,7 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -50,15 +52,16 @@ public class LoadConfirmationPreviewDialog {
         dialog = new Stage();
         dialog.initModality(Modality.APPLICATION_MODAL);
         dialog.setTitle("Load Confirmation Preview - Load #" + load.getLoadNumber());
-        dialog.setWidth(850);
-        dialog.setHeight(700);
+        dialog.setWidth(1000);
+        dialog.setHeight(900);
         
         createContent();
     }
     
     private void createContent() {
-        VBox root = new VBox(10);
-        root.setPadding(new Insets(10));
+        VBox root = new VBox(8);
+        root.setPadding(new Insets(12));
+        root.setStyle("-fx-background-color: #f8f9fa;");
         
         // Create toolbar
         ToolBar toolbar = createToolbar();
@@ -68,7 +71,9 @@ public class LoadConfirmationPreviewDialog {
         previewContent = createPreviewContent();
         scrollPane.setContent(previewContent);
         scrollPane.setFitToWidth(true);
-        scrollPane.setStyle("-fx-background-color: #f0f0f0;");
+        scrollPane.setStyle("-fx-background-color: #ffffff; -fx-border-color: #dee2e6; -fx-border-width: 1;");
+        scrollPane.setPrefViewportWidth(850);
+        scrollPane.setPrefViewportHeight(700);
         
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
         root.getChildren().addAll(toolbar, scrollPane);
@@ -78,16 +83,23 @@ public class LoadConfirmationPreviewDialog {
     }
     
     private ToolBar createToolbar() {
-        Button printBtn = new Button("Print");
-        printBtn.setOnAction(e -> handlePrint());
+        ToolBar toolbar = new ToolBar();
+        toolbar.setStyle("-fx-background-color: #ffffff; -fx-border-color: #dee2e6; -fx-border-width: 0 0 1 0;");
+        
+        Button printPdfBtn = new Button("Print PDF");
+        printPdfBtn.setStyle("-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 16;");
+        printPdfBtn.setOnAction(e -> handlePrintPdf());
         
         Button saveAsPdfBtn = new Button("Save as PDF");
+        saveAsPdfBtn.setStyle("-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 16;");
         saveAsPdfBtn.setOnAction(e -> handleSaveAsPdf());
         
         Button emailBtn = new Button("Email");
+        emailBtn.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white; -fx-padding: 8 16;");
         emailBtn.setDisable(true); // Will be implemented later
         
         Button configBtn = new Button("Configuration");
+        configBtn.setStyle("-fx-background-color: #17a2b8; -fx-text-fill: white; -fx-padding: 8 16;");
         configBtn.setOnAction(e -> {
             LoadConfirmationConfigDialog configDialog = new LoadConfirmationConfigDialog();
             configDialog.showAndWait();
@@ -98,123 +110,146 @@ public class LoadConfirmationPreviewDialog {
         });
         
         Button closeBtn = new Button("Close");
+        closeBtn.setStyle("-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 8 16;");
         closeBtn.setOnAction(e -> dialog.close());
         
-        return new ToolBar(printBtn, saveAsPdfBtn, emailBtn, new Separator(), configBtn, new Separator(), closeBtn);
+        // Add spacing between button groups
+        Region spacer1 = new Region();
+        HBox.setHgrow(spacer1, Priority.ALWAYS);
+        Region spacer2 = new Region();
+        HBox.setHgrow(spacer2, Priority.ALWAYS);
+        
+        toolbar.getItems().addAll(printPdfBtn, saveAsPdfBtn, emailBtn, spacer1, configBtn, spacer2, closeBtn);
+        
+        return toolbar;
     }
     
     private VBox createPreviewContent() {
+        // Letter size paper dimensions: 8.5" x 11" = 612 x 792 points (72 DPI)
+        // Convert to pixels for screen display (assuming 96 DPI screen)
+        double letterWidthPixels = 612 * (96.0 / 72.0); // ~816 pixels
+        double letterHeightPixels = 792 * (96.0 / 72.0); // ~1056 pixels
+        
+        // Standard margins (1 inch = 72 points = 96 pixels at 96 DPI)
+        double marginPixels = 72;
+        double contentWidth = letterWidthPixels - (2 * marginPixels); // ~672 pixels
+        
+        // Main container that represents the page
+        VBox pageContainer = new VBox();
+        pageContainer.setAlignment(Pos.TOP_CENTER);
+        pageContainer.setStyle("-fx-background-color: white; -fx-border-color: #dee2e6; -fx-border-width: 1; -fx-border-radius: 4;");
+        pageContainer.setMaxWidth(letterWidthPixels);
+        pageContainer.setMinWidth(letterWidthPixels);
+        pageContainer.setPrefWidth(letterWidthPixels);
+        pageContainer.setMinHeight(letterHeightPixels);
+        pageContainer.setPrefHeight(letterHeightPixels);
+        
+        // Content container with margins
         VBox content = new VBox(10);
-        content.setPadding(new Insets(20));
-        content.setAlignment(Pos.TOP_CENTER);
-        content.setStyle("-fx-background-color: white; -fx-border-color: #cccccc; -fx-border-width: 1;");
-        content.setMaxWidth(750);
+        content.setPadding(new Insets(marginPixels));
+        content.setAlignment(Pos.TOP_LEFT);
+        content.setMaxWidth(contentWidth);
+        content.setMinWidth(contentWidth);
+        content.setPrefWidth(contentWidth);
         
-        // Add company logo if available
-        addCompanyLogo(content);
-        
-        // Add header with driver info
+        // Header
         addHeader(content);
         
-        // Add separator
-        content.getChildren().add(new Separator());
+        // Separator
+        Separator separator = new Separator();
+        separator.setStyle("-fx-background-color: #dee2e6;");
+        VBox.setMargin(separator, new Insets(10, 0, 10, 0));
+        content.getChildren().add(separator);
         
-        // Add pickup and drop information
-        addPickupSection(content);
-        content.getChildren().add(new Separator());
-        addDropSection(content);
+        // Main content in a single vertical flow
+        addMainContent(content);
         
-        // Add notes if present
-        if (load.getNotes() != null && !load.getNotes().trim().isEmpty()) {
+        // Notes section if available
+        if (load.getNotes() != null && !load.getNotes().isEmpty()) {
             addNotesSection(content);
         }
         
-        // Add pickup and delivery policy
+        // Policy section
         addPolicySection(content);
         
-        // Add dispatcher information
+        // Spacer to push dispatcher info to bottom
+        Region spacer = new Region();
+        VBox.setVgrow(spacer, Priority.ALWAYS);
+        content.getChildren().add(spacer);
+        
+        // Dispatcher section
         addDispatcherSection(content);
         
-        return content;
-    }
-    
-    private void addCompanyLogo(VBox content) {
-        String logoPath = config.getCompanyLogoPath();
-        if (logoPath != null && !logoPath.isEmpty()) {
-            File logoFile = new File(logoPath);
-            if (logoFile.exists()) {
-                try {
-                    Image image = new Image(logoFile.toURI().toString());
-                    ImageView imageView = new ImageView(image);
-                    imageView.setPreserveRatio(true);
-                    imageView.setFitHeight(80);
-                    
-                    HBox logoBox = new HBox(imageView);
-                    logoBox.setAlignment(Pos.CENTER);
-                    content.getChildren().add(logoBox);
-                } catch (Exception e) {
-                    logger.error("Error loading logo: {}", e.getMessage());
-                }
-            }
-        }
+        pageContainer.getChildren().add(content);
+        return pageContainer;
     }
     
     private void addHeader(VBox content) {
-        // Get company name
-        String companyName = getCompanyNameFromConfig();
-        
         // Company name
+        String companyName = getCompanyNameFromConfig();
         Label companyLabel = new Label(companyName);
-        companyLabel.setFont(Font.font("Arial", FontWeight.BOLD, 24));
+        companyLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         companyLabel.setAlignment(Pos.CENTER);
+        companyLabel.setStyle("-fx-text-fill: #2c3e50;");
         
         HBox companyBox = new HBox(companyLabel);
         companyBox.setAlignment(Pos.CENTER);
+        companyBox.setPadding(new Insets(0, 0, 2, 0));
         content.getChildren().add(companyBox);
         
         // Title
         Label title = new Label("LOAD CONFIRMATION");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 20));
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 14));
         title.setAlignment(Pos.CENTER);
+        title.setStyle("-fx-text-fill: #34495e;");
         
         HBox titleBox = new HBox(title);
         titleBox.setAlignment(Pos.CENTER);
-        titleBox.setPadding(new Insets(5, 0, 0, 0));
+        titleBox.setPadding(new Insets(0, 0, 8, 0));
         content.getChildren().add(titleBox);
+    }
+    
+    private void addMainContent(VBox content) {
+        // Load and Driver Info Section
+        VBox loadInfoSection = new VBox(8);
         
-        // Header with load info on left and driver info on right
-        HBox headerBox = new HBox();
-        headerBox.setPadding(new Insets(10, 0, 0, 0));
+        // Two-column layout for basic info
+        GridPane basicInfoGrid = new GridPane();
+        basicInfoGrid.setHgap(40);
+        basicInfoGrid.setVgap(6);
         
-        // Left side - Load info
-        VBox leftInfo = new VBox(5);
-        Label loadNumLabel = new Label("Load #: " + load.getLoadNumber());
-        loadNumLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        // Configure columns - 60% for left, 40% for right
+        ColumnConstraints col1 = new ColumnConstraints();
+        col1.setPercentWidth(60);
+        ColumnConstraints col2 = new ColumnConstraints();
+        col2.setPercentWidth(40);
+        basicInfoGrid.getColumnConstraints().addAll(col1, col2);
         
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
-        Label pickupDateLabel = new Label("Pickup: " + 
-            (load.getPickUpDate() != null ? load.getPickUpDate().format(dateFormatter) : "TBD"));
-        pickupDateLabel.setFont(Font.font("Arial", 11));
-        
-        Label deliveryDateLabel = new Label("Delivery: " + 
-            (load.getDeliveryDate() != null ? load.getDeliveryDate().format(dateFormatter) : "TBD"));
-        deliveryDateLabel.setFont(Font.font("Arial", 11));
-        
-        leftInfo.getChildren().addAll(loadNumLabel, pickupDateLabel, deliveryDateLabel);
-        
-        // Right side - Driver info
-        VBox rightInfo = new VBox(5);
-        rightInfo.setAlignment(Pos.TOP_RIGHT);
-        
         Employee driver = load.getDriver();
+        
+        // Left column
+        int leftRow = 0;
+        addLabelValuePair(basicInfoGrid, leftRow++, 0, "Load #:", load.getLoadNumber(), true);
+        
+        String pickupDate = load.getPickUpDate() != null ? load.getPickUpDate().format(dateFormatter) : "TBD";
+        addLabelValuePair(basicInfoGrid, leftRow++, 0, "Pickup Date:", pickupDate, false);
+        
+        String deliveryDate = load.getDeliveryDate() != null ? load.getDeliveryDate().format(dateFormatter) : "TBD";
+        addLabelValuePair(basicInfoGrid, leftRow++, 0, "Delivery Date:", deliveryDate, false);
+        
+        if (config.isShowGrossAmount() && load.getGrossAmount() > 0.0) {
+            addLabelValuePair(basicInfoGrid, leftRow++, 0, "Gross Amount:", "$" + String.format("%.2f", load.getGrossAmount()), true);
+        }
+        
+        // Right column
+        int rightRow = 0;
         if (driver != null) {
-            Label driverLabel = new Label("Driver: " + driver.getName());
-            driverLabel.setFont(Font.font("Arial", 11));
+            addLabelValuePair(basicInfoGrid, rightRow++, 1, "Driver:", driver.getName(), true);
             
             String truckUnit = load.getTruckUnitSnapshot() != null ? load.getTruckUnitSnapshot() : 
                              (driver.getTruckUnit() != null ? driver.getTruckUnit() : "N/A");
-            Label truckLabel = new Label("Truck: " + truckUnit);
-            truckLabel.setFont(Font.font("Arial", 11));
+            addLabelValuePair(basicInfoGrid, rightRow++, 1, "Truck:", truckUnit, false);
             
             Trailer trailer = load.getTrailer();
             String trailerInfo = "N/A";
@@ -226,203 +261,318 @@ public class LoadConfirmationPreviewDialog {
             } else if (load.getTrailerNumber() != null && !load.getTrailerNumber().isEmpty()) {
                 trailerInfo = load.getTrailerNumber();
             }
-            Label trailerLabel = new Label("Trailer: " + trailerInfo);
-            trailerLabel.setFont(Font.font("Arial", 11));
+            addLabelValuePair(basicInfoGrid, rightRow++, 1, "Trailer:", trailerInfo, false);
             
-            rightInfo.getChildren().addAll(driverLabel, truckLabel, trailerLabel);
-            
-            // Add mobile and email if available
             if (driver.getPhone() != null && !driver.getPhone().isEmpty()) {
-                Label mobileLabel = new Label("Mobile #: " + driver.getPhone());
-                mobileLabel.setFont(Font.font("Arial", 11));
-                leftInfo.getChildren().add(mobileLabel);
-            }
-            
-            if (driver.getEmail() != null && !driver.getEmail().isEmpty()) {
-                Label emailLabel = new Label("Email: " + driver.getEmail());
-                emailLabel.setFont(Font.font("Arial", 11));
-                rightInfo.getChildren().add(emailLabel);
+                addLabelValuePair(basicInfoGrid, rightRow++, 1, "Mobile:", driver.getPhone(), false);
             }
         }
         
-        // Add spacer to push driver info to the right
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        loadInfoSection.getChildren().add(basicInfoGrid);
+        content.getChildren().add(loadInfoSection);
         
-        headerBox.getChildren().addAll(leftInfo, spacer, rightInfo);
-        content.getChildren().add(headerBox);
-    }
-    
-    
-    private void addPickupSection(VBox content) {
-        VBox section = createSection("PICKUP INFORMATION");
+        // Separator
+        Separator separator1 = new Separator();
+        separator1.setStyle("-fx-background-color: #e0e0e0;");
+        VBox.setMargin(separator1, new Insets(10, 0, 10, 0));
+        content.getChildren().add(separator1);
         
-        // Always show the original pickup location first
-        GridPane grid = new GridPane();
-        grid.setHgap(15);
-        grid.setVgap(5);
-        grid.setPadding(new Insets(0, 0, 0, 20));
+        // Pickup Information Section
+        VBox pickupSection = createLocationSection("PICKUP INFORMATION", 
+            load.getCustomer(), 
+            load.getPickUpLocation(),
+            formatDateTime(load.getPickUpDate(), load.getPickUpTime()),
+            load.getPONumber());
+        content.getChildren().add(pickupSection);
         
-        int row = 0;
-        addInfoRow(grid, row++, "Customer:", load.getCustomer());
-        addInfoRow(grid, row++, "Address:", load.getPickUpLocation());
-        
-        String pickupDateTime = formatDateTime(load.getPickUpDate(), load.getPickUpTime());
-        addInfoRow(grid, row++, "Date/Time:", pickupDateTime);
-        
-        if (load.getPONumber() != null && !load.getPONumber().isEmpty()) {
-            addInfoRow(grid, row++, "PO #:", load.getPONumber());
-        }
-        
-        section.getChildren().add(grid);
-        
-        // Check if we have additional pickup locations from Manage Load Locations
-        List<LoadLocation> additionalPickups = load.getLocations().stream()
-            .filter(loc -> loc.getType() == LoadLocation.LocationType.PICKUP)
-            .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
-            .collect(java.util.stream.Collectors.toList());
-        
-        // If we have additional pickups, show them
+        // Additional pickup locations
+        List<LoadLocation> additionalPickups = getAdditionalLocations(LoadLocation.LocationType.PICKUP);
         if (!additionalPickups.isEmpty()) {
-            Label additionalLabel = new Label("Additional Pickup Locations:");
-            additionalLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-            additionalLabel.setPadding(new Insets(10, 0, 5, 20));
-            section.getChildren().add(additionalLabel);
-            
-            VBox locationsList = new VBox(3);
-            locationsList.setPadding(new Insets(0, 0, 0, 30));
-            
-            for (int i = 0; i < additionalPickups.size(); i++) {
-                LoadLocation loc = additionalPickups.get(i);
-                
-                // Format: Customer - Address - Time
-                String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
-                    loc.getCustomer() : "";
-                String address = formatLocationAddress(loc);
-                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
-                
-                Label locationLine = new Label(String.format("%d. %s - %s - %s", 
-                    i + 1, customer, address, time));
-                locationLine.setFont(Font.font("Arial", 11));
-                locationsList.getChildren().add(locationLine);
-                
-                // Add notes if present
-                if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
-                    Label notesLabel = new Label("   Notes: " + loc.getNotes());
-                    notesLabel.setFont(Font.font("Arial", 10));
-                    notesLabel.setTextFill(Color.GRAY);
-                    locationsList.getChildren().add(notesLabel);
-                }
-            }
-            
-            section.getChildren().add(locationsList);
+            VBox addPickupSection = createAdditionalLocationsSection("Additional Pickup Locations", additionalPickups);
+            VBox.setMargin(addPickupSection, new Insets(5, 0, 0, 20));
+            content.getChildren().add(addPickupSection);
         }
         
-        content.getChildren().add(section);
+        // Separator
+        Separator separator2 = new Separator();
+        separator2.setStyle("-fx-background-color: #e0e0e0;");
+        VBox.setMargin(separator2, new Insets(10, 0, 10, 0));
+        content.getChildren().add(separator2);
+        
+        // Drop Information Section
+        VBox dropSection = createLocationSection("DROP INFORMATION",
+            load.getCustomer2() != null ? load.getCustomer2() : load.getCustomer(),
+            load.getDropLocation(),
+            formatDateTime(load.getDeliveryDate(), load.getDeliveryTime()),
+            null);
+        content.getChildren().add(dropSection);
+        
+        // Additional drop locations
+        List<LoadLocation> additionalDrops = getAdditionalLocations(LoadLocation.LocationType.DROP);
+        if (!additionalDrops.isEmpty()) {
+            VBox addDropSection = createAdditionalLocationsSection("Additional Drop Locations", additionalDrops);
+            VBox.setMargin(addDropSection, new Insets(5, 0, 0, 20));
+            content.getChildren().add(addDropSection);
+        }
     }
     
-    private void addDropSection(VBox content) {
-        VBox section = createSection("DROP INFORMATION");
+    private VBox createLocationSection(String title, String customer, String address, String dateTime, String poNumber) {
+        VBox section = new VBox(5);
         
-        // Always show the original drop location first
-        GridPane grid = new GridPane();
-        grid.setHgap(15);
-        grid.setVgap(5);
-        grid.setPadding(new Insets(0, 0, 0, 20));
+        // Create header with gray background
+        HBox headerBox = new HBox();
+        headerBox.setStyle("-fx-background-color: #f0f0f0; -fx-padding: 3 10;");
+        headerBox.setPrefWidth(Region.USE_COMPUTED_SIZE);
+        headerBox.setMaxWidth(Double.MAX_VALUE);
         
-        int row = 0;
-        addInfoRow(grid, row++, "Customer:", load.getCustomer2() != null ? load.getCustomer2() : load.getCustomer());
-        addInfoRow(grid, row++, "Address:", load.getDropLocation());
+        Label titleLabel = new Label(title);
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 11));
+        titleLabel.setStyle("-fx-text-fill: black;");
+        headerBox.getChildren().add(titleLabel);
         
-        String dropDateTime = formatDateTime(load.getDeliveryDate(), load.getDeliveryTime());
-        addInfoRow(grid, row++, "Date/Time:", dropDateTime);
+        section.getChildren().add(headerBox);
         
-        section.getChildren().add(grid);
+        // Add double spacing after header
+        Region spacer = new Region();
+        spacer.setPrefHeight(10);
+        section.getChildren().add(spacer);
         
-        // Check if we have additional drop locations from Manage Load Locations
-        List<LoadLocation> additionalDrops = load.getLocations().stream()
-            .filter(loc -> loc.getType() == LoadLocation.LocationType.DROP)
-            .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
-            .collect(java.util.stream.Collectors.toList());
+        VBox detailsBox = new VBox(3);
+        detailsBox.setPadding(new Insets(0, 0, 0, 20));
         
-        // If we have additional drops, show them
-        if (!additionalDrops.isEmpty()) {
-            Label additionalLabel = new Label("Additional Drop Locations:");
-            additionalLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-            additionalLabel.setPadding(new Insets(10, 0, 5, 20));
-            section.getChildren().add(additionalLabel);
-            
-            VBox locationsList = new VBox(3);
-            locationsList.setPadding(new Insets(0, 0, 0, 30));
-            
-            for (int i = 0; i < additionalDrops.size(); i++) {
-                LoadLocation loc = additionalDrops.get(i);
-                
-                // Format: Customer - Address - Time
-                String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
-                    loc.getCustomer() : "";
-                String address = formatLocationAddress(loc);
-                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
-                
-                Label locationLine = new Label(String.format("%d. %s - %s - %s", 
-                    i + 1, customer, address, time));
-                locationLine.setFont(Font.font("Arial", 11));
-                locationsList.getChildren().add(locationLine);
-                
-                // Add notes if present
-                if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
-                    Label notesLabel = new Label("   Notes: " + loc.getNotes());
-                    notesLabel.setFont(Font.font("Arial", 10));
-                    notesLabel.setTextFill(Color.GRAY);
-                    locationsList.getChildren().add(notesLabel);
-                }
-            }
-            
-            section.getChildren().add(locationsList);
+        if (customer != null && !customer.isEmpty()) {
+            HBox customerBox = createDetailRow("Customer:", customer, false);
+            detailsBox.getChildren().add(customerBox);
         }
         
-        content.getChildren().add(section);
+        if (address != null && !address.isEmpty()) {
+            HBox addressBox = createDetailRow("Address:", address, false);
+            detailsBox.getChildren().add(addressBox);
+        }
+        
+        if (dateTime != null && !dateTime.isEmpty()) {
+            HBox dateTimeBox = createDetailRow("Date/Time:", dateTime, false);
+            detailsBox.getChildren().add(dateTimeBox);
+        }
+        
+        if (poNumber != null && !poNumber.isEmpty()) {
+            HBox poBox = createDetailRow("PO #:", poNumber, false);
+            detailsBox.getChildren().add(poBox);
+        }
+        
+        section.getChildren().add(detailsBox);
+        return section;
+    }
+    
+    private HBox createDetailRow(String label, String value, boolean bold) {
+        HBox row = new HBox(5);
+        
+        Label labelNode = new Label(label);
+        labelNode.setFont(Font.font("Arial", FontWeight.BOLD, 10));
+        labelNode.setStyle("-fx-text-fill: #2c3e50;");
+        labelNode.setMinWidth(80);
+        
+        Label valueNode = new Label(value != null ? value : "");
+        if (bold) {
+            valueNode.setFont(Font.font("Arial", FontWeight.BOLD, 10));
+            valueNode.setStyle("-fx-text-fill: #27ae60;");
+        } else {
+            valueNode.setFont(Font.font("Arial", 10));
+            valueNode.setStyle("-fx-text-fill: #34495e;");
+        }
+        valueNode.setWrapText(true);
+        valueNode.setMaxWidth(500);
+        
+        row.getChildren().addAll(labelNode, valueNode);
+        return row;
+    }
+    
+    private VBox createAdditionalLocationsSection(String title, List<LoadLocation> locations) {
+        VBox section = new VBox(3);
+        
+        Label titleLabel = new Label(title + ":");
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 10));
+        titleLabel.setStyle("-fx-text-fill: #2c3e50;");
+        section.getChildren().add(titleLabel);
+        
+        VBox locationsList = new VBox(2);
+        locationsList.setPadding(new Insets(0, 0, 0, 15));
+        
+        for (int i = 0; i < locations.size(); i++) {
+            LoadLocation loc = locations.get(i);
+            String info = String.format("%d. %s - %s", 
+                i + 1, 
+                loc.getCustomer() != null ? loc.getCustomer() : "",
+                formatLocationAddress(loc));
+            
+            if (loc.getTime() != null) {
+                info += " @ " + loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a"));
+            }
+            
+            Label locLabel = new Label(info);
+            locLabel.setFont(Font.font("Arial", 9));
+            locLabel.setStyle("-fx-text-fill: #34495e;");
+            locLabel.setWrapText(true);
+            locationsList.getChildren().add(locLabel);
+            
+            if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
+                Label notesLabel = new Label("   Notes: " + loc.getNotes());
+                notesLabel.setFont(Font.font("Arial", 8));
+                notesLabel.setStyle("-fx-text-fill: #7f8c8d;");
+                notesLabel.setWrapText(true);
+                locationsList.getChildren().add(notesLabel);
+            }
+        }
+        
+        section.getChildren().add(locationsList);
+        return section;
+    }
+    
+    private List<LoadLocation> getAdditionalLocations(LoadLocation.LocationType type) {
+        if (load.getLocations() == null) {
+            return new ArrayList<>();
+        }
+        
+        return load.getLocations().stream()
+            .filter(loc -> loc.getType() == type)
+            .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
+            .collect(java.util.stream.Collectors.toList());
+    }
+    
+    private void addLabelValuePair(GridPane grid, int row, int col, String label, String value, boolean bold) {
+        HBox pairBox = createDetailRow(label, value, bold);
+        grid.add(pairBox, col, row);
+    }
+    
+    private void addGridCell(GridPane grid, int row, int col, String label, String value, boolean bold) {
+        if (label.isEmpty()) {
+            // Just value
+            Label valueNode = new Label(value != null ? value : "");
+            if (bold) {
+                valueNode.setFont(Font.font("Arial", FontWeight.BOLD, 9));
+                valueNode.setStyle("-fx-text-fill: #27ae60;");
+            } else {
+                valueNode.setFont(Font.font("Arial", 9));
+                valueNode.setStyle("-fx-text-fill: #34495e;");
+            }
+            grid.add(valueNode, col, row);
+        } else {
+            // Label and value
+            Label labelNode = new Label(label);
+            labelNode.setFont(Font.font("Arial", FontWeight.BOLD, 9));
+            labelNode.setStyle("-fx-text-fill: #2c3e50;");
+            
+            Label valueNode = new Label(value != null ? value : "");
+            if (bold) {
+                valueNode.setFont(Font.font("Arial", FontWeight.BOLD, 9));
+                valueNode.setStyle("-fx-text-fill: #27ae60;");
+            } else {
+                valueNode.setFont(Font.font("Arial", 9));
+                valueNode.setStyle("-fx-text-fill: #34495e;");
+            }
+            
+            grid.add(labelNode, col, row);
+            grid.add(valueNode, col + 1, row);
+        }
+    }
+    
+    private void addCompanyLogo(VBox content) {
+        String logoPath = config.getCompanyLogoPath();
+        if (logoPath != null && !logoPath.isEmpty()) {
+            File logoFile = new File(logoPath);
+            if (logoFile.exists()) {
+                try {
+                    Image image = new Image(logoFile.toURI().toString());
+                    ImageView imageView = new ImageView(image);
+                    imageView.setPreserveRatio(true);
+                    imageView.setFitHeight(50); // Reduced logo size
+                    
+                    HBox logoBox = new HBox(imageView);
+                    logoBox.setAlignment(Pos.CENTER);
+                    logoBox.setPadding(new Insets(0, 0, 5, 0)); // Reduced padding
+                    content.getChildren().add(logoBox);
+                } catch (Exception e) {
+                    logger.error("Error loading logo: {}", e.getMessage());
+                }
+            }
+        }
     }
     
     private void addNotesSection(VBox content) {
-        VBox section = createSection("NOTES");
+        VBox section = new VBox(5);
+        VBox.setMargin(section, new Insets(10, 0, 10, 0));
         
-        Text notesText = new Text(load.getNotes());
-        notesText.setFont(Font.font("Arial", FontWeight.BOLD, 10));
-        notesText.setFill(Color.RED);
-        notesText.setWrappingWidth(680);
+        // Create header with gray background
+        HBox headerBox = new HBox();
+        headerBox.setStyle("-fx-background-color: #f0f0f0; -fx-padding: 3 10;");
+        headerBox.setPrefWidth(Region.USE_COMPUTED_SIZE);
+        headerBox.setMaxWidth(Double.MAX_VALUE);
         
-        VBox notesBox = new VBox(notesText);
+        Label title = new Label("NOTES");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 11));
+        title.setStyle("-fx-text-fill: black;");
+        headerBox.getChildren().add(title);
+        
+        // Add double spacing after header
+        Region spacer = new Region();
+        spacer.setPrefHeight(10);
+        
+        Label notesLabel = new Label(load.getNotes());
+        notesLabel.setFont(Font.font("Arial", FontWeight.BOLD, 10));
+        notesLabel.setStyle("-fx-text-fill: #e74c3c;");
+        notesLabel.setWrapText(true);
+        notesLabel.setMaxWidth(600);
+        
+        VBox notesBox = new VBox(notesLabel);
         notesBox.setPadding(new Insets(0, 0, 0, 20));
         
-        section.getChildren().add(notesBox);
+        section.getChildren().addAll(headerBox, spacer, notesBox);
         content.getChildren().add(section);
     }
     
     private void addPolicySection(VBox content) {
         String policy = config.getPickupDeliveryPolicy();
         if (policy != null && !policy.isEmpty()) {
-            VBox section = createSection("PICKUP AND DELIVERY POLICY");
+            VBox section = new VBox(5);
+            VBox.setMargin(section, new Insets(15, 0, 10, 0));
             
-            Text policyText = new Text(policy);
-            policyText.setFont(Font.font("Arial", 8));
-            policyText.setWrappingWidth(680);
+            // Create header with gray background
+            HBox headerBox = new HBox();
+            headerBox.setStyle("-fx-background-color: #f0f0f0; -fx-padding: 3 10;");
+            headerBox.setPrefWidth(Region.USE_COMPUTED_SIZE);
+            headerBox.setMaxWidth(Double.MAX_VALUE);
             
-            VBox policyBox = new VBox(policyText);
+            Label title = new Label("PICKUP AND DELIVERY POLICY");
+            title.setFont(Font.font("Arial", FontWeight.BOLD, 10));
+            title.setStyle("-fx-text-fill: black;");
+            headerBox.getChildren().add(title);
+            
+            // Add double spacing after header
+            Region spacer = new Region();
+            spacer.setPrefHeight(10);
+            
+            Label policyLabel = new Label(policy);
+            policyLabel.setFont(Font.font("Arial", 8));
+            policyLabel.setStyle("-fx-text-fill: #34495e;");
+            policyLabel.setWrapText(true);
+            policyLabel.setMaxWidth(600);
+            
+            VBox policyBox = new VBox(policyLabel);
             policyBox.setPadding(new Insets(0, 0, 0, 20));
             
-            section.getChildren().add(policyBox);
+            section.getChildren().addAll(headerBox, spacer, policyBox);
             content.getChildren().add(section);
         }
     }
     
     private void addDispatcherSection(VBox content) {
-        HBox dispatcherBox = new HBox(10);
-        dispatcherBox.setPadding(new Insets(20, 0, 0, 0));
-        dispatcherBox.setAlignment(Pos.CENTER);
+        VBox dispatcherSection = new VBox(3);
+        dispatcherSection.setAlignment(Pos.CENTER);
+        dispatcherSection.setPadding(new Insets(10, 0, 0, 0));
         
-        Label title = new Label("DISPATCHER INFORMATION:");
-        title.setFont(Font.font("Arial", FontWeight.BOLD, 9));
+        Label title = new Label("DISPATCHER INFORMATION");
+        title.setFont(Font.font("Arial", FontWeight.BOLD, 8));
+        title.setStyle("-fx-text-fill: #2c3e50;");
         
         StringBuilder info = new StringBuilder();
         if (!config.getDispatcherName().isEmpty()) {
@@ -442,18 +592,21 @@ public class LoadConfirmationPreviewDialog {
         }
         
         Label infoLabel = new Label(info.toString());
-        infoLabel.setFont(Font.font("Arial", 8));
+        infoLabel.setFont(Font.font("Arial", 7));
+        infoLabel.setStyle("-fx-text-fill: #34495e;");
+        infoLabel.setWrapText(true);
+        infoLabel.setMaxWidth(600);
         
-        dispatcherBox.getChildren().addAll(title, infoLabel);
-        content.getChildren().add(dispatcherBox);
+        dispatcherSection.getChildren().addAll(title, infoLabel);
+        content.getChildren().add(dispatcherSection);
     }
     
     private VBox createSection(String title) {
-        VBox section = new VBox(8);
+        VBox section = new VBox(6);
         
         Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 11));
-        titleLabel.setTextFill(Color.DARKBLUE);
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        titleLabel.setStyle("-fx-text-fill: #2c3e50; -fx-background-color: #ecf0f1; -fx-padding: 5 10; -fx-background-radius: 3;");
         
         section.getChildren().add(titleLabel);
         return section;
@@ -480,18 +633,124 @@ public class LoadConfirmationPreviewDialog {
         return result;
     }
     
-    private void handlePrint() {
-        PrinterJob job = PrinterJob.createPrinterJob();
-        if (job != null && job.showPrintDialog(dialog)) {
-            PageLayout pageLayout = job.getPrinter().createPageLayout(
-                Paper.NA_LETTER, PageOrientation.PORTRAIT, Printer.MarginType.DEFAULT
-            );
-            job.getJobSettings().setPageLayout(pageLayout);
+    private void handlePrintPdf() {
+        try {
+            // Generate PDF in memory
+            PDDocument document = generator.generateLoadConfirmation(load);
             
-            boolean success = job.printPage(previewContent);
-            if (success) {
-                job.endJob();
+            // Create temporary file with proper extension
+            File tempFile = File.createTempFile("LoadConfirmation_" + load.getLoadNumber() + "_", ".pdf");
+            document.save(tempFile);
+            document.close();
+            
+            // Verify the file was created successfully
+            if (!tempFile.exists() || tempFile.length() == 0) {
+                throw new IOException("Failed to create temporary PDF file");
             }
+            
+            // Try multiple printing approaches
+            boolean printSuccess = false;
+            
+            // Method 1: Try direct printing
+            if (java.awt.Desktop.isDesktopSupported()) {
+                try {
+                    java.awt.Desktop.getDesktop().print(tempFile);
+                    printSuccess = true;
+                    logger.info("Direct printing successful");
+                } catch (IOException printException) {
+                    logger.warn("Direct printing failed: {}", printException.getMessage());
+                }
+            }
+            
+            // Method 2: If direct printing failed, try opening with default app
+            if (!printSuccess) {
+                try {
+                    // Try to open with default PDF viewer
+                    java.awt.Desktop.getDesktop().open(tempFile);
+                    printSuccess = true;
+                    logger.info("Opened PDF in default viewer");
+                } catch (IOException openException) {
+                    logger.warn("Failed to open PDF: {}", openException.getMessage());
+                }
+            }
+            
+            // Method 3: If both failed, try using system print command
+            if (!printSuccess) {
+                try {
+                    printSuccess = printUsingSystemCommand(tempFile);
+                    if (printSuccess) {
+                        logger.info("System print command successful");
+                    }
+                } catch (Exception cmdException) {
+                    logger.warn("System print command failed: {}", cmdException.getMessage());
+                }
+            }
+            
+            if (printSuccess) {
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Print PDF");
+                alert.setHeaderText(null);
+                alert.setContentText("Load confirmation PDF sent to printer successfully!");
+                alert.showAndWait();
+            } else {
+                // Final fallback: Save to desktop and inform user
+                File desktopFile = new File(System.getProperty("user.home") + "/Desktop/LoadConfirmation_" + load.getLoadNumber() + ".pdf");
+                document = generator.generateLoadConfirmation(load);
+                document.save(desktopFile);
+                document.close();
+                
+                Alert fallbackAlert = new Alert(Alert.AlertType.INFORMATION);
+                fallbackAlert.setTitle("PDF Saved");
+                fallbackAlert.setHeaderText("Printing not available");
+                fallbackAlert.setContentText("The PDF has been saved to your Desktop as 'LoadConfirmation_" + load.getLoadNumber() + ".pdf'. You can open it and print manually.");
+                fallbackAlert.showAndWait();
+            }
+            
+            // Clean up temp file after a delay
+            new Thread(() -> {
+                try {
+                    Thread.sleep(15000); // Wait 15 seconds to ensure printing is complete
+                    if (tempFile.exists()) {
+                        tempFile.delete();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }).start();
+            
+        } catch (IOException e) {
+            logger.error("Error generating PDF for printing: {}", e.getMessage(), e);
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Print Error");
+            alert.setHeaderText("Failed to generate PDF");
+            alert.setContentText("Error: " + e.getMessage());
+            alert.showAndWait();
+        }
+    }
+    
+    private boolean printUsingSystemCommand(File pdfFile) {
+        try {
+            String os = System.getProperty("os.name").toLowerCase();
+            ProcessBuilder pb;
+            
+            if (os.contains("win")) {
+                // Windows: Try using the print command
+                pb = new ProcessBuilder("cmd", "/c", "print", pdfFile.getAbsolutePath());
+            } else if (os.contains("mac")) {
+                // macOS: Use lpr command
+                pb = new ProcessBuilder("lpr", pdfFile.getAbsolutePath());
+            } else {
+                // Linux: Use lpr command
+                pb = new ProcessBuilder("lpr", pdfFile.getAbsolutePath());
+            }
+            
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+            return exitCode == 0;
+            
+        } catch (Exception e) {
+            logger.warn("System print command failed: {}", e.getMessage());
+            return false;
         }
     }
     
@@ -558,28 +817,29 @@ public class LoadConfirmationPreviewDialog {
     }
     
     private void addPickupAndDropSideBySide(VBox content) {
-        HBox locationBox = new HBox(20);
-        locationBox.setPadding(new Insets(10, 0, 10, 0));
+        HBox locationBox = new HBox(15); // Reduced gap
+        locationBox.setPadding(new Insets(5, 0, 5, 0)); // Reduced padding
+        locationBox.setAlignment(Pos.TOP_CENTER);
         
-        // Pickup section on the left with additional locations
-        VBox pickupContainer = new VBox(10);
+        // Pickup section on the left
+        VBox pickupContainer = new VBox(3); // Reduced spacing
         pickupContainer.setMinWidth(350);
         pickupContainer.setMaxWidth(350);
         
         // Main pickup section
-        VBox pickupSection = new VBox(5);
+        VBox pickupSection = new VBox(3); // Reduced spacing
         
         Label pickupTitle = new Label("PICKUP INFORMATION");
-        pickupTitle.setFont(Font.font("Arial", FontWeight.BOLD, 11));
-        pickupTitle.setTextFill(Color.DARKBLUE);
+        pickupTitle.setFont(Font.font("Arial", FontWeight.BOLD, 10)); // Reduced font size
+        pickupTitle.setStyle("-fx-text-fill: #2c3e50; -fx-background-color: #ecf0f1; -fx-padding: 3 8; -fx-background-radius: 2;");
         
         GridPane pickupGrid = new GridPane();
-        pickupGrid.setHgap(10);
-        pickupGrid.setVgap(3);
-        pickupGrid.setPadding(new Insets(5, 0, 0, 15));
+        pickupGrid.setHgap(8); // Reduced gap
+        pickupGrid.setVgap(2); // Reduced gap
+        pickupGrid.setPadding(new Insets(3, 0, 0, 10)); // Reduced padding
         
         int pRow = 0;
-        addInfoRow(pickupGrid, pRow++, "Customer:", load.getCustomer(), 9);
+        addInfoRow(pickupGrid, pRow++, "Customer:", load.getCustomer(), 9); // Reduced font size
         addInfoRow(pickupGrid, pRow++, "Address:", load.getPickUpLocation(), 9);
         String pickupDateTime = formatDateTime(load.getPickUpDate(), load.getPickUpTime());
         addInfoRow(pickupGrid, pRow++, "Date/Time:", pickupDateTime, 9);
@@ -597,14 +857,14 @@ public class LoadConfirmationPreviewDialog {
             .collect(java.util.stream.Collectors.toList());
             
         if (!additionalPickups.isEmpty()) {
-            VBox addPickupSection = new VBox(3);
+            VBox addPickupSection = new VBox(2); // Reduced spacing
             
             Label addPickupTitle = new Label("Additional Pickup Locations:");
-            addPickupTitle.setFont(Font.font("Arial", FontWeight.BOLD, 9));
-            addPickupTitle.setPadding(new Insets(0, 0, 3, 15));
+            addPickupTitle.setFont(Font.font("Arial", FontWeight.BOLD, 8)); // Reduced font size
+            addPickupTitle.setPadding(new Insets(0, 0, 2, 10)); // Reduced padding
             
-            VBox pickupList = new VBox(2);
-            pickupList.setPadding(new Insets(0, 0, 0, 25));
+            VBox pickupList = new VBox(1); // Reduced spacing
+            pickupList.setPadding(new Insets(0, 0, 0, 15)); // Reduced padding
             
             for (int i = 0; i < additionalPickups.size(); i++) {
                 LoadLocation loc = additionalPickups.get(i);
@@ -614,13 +874,13 @@ public class LoadConfirmationPreviewDialog {
                     formatLocationAddress(loc),
                     loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "");
                 Label locLabel = new Label(info);
-                locLabel.setFont(Font.font("Arial", 9));
+                locLabel.setFont(Font.font("Arial", 8)); // Reduced font size
                 pickupList.getChildren().add(locLabel);
                 
                 if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
                     Label notesLabel = new Label("   Notes: " + loc.getNotes());
-                    notesLabel.setFont(Font.font("Arial", 8));
-                    notesLabel.setTextFill(Color.GRAY);
+                    notesLabel.setFont(Font.font("Arial", 7)); // Reduced font size
+                    notesLabel.setStyle("-fx-text-fill: #7f8c8d;");
                     pickupList.getChildren().add(notesLabel);
                 }
             }
@@ -629,25 +889,25 @@ public class LoadConfirmationPreviewDialog {
             pickupContainer.getChildren().add(addPickupSection);
         }
         
-        // Drop section on the right with additional locations
-        VBox dropContainer = new VBox(10);
+        // Drop section on the right
+        VBox dropContainer = new VBox(3); // Reduced spacing
         dropContainer.setMinWidth(350);
         dropContainer.setMaxWidth(350);
         
         // Main drop section
-        VBox dropSection = new VBox(5);
+        VBox dropSection = new VBox(3); // Reduced spacing
         
         Label dropTitle = new Label("DROP INFORMATION");
-        dropTitle.setFont(Font.font("Arial", FontWeight.BOLD, 11));
-        dropTitle.setTextFill(Color.DARKBLUE);
+        dropTitle.setFont(Font.font("Arial", FontWeight.BOLD, 10)); // Reduced font size
+        dropTitle.setStyle("-fx-text-fill: #2c3e50; -fx-background-color: #ecf0f1; -fx-padding: 3 8; -fx-background-radius: 2;");
         
         GridPane dropGrid = new GridPane();
-        dropGrid.setHgap(10);
-        dropGrid.setVgap(3);
-        dropGrid.setPadding(new Insets(5, 0, 0, 15));
+        dropGrid.setHgap(8); // Reduced gap
+        dropGrid.setVgap(2); // Reduced gap
+        dropGrid.setPadding(new Insets(3, 0, 0, 10)); // Reduced padding
         
         int dRow = 0;
-        addInfoRow(dropGrid, dRow++, "Customer:", load.getCustomer2() != null ? load.getCustomer2() : load.getCustomer(), 9);
+        addInfoRow(dropGrid, dRow++, "Customer:", load.getCustomer2() != null ? load.getCustomer2() : load.getCustomer(), 9); // Reduced font size
         addInfoRow(dropGrid, dRow++, "Address:", load.getDropLocation(), 9);
         String dropDateTime = formatDateTime(load.getDeliveryDate(), load.getDeliveryTime());
         addInfoRow(dropGrid, dRow++, "Date/Time:", dropDateTime, 9);
@@ -662,14 +922,14 @@ public class LoadConfirmationPreviewDialog {
             .collect(java.util.stream.Collectors.toList());
             
         if (!additionalDrops.isEmpty()) {
-            VBox addDropSection = new VBox(3);
+            VBox addDropSection = new VBox(2); // Reduced spacing
             
             Label addDropTitle = new Label("Additional Drop Locations:");
-            addDropTitle.setFont(Font.font("Arial", FontWeight.BOLD, 9));
-            addDropTitle.setPadding(new Insets(0, 0, 3, 15));
+            addDropTitle.setFont(Font.font("Arial", FontWeight.BOLD, 8)); // Reduced font size
+            addDropTitle.setPadding(new Insets(0, 0, 2, 10)); // Reduced padding
             
-            VBox dropList = new VBox(2);
-            dropList.setPadding(new Insets(0, 0, 0, 25));
+            VBox dropList = new VBox(1); // Reduced spacing
+            dropList.setPadding(new Insets(0, 0, 0, 15)); // Reduced padding
             
             for (int i = 0; i < additionalDrops.size(); i++) {
                 LoadLocation loc = additionalDrops.get(i);
@@ -679,13 +939,13 @@ public class LoadConfirmationPreviewDialog {
                     formatLocationAddress(loc),
                     loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "");
                 Label locLabel = new Label(info);
-                locLabel.setFont(Font.font("Arial", 9));
+                locLabel.setFont(Font.font("Arial", 8)); // Reduced font size
                 dropList.getChildren().add(locLabel);
                 
                 if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
                     Label notesLabel = new Label("   Notes: " + loc.getNotes());
-                    notesLabel.setFont(Font.font("Arial", 8));
-                    notesLabel.setTextFill(Color.GRAY);
+                    notesLabel.setFont(Font.font("Arial", 7)); // Reduced font size
+                    notesLabel.setStyle("-fx-text-fill: #7f8c8d;");
                     dropList.getChildren().add(notesLabel);
                 }
             }
@@ -701,9 +961,11 @@ public class LoadConfirmationPreviewDialog {
     private void addInfoRow(GridPane grid, int row, String label, String value, int fontSize) {
         Label labelNode = new Label(label);
         labelNode.setFont(Font.font("Arial", FontWeight.BOLD, fontSize));
+        labelNode.setStyle("-fx-text-fill: #2c3e50;");
         
         Label valueNode = new Label(value != null ? value : "");
         valueNode.setFont(Font.font("Arial", fontSize));
+        valueNode.setStyle("-fx-text-fill: #34495e;");
         valueNode.setWrapText(true);
         valueNode.setMaxWidth(250);
         
@@ -727,10 +989,18 @@ public class LoadConfirmationPreviewDialog {
                     return name;
                 }
             } catch (Exception e) {
-                logger.warn("Could not load company name from config: " + e.getMessage());
+                logger.warn("Could not load company name from config: {}", e.getMessage());
             }
         }
         
         return "Your Company Name";
+    }
+    
+    private void showError(String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("Error");
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 }

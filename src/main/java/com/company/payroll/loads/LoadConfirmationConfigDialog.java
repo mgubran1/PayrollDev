@@ -22,6 +22,10 @@ public class LoadConfirmationConfigDialog extends Dialog<Void> {
     private TextField dispatcherFaxField;
     private TextField logoPathField;
     
+    // Configuration controls
+    private CheckBox showGrossAmountCheckBox;
+    private CheckBox fitToPageCheckBox;
+    
     public LoadConfirmationConfigDialog() {
         this.config = LoadConfirmationConfig.getInstance();
         
@@ -105,6 +109,22 @@ public class LoadConfirmationConfigDialog extends Dialog<Void> {
         
         logoBox.getChildren().addAll(logoPathField, browseBtn, clearLogoBtn);
         
+        // Document Settings Section
+        Label settingsLabel = new Label("Document Settings");
+        settingsLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+        
+        VBox settingsBox = new VBox(10);
+        settingsBox.setPadding(new Insets(0, 0, 0, 20));
+        
+        showGrossAmountCheckBox = new CheckBox("Show Gross Amount");
+        showGrossAmountCheckBox.setTooltip(new Tooltip("Display the gross amount on the load confirmation"));
+        
+        fitToPageCheckBox = new CheckBox("Fit to Page");
+        fitToPageCheckBox.setTooltip(new Tooltip("Automatically scale content to fit within page boundaries when printing"));
+        fitToPageCheckBox.setSelected(true);
+        
+        settingsBox.getChildren().addAll(showGrossAmountCheckBox, fitToPageCheckBox);
+        
         // Pickup and Delivery Policy Section
         Label policyLabel = new Label("Pickup and Delivery Policy");
         policyLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
@@ -126,6 +146,9 @@ public class LoadConfirmationConfigDialog extends Dialog<Void> {
             new Separator(),
             logoLabel,
             logoBox,
+            new Separator(),
+            settingsLabel,
+            settingsBox,
             new Separator(),
             policyLabel,
             policyBox
@@ -169,6 +192,10 @@ public class LoadConfirmationConfigDialog extends Dialog<Void> {
         dispatcherFaxField.setText(config.getDispatcherFax());
         logoPathField.setText(config.getCompanyLogoPath());
         policyArea.setText(config.getPickupDeliveryPolicy());
+        
+        // Load configuration values
+        showGrossAmountCheckBox.setSelected(config.isShowGrossAmount());
+        fitToPageCheckBox.setSelected(config.isFitToPage());
     }
     
     private void saveConfiguration() {
@@ -178,6 +205,10 @@ public class LoadConfirmationConfigDialog extends Dialog<Void> {
         config.setDispatcherFax(dispatcherFaxField.getText().trim());
         config.setCompanyLogoPath(logoPathField.getText().trim());
         config.setPickupDeliveryPolicy(policyArea.getText());
+        
+        // Save configuration values
+        config.setShowGrossAmount(showGrossAmountCheckBox.isSelected());
+        config.setFitToPage(fitToPageCheckBox.isSelected());
         
         config.save();
         logger.info("Load confirmation configuration saved");

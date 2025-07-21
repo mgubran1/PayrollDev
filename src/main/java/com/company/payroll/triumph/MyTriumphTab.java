@@ -2,6 +2,9 @@ package com.company.payroll.triumph;
 
 import com.company.payroll.loads.Load;
 import com.company.payroll.loads.LoadDAO;
+import com.company.payroll.config.InvoiceConfig;
+import com.company.payroll.config.InvoiceConfigDialog;
+import com.company.payroll.export.InvoicePDFGenerator;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.collections.FXCollections;
@@ -18,6 +21,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.company.payroll.payroll.ModernButtonStyles;
@@ -50,17 +54,17 @@ public class MyTriumphTab extends Tab {
     private CheckBox useCustomDateRange;
 
     public MyTriumphTab() {
-        super("MyTriumph Audit");
-        logger.info("Initializing MyTriumphTab");
+        super("Invoice");
+        logger.info("Initializing Invoice Tab");
 
         reloadAll();
 
         setContent(buildPanel());
-        logger.info("MyTriumphTab initialization complete");
+        logger.info("Invoice Tab initialization complete");
     }
 
     private Node buildPanel() {
-        logger.debug("Building MyTriumph panel");
+        logger.debug("Building Invoice panel");
         searchField.setPromptText("Search by PO, DTR_NAME, or INV_DATE...");
         searchCombo.getItems().addAll("PO", "DTR_NAME", "INV_DATE", "INVOICE#");
         searchCombo.setValue("PO");
@@ -76,8 +80,9 @@ public class MyTriumphTab extends Tab {
         Button refreshBtn = ModernButtonStyles.createPrimaryButton("🔄 Refresh");
         Button syncFromLoadsBtn = ModernButtonStyles.createInfoButton("🔄 Sync from Loads");
         Button copyUnbilledBtn = ModernButtonStyles.createSecondaryButton("📋 Copy Unbilled for Excel");
+        Button invoiceConfigBtn = ModernButtonStyles.createWarningButton("⚙️ Invoice Config");
 
-        HBox buttonBox = new HBox(8, importBtn, addBtn, editBtn, removeBtn, saveBtn, refreshBtn, syncFromLoadsBtn, copyUnbilledBtn);
+        HBox buttonBox = new HBox(8, importBtn, addBtn, editBtn, removeBtn, saveBtn, refreshBtn, syncFromLoadsBtn, copyUnbilledBtn, invoiceConfigBtn);
         buttonBox.setPadding(new Insets(8));
 
         // Table setup
@@ -177,8 +182,40 @@ public class MyTriumphTab extends Tab {
         colDriver.setCellValueFactory(param -> new ReadOnlyStringWrapper(param.getValue().getDriverName() == null ? "" : param.getValue().getDriverName()));
         colDriver.setPrefWidth(120);
 
+        // Action column for Generate Invoice
+        TableColumn<MyTriumphRecord, Void> colAction = new TableColumn<>("Action");
+        colAction.setPrefWidth(120);
+        colAction.setCellFactory(col -> new TableCell<MyTriumphRecord, Void>() {
+            private final Button generateInvoiceBtn = ModernButtonStyles.createPrimaryButton("📄 Invoice");
+            
+            {
+                generateInvoiceBtn.getStyleClass().add("triumph-invoice-button");
+                generateInvoiceBtn.setStyle("-fx-font-size: 11px; -fx-padding: 3 8 3 8;");
+                generateInvoiceBtn.setOnAction(e -> {
+                    MyTriumphRecord record = getTableView().getItems().get(getIndex());
+                    generateInvoice(record);
+                });
+            }
+            
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    MyTriumphRecord record = getTableView().getItems().get(getIndex());
+                    // Only show button for synced records
+                    if ("SYNCED".equals(record.getSource())) {
+                        setGraphic(generateInvoiceBtn);
+                    } else {
+                        setGraphic(null);
+                    }
+                }
+            }
+        });
+
         table.getColumns().setAll(java.util.List.of(
-                colDTR, colINV, colDATE, colPO, colAMT, colSource, colStatus, colDriver));
+                colDTR, colINV, colDATE, colPO, colAMT, colSource, colStatus, colDriver, colAction));
         table.setEditable(true);
         table.setItems(makeFilteredList());
 
@@ -244,6 +281,10 @@ public class MyTriumphTab extends Tab {
         copyUnbilledBtn.setOnAction(e -> {
             logger.info("Copy Unbilled button clicked");
             handleCopyUnbilledForExcel();
+        });
+        invoiceConfigBtn.setOnAction(e -> {
+            logger.info("Invoice Config button clicked");
+            showInvoiceConfigDialog();
         });
 
         searchField.textProperty().addListener((obs, oldV, newV) -> {
@@ -542,24 +583,26 @@ public class MyTriumphTab extends Tab {
         }
         
         logger.info("Sync complete - {} loads synced", synced);
-        showInfo("Synced " + synced + " loads to MyTriumph audit.");
+                    showInfo("Synced " + synced + " loads to Invoice audit.");
     }
 
     public int syncFromLoads(List<Load> deliveredLoads) {
         logger.debug("Syncing {} loads", deliveredLoads.size());
         int added = 0;
+        int updated = 0;
         for (Load load : deliveredLoads) {
             if (load.getPONumber() != null && !load.getPONumber().isEmpty()) {
-                // Check if PO already exists
-                if (!triumphDAO.existsByPO(load.getPONumber())) {
-                    logger.debug("Adding placeholder for PO: {} from load: {}", 
-                        load.getPONumber(), load.getLoadNumber());
+                String po = load.getPONumber().trim();
+                MyTriumphRecord existingRecord = triumphDAO.getByPO(po);
+                if (existingRecord == null) {
+                    // Create new record
+                    logger.debug("Adding new record for PO: {} from load: {}", po, load.getLoadNumber());
                     MyTriumphRecord rec = new MyTriumphRecord(
                         0,
                         load.getCustomer() != null ? load.getCustomer() : "",
                         "PENDING-" + load.getLoadNumber(),
                         load.getDeliveryDate(),
-                        load.getPONumber(),
+                        po,
                         load.getGrossAmount()
                     );
                     rec.setSource("LOAD");
@@ -570,14 +613,43 @@ public class MyTriumphTab extends Tab {
                         added++;
                     }
                 } else {
-                    logger.debug("PO {} already exists, skipping", load.getPONumber());
+                    // Update existing record if it's from LOAD source
+                    if ("LOAD".equals(existingRecord.getSource())) {
+                        boolean needsUpdate = false;
+                        String currentCustomer = load.getCustomer() != null ? load.getCustomer() : "";
+                        if (!currentCustomer.equals(existingRecord.getDtrName())) {
+                            logger.debug("Updating customer for PO {}: {} -> {}", po, existingRecord.getDtrName(), currentCustomer);
+                            existingRecord.setDtrName(currentCustomer);
+                            needsUpdate = true;
+                        }
+                        if (load.getDeliveryDate() != null && !load.getDeliveryDate().equals(existingRecord.getInvoiceDate())) {
+                            logger.debug("Updating delivery date for PO {}: {} -> {}", po, existingRecord.getInvoiceDate(), load.getDeliveryDate());
+                            existingRecord.setInvoiceDate(load.getDeliveryDate());
+                            needsUpdate = true;
+                        }
+                        if (load.getGrossAmount() != existingRecord.getInvAmt()) {
+                            logger.debug("Updating amount for PO {}: {} -> {}", po, existingRecord.getInvAmt(), load.getGrossAmount());
+                            existingRecord.setInvAmt(load.getGrossAmount());
+                            needsUpdate = true;
+                        }
+                        if (needsUpdate) {
+                            triumphDAO.update(existingRecord);
+                            updated++;
+                            logger.debug("Updated existing LOAD record for PO: {}", po);
+                        } else {
+                            logger.debug("No changes needed for PO: {}", po);
+                        }
+                    } else {
+                        logger.debug("PO {} exists but is from IMPORT source, skipping", po);
+                    }
                 }
             }
         }
-        if (added > 0) {
+        if (added > 0 || updated > 0) {
             reloadAll();
         }
-        return added;
+        logger.info("Sync complete - Added: {}, Updated: {}", added, updated);
+        return added + updated;
     }
 
     private void handleAdd() {
@@ -847,5 +919,102 @@ public class MyTriumphTab extends Tab {
         Alert alert = new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK);
         alert.setHeaderText("Info");
         alert.showAndWait();
+    }
+    
+    /**
+     * Show invoice configuration dialog
+     */
+    private void showInvoiceConfigDialog() {
+        InvoiceConfigDialog dialog = new InvoiceConfigDialog((Stage) getTabPane().getScene().getWindow());
+        dialog.showAndWait();
+    }
+    
+    /**
+     * Generate invoice for a synced triumph record
+     */
+    private void generateInvoice(MyTriumphRecord record) {
+        if (record == null || !"SYNCED".equals(record.getSource())) {
+            showError("Can only generate invoices for synced records");
+            return;
+        }
+        
+        try {
+            // Find the corresponding load
+            Load load = findLoadForRecord(record);
+            if (load == null) {
+                showError("Could not find load data for this record");
+                return;
+            }
+            
+            // Choose output location
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Save Invoice PDF");
+            fileChooser.setInitialFileName("Invoice_" + record.getInvoiceNumber() + ".pdf");
+            fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("PDF Files", "*.pdf")
+            );
+            
+            File outputFile = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
+            if (outputFile != null) {
+                // Generate the invoice
+                InvoicePDFGenerator generator = new InvoicePDFGenerator();
+                File invoiceFile = generator.generateInvoice(load, outputFile);
+                
+                showInfo("Invoice generated successfully: " + invoiceFile.getAbsolutePath());
+                
+                // Optionally open the PDF
+                Alert openAlert = new Alert(Alert.AlertType.CONFIRMATION,
+                    "Would you like to open the invoice PDF?",
+                    ButtonType.YES, ButtonType.NO);
+                openAlert.setHeaderText("Invoice Generated");
+                openAlert.showAndWait().ifPresent(response -> {
+                    if (response == ButtonType.YES) {
+                        try {
+                            if (java.awt.Desktop.isDesktopSupported()) {
+                                java.awt.Desktop.getDesktop().open(invoiceFile);
+                            }
+                        } catch (Exception ex) {
+                            logger.error("Failed to open PDF", ex);
+                            showError("Failed to open PDF: " + ex.getMessage());
+                        }
+                    }
+                });
+            }
+        } catch (Exception e) {
+            logger.error("Failed to generate invoice", e);
+            showError("Failed to generate invoice: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Find the load that corresponds to a triumph record
+     */
+    private Load findLoadForRecord(MyTriumphRecord record) {
+        // First try to find by invoice number (PO number)
+        if (record.getPo() != null && !record.getPo().isEmpty()) {
+            // Search through all loads for matching PO
+            List<Load> allLoads = loadDAO.getAll();
+            List<Load> loadsByPO = allLoads.stream()
+                .filter(l -> l.getPONumber() != null && l.getPONumber().equals(record.getPo()))
+                .collect(Collectors.toList());
+            if (!loadsByPO.isEmpty()) {
+                return loadsByPO.get(0);
+            }
+        }
+        
+        // Try to find by driver name and date
+        if (record.getDriverName() != null && record.getInvoiceDate() != null) {
+            List<Load> allLoads = loadDAO.getAll();
+            for (Load load : allLoads) {
+                if (load.getDriver() != null && 
+                    load.getDriver().getName().equals(record.getDriverName()) &&
+                    load.getDeliveryDate() != null &&
+                    load.getDeliveryDate().equals(record.getInvoiceDate())) {
+                    return load;
+                }
+            }
+        }
+        
+        return null;
     }
 }

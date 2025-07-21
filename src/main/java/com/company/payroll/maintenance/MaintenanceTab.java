@@ -24,6 +24,7 @@ import javafx.geometry.Side;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 import javafx.util.Callback;
 import javafx.util.StringConverter;
 import org.slf4j.Logger;
@@ -34,6 +35,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.PrintWriter;
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -43,6 +46,16 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import javafx.concurrent.Task;
+import javafx.scene.control.ProgressIndicator;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Cell;
+import com.company.payroll.config.DocumentManagerConfig;
+import com.company.payroll.config.DocumentManagerSettingsDialog;
+import com.company.payroll.config.FilterConfig;
 
 /**
  * Simplified MaintenanceTab for tracking fleet maintenance expenses
@@ -101,8 +114,8 @@ public class MaintenanceTab extends Tab {
     private ObservableList<MaintenanceRecord> allRecords = FXCollections.observableArrayList();
     private FilteredList<MaintenanceRecord> filteredRecords;
     
-    // Document storage path
-    private final String docStoragePath = "maintenance_documents";
+    // Document storage path - now uses configurable path
+    private String docStoragePath;
     
     // Config file constants (same as PayrollTab)
     private static final String CONFIG_FILE = "payroll_config.properties";
@@ -116,6 +129,9 @@ public class MaintenanceTab extends Tab {
         
         // Initialize common service type colors for consistency
         initializeServiceTypeColors();
+        
+        // Initialize document storage path
+        docStoragePath = DocumentManagerConfig.getMaintenanceStoragePath();
         
         // Create document directory if it doesn't exist
         try {
@@ -227,8 +243,10 @@ public class MaintenanceTab extends Tab {
         HBox actionRow = new HBox(15);
         actionRow.setAlignment(Pos.CENTER_LEFT);
         
-        startDatePicker = new DatePicker(LocalDate.now().minusMonths(6));
-        endDatePicker = new DatePicker(LocalDate.now());
+        // Load saved date range or use defaults
+        FilterConfig.DateRange savedRange = FilterConfig.loadMaintenanceDateRange();
+        startDatePicker = new DatePicker(savedRange.getStartDate());
+        endDatePicker = new DatePicker(savedRange.getEndDate());
         
         Button refreshButton = ModernButtonStyles.createPrimaryButton("🔄 Refresh");
         refreshButton.setOnAction(e -> loadData());
@@ -242,6 +260,9 @@ public class MaintenanceTab extends Tab {
         Button generateReportButton = ModernButtonStyles.createDangerButton("📊 Generate Report");
         generateReportButton.setOnAction(e -> generateReport());
         
+        Button importButton = ModernButtonStyles.createInfoButton("📥 Import CSV/XLSX");
+        importButton.setOnAction(e -> showImportDialog());
+        
         Button exportButton = ModernButtonStyles.createWarningButton("📤 Export");
         exportButton.setOnAction(e -> showExportMenu(exportButton));
         
@@ -249,7 +270,7 @@ public class MaintenanceTab extends Tab {
             new Label("Date Range:"), startDatePicker, new Label("to"), endDatePicker,
             new Separator(Orientation.VERTICAL),
             refreshButton, addExpenseButton, documentManagerButton,
-            generateReportButton, exportButton
+            importButton, generateReportButton, exportButton
         );
         
         controlPanel.getChildren().addAll(searchRow, new Separator(), actionRow);
@@ -261,8 +282,20 @@ public class MaintenanceTab extends Tab {
             applyFilters();
         });
         unitNumberFilter.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
-        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
-        endDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            applyFilters();
+            // Auto-save date range
+            if (newVal != null && endDatePicker.getValue() != null) {
+                FilterConfig.saveMaintenanceDateRange(newVal, endDatePicker.getValue());
+            }
+        });
+        endDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            applyFilters();
+            // Auto-save date range
+            if (newVal != null && startDatePicker.getValue() != null) {
+                FilterConfig.saveMaintenanceDateRange(startDatePicker.getValue(), newVal);
+            }
+        });
         
         return controlPanel;
     }
@@ -1181,59 +1214,143 @@ public class MaintenanceTab extends Tab {
         }
         
         Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Document Manager - " + selected.getVehicle() + " - " + 
+        dialog.setTitle("Maintenance Document Manager - " + selected.getVehicle() + " - " + 
                        selected.getDate().format(DATE_FORMAT));
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         
+        // Create main content
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(800);
+        content.setPrefHeight(600);
+        
+        // Header with unit info
+        HBox headerBox = new HBox(15);
+        headerBox.setAlignment(Pos.CENTER_LEFT);
+        
+        Label titleLabel = new Label("Documents for " + selected.getVehicle());
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+        
+        Label dateLabel = new Label("Service Date: " + selected.getDate().format(DATE_FORMAT));
+        dateLabel.setStyle("-fx-text-fill: #666;");
+        
+        headerBox.getChildren().addAll(titleLabel, new Separator(Orientation.VERTICAL), dateLabel);
+        
+        // Document list section
+        VBox documentSection = createDocumentListSection(selected);
+        
+        // Action buttons section
+        HBox actionButtons = createDocumentActionButtons(selected, documentSection);
+        
+        // Settings button
+        Button settingsButton = ModernButtonStyles.createSecondaryButton("⚙️ Settings");
+        settingsButton.setOnAction(e -> {
+            DocumentManagerSettingsDialog settingsDialog = 
+                new DocumentManagerSettingsDialog((Stage) maintenanceTable.getScene().getWindow());
+            settingsDialog.showAndWait();
+            // Refresh storage path after settings change
+            docStoragePath = DocumentManagerConfig.getMaintenanceStoragePath();
+        });
+        
+        HBox topButtons = new HBox(10, settingsButton);
+        topButtons.setAlignment(Pos.CENTER_RIGHT);
+        
+        content.getChildren().addAll(headerBox, documentSection, actionButtons, topButtons);
+        VBox.setVgrow(documentSection, Priority.ALWAYS);
+        
+        dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
+    }
+    
+    /**
+     * Create document list section
+     */
+    private VBox createDocumentListSection(MaintenanceRecord record) {
+        VBox section = new VBox(10);
+        section.setPadding(new Insets(10));
+        section.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 5;");
+        
+        Label sectionTitle = new Label("📄 Documents");
+        sectionTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #34495e;");
+        
         ListView<String> docListView = new ListView<>();
-        updateDocumentList(docListView, selected.getId());
+        docListView.setPrefHeight(300);
+        updateDocumentList(docListView, record.getId());
+        
+        // Folder info
+        Path folderPath = DocumentManagerConfig.getMaintenanceFolderPath(
+            record.getVehicleType().toString(), record.getVehicle());
+        
+        Label folderInfo = new Label("Storage: " + folderPath.toString());
+        folderInfo.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
+        
+        section.getChildren().addAll(sectionTitle, docListView, folderInfo);
+        
+        return section;
+    }
+    
+    /**
+     * Create document action buttons
+     */
+    private HBox createDocumentActionButtons(MaintenanceRecord record, VBox documentSection) {
+        HBox buttonBox = new HBox(10);
+        buttonBox.setAlignment(Pos.CENTER);
+        buttonBox.setPadding(new Insets(10, 0, 0, 0));
         
         Button uploadBtn = ModernButtonStyles.createPrimaryButton("📤 Upload");
         Button viewBtn = ModernButtonStyles.createInfoButton("👁️ View");
         Button printBtn = ModernButtonStyles.createSecondaryButton("🖨️ Print");
         Button deleteBtn = ModernButtonStyles.createDangerButton("🗑️ Delete");
+        Button openFolderBtn = ModernButtonStyles.createSuccessButton("📁 Open Folder");
+        
+        // Get document list view from the section
+        ListView<String> docListView = (ListView<String>) documentSection.getChildren().get(1);
         
         uploadBtn.setOnAction(e -> {
-            uploadDocumentForRecord(selected.getId());
-            updateDocumentList(docListView, selected.getId());
+            uploadDocumentForRecord(record.getId());
+            updateDocumentList(docListView, record.getId());
         });
         
         viewBtn.setOnAction(e -> {
             String selectedDoc = docListView.getSelectionModel().getSelectedItem();
             if (selectedDoc != null) {
-                viewDocument(selected.getId(), selectedDoc);
+                viewDocument(record.getId(), selectedDoc);
+            } else {
+                showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                         "Please select a document to view");
             }
         });
         
         printBtn.setOnAction(e -> {
             String selectedDoc = docListView.getSelectionModel().getSelectedItem();
             if (selectedDoc != null) {
-                printDocument(selected.getId(), selectedDoc);
+                printDocument(record.getId(), selectedDoc);
+            } else {
+                showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                         "Please select a document to print");
             }
         });
         
         deleteBtn.setOnAction(e -> {
             String selectedDoc = docListView.getSelectionModel().getSelectedItem();
             if (selectedDoc != null) {
-                deleteDocument(selected.getId(), selectedDoc);
-                updateDocumentList(docListView, selected.getId());
+                deleteDocument(record.getId(), selectedDoc);
+                updateDocumentList(docListView, record.getId());
+            } else {
+                showAlert(Alert.AlertType.INFORMATION, "No Selection", 
+                         "Please select a document to delete");
             }
         });
         
-        HBox buttonBox = new HBox(10, uploadBtn, viewBtn, printBtn, deleteBtn);
-        buttonBox.setAlignment(Pos.CENTER);
-        buttonBox.setPadding(new Insets(10, 0, 0, 0));
+        openFolderBtn.setOnAction(e -> {
+            Path folderPath = DocumentManagerConfig.getMaintenanceFolderPath(
+                record.getVehicleType().toString(), record.getVehicle());
+            DocumentManagerConfig.openFolder(folderPath);
+        });
         
-        VBox content = new VBox(10, 
-                               new Label("Documents for this maintenance record"), 
-                               docListView, 
-                               buttonBox);
-        content.setPadding(new Insets(20));
-        content.setPrefWidth(500);
-        content.setPrefHeight(400);
+        buttonBox.getChildren().addAll(uploadBtn, viewBtn, printBtn, deleteBtn, openFolderBtn);
         
-        dialog.getDialogPane().setContent(content);
-        dialog.showAndWait();
+        return buttonBox;
     }
     
     private void uploadDocument() {
@@ -1248,51 +1365,66 @@ public class MaintenanceTab extends Tab {
     }
     
     private void uploadDocumentForRecord(int recordId) {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Select Document to Upload");
-        fileChooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("PDF Files", "*.pdf"),
-                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg"),
-                new FileChooser.ExtensionFilter("All Files", "*.*"));
-        
-        File selectedFile = fileChooser.showOpenDialog(getTabPane().getScene().getWindow());
-        if (selectedFile != null) {
-            try {
-                Path recordDir = Paths.get(docStoragePath, String.valueOf(recordId));
-                Files.createDirectories(recordDir);
-                
-                String timestamp = String.valueOf(System.currentTimeMillis());
-                String extension = selectedFile.getName().substring(
-                        selectedFile.getName().lastIndexOf('.'));
-                String newFileName = "maintenance_" + timestamp + extension;
-                
-                Path destPath = recordDir.resolve(newFileName);
-                Files.copy(selectedFile.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
-                
-                logger.info("Uploaded document for record {}: {}", recordId, newFileName);
-                showAlert(Alert.AlertType.INFORMATION, "Success", 
-                         "Document uploaded successfully");
-                
-            } catch (Exception e) {
-                logger.error("Failed to upload document", e);
-                showAlert(Alert.AlertType.ERROR, "Error", 
-                         "Failed to upload document: " + e.getMessage());
+        try {
+            MaintenanceRecord record = maintenanceDAO.findById(recordId);
+            if (record == null) {
+                showAlert(Alert.AlertType.ERROR, "Error", "Maintenance record not found");
+                return;
             }
+            
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Upload Document for " + record.getVehicle());
+            fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("All Files", "*.*"),
+                new FileChooser.ExtensionFilter("PDF Files", "*.pdf"),
+                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif"),
+                new FileChooser.ExtensionFilter("Document Files", "*.doc", "*.docx", "*.txt")
+            );
+            
+            File selectedFile = fileChooser.showOpenDialog(getTabPane().getScene().getWindow());
+            if (selectedFile != null) {
+                // Create organized path structure
+                Path documentPath = DocumentManagerConfig.createMaintenanceDocumentPath(
+                    record.getVehicleType().toString(),
+                    record.getVehicle(),
+                    record.getReceiptNumber() != null ? record.getReceiptNumber() : "NO_INVOICE",
+                    record.getServiceType(),
+                    selectedFile.getName()
+                );
+                
+                // Copy file to organized location
+                Files.copy(selectedFile.toPath(), documentPath, StandardCopyOption.REPLACE_EXISTING);
+                
+                // Update record with document path
+                record.setReceiptPath(documentPath.toString());
+                maintenanceDAO.save(record);
+                
+                showAlert(Alert.AlertType.INFORMATION, "Success", 
+                         "Document uploaded successfully for " + record.getVehicle() + 
+                         "\nSaved to: " + documentPath.getParent());
+                
+            }
+        } catch (Exception e) {
+            logger.error("Failed to upload document", e);
+            showAlert(Alert.AlertType.ERROR, "Upload Failed", 
+                     "Failed to upload document: " + e.getMessage());
         }
     }
     
     private void updateDocumentList(ListView<String> listView, int recordId) {
         try {
-            Path recordDir = Paths.get(docStoragePath, String.valueOf(recordId));
-            if (Files.exists(recordDir)) {
-                List<String> files = Files.list(recordDir)
-                    .map(p -> p.getFileName().toString())
-                    .sorted()
-                    .collect(Collectors.toList());
-                listView.setItems(FXCollections.observableArrayList(files));
-            } else {
+            MaintenanceRecord record = maintenanceDAO.findById(recordId);
+            if (record == null) {
                 listView.setItems(FXCollections.observableArrayList());
+                return;
             }
+            
+            // Use the new organized folder structure
+            List<String> documents = DocumentManagerConfig.listMaintenanceDocuments(
+                record.getVehicleType().toString(), record.getVehicle());
+            
+            listView.setItems(FXCollections.observableArrayList(documents));
+            
         } catch (Exception e) {
             logger.error("Failed to list documents", e);
             listView.setItems(FXCollections.observableArrayList());
@@ -1301,7 +1433,16 @@ public class MaintenanceTab extends Tab {
     
     private void viewDocument(int recordId, String document) {
         try {
-            Path docPath = Paths.get(docStoragePath, String.valueOf(recordId), document);
+            MaintenanceRecord record = maintenanceDAO.findById(recordId);
+            if (record == null) {
+                showAlert(Alert.AlertType.ERROR, "Error", "Maintenance record not found");
+                return;
+            }
+            
+            Path folderPath = DocumentManagerConfig.getMaintenanceFolderPath(
+                record.getVehicleType().toString(), record.getVehicle());
+            Path docPath = folderPath.resolve(document);
+            
             File file = docPath.toFile();
             if (java.awt.Desktop.isDesktopSupported()) {
                 java.awt.Desktop.getDesktop().open(file);
@@ -1318,7 +1459,16 @@ public class MaintenanceTab extends Tab {
     
     private void printDocument(int recordId, String document) {
         try {
-            Path docPath = Paths.get(docStoragePath, String.valueOf(recordId), document);
+            MaintenanceRecord record = maintenanceDAO.findById(recordId);
+            if (record == null) {
+                showAlert(Alert.AlertType.ERROR, "Error", "Maintenance record not found");
+                return;
+            }
+            
+            Path folderPath = DocumentManagerConfig.getMaintenanceFolderPath(
+                record.getVehicleType().toString(), record.getVehicle());
+            Path docPath = folderPath.resolve(document);
+            
             File file = docPath.toFile();
             if (java.awt.Desktop.isDesktopSupported() && 
                 java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.PRINT)) {
@@ -1345,7 +1495,16 @@ public class MaintenanceTab extends Tab {
         confirm.showAndWait().ifPresent(response -> {
             if (response == ButtonType.YES) {
                 try {
-                    Path docPath = Paths.get(docStoragePath, String.valueOf(recordId), document);
+                    MaintenanceRecord record = maintenanceDAO.findById(recordId);
+                    if (record == null) {
+                        showAlert(Alert.AlertType.ERROR, "Error", "Maintenance record not found");
+                        return;
+                    }
+                    
+                    Path folderPath = DocumentManagerConfig.getMaintenanceFolderPath(
+                        record.getVehicleType().toString(), record.getVehicle());
+                    Path docPath = folderPath.resolve(document);
+                    
                     Files.delete(docPath);
                     logger.info("Deleted document: {}", docPath);
                 } catch (Exception e) {
@@ -1366,17 +1525,8 @@ public class MaintenanceTab extends Tab {
         }
         
         try {
-            Path recordDir = Paths.get(docStoragePath, String.valueOf(selected.getId()));
-            if (!Files.exists(recordDir) || !Files.isDirectory(recordDir)) {
-                showAlert(Alert.AlertType.INFORMATION, "No Documents", 
-                         "No documents found for this maintenance record");
-                return;
-            }
-            
-            List<String> documents = Files.list(recordDir)
-                .map(p -> p.getFileName().toString())
-                .sorted()
-                .collect(Collectors.toList());
+            List<String> documents = DocumentManagerConfig.listMaintenanceDocuments(
+                selected.getVehicleType().toString(), selected.getVehicle());
             
             if (documents.isEmpty()) {
                 showAlert(Alert.AlertType.INFORMATION, "No Documents", 
@@ -1837,5 +1987,509 @@ public class MaintenanceTab extends Tab {
             }
             applyLegendColors(truckVsTrailerChart, truckTrailerColors);
         }
+    }
+
+    /**
+     * Show import dialog for CSV/XLSX files
+     */
+    private void showImportDialog() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Import Maintenance Records");
+        fileChooser.getExtensionFilters().addAll(
+            new FileChooser.ExtensionFilter("CSV Files", "*.csv"),
+            new FileChooser.ExtensionFilter("Excel Files", "*.xlsx", "*.xls"),
+            new FileChooser.ExtensionFilter("All Files", "*.*")
+        );
+        
+        File selectedFile = fileChooser.showOpenDialog(getTabPane().getScene().getWindow());
+        if (selectedFile != null) {
+            showImportProgressDialog(selectedFile);
+        }
+    }
+    
+    /**
+     * Show import progress dialog with better error handling
+     */
+    private void showImportProgressDialog(File selectedFile) {
+        Dialog<Void> progressDialog = new Dialog<>();
+        progressDialog.setTitle("Importing Maintenance Records");
+        progressDialog.setHeaderText("Processing " + selectedFile.getName());
+        
+        // Create progress indicator
+        ProgressIndicator progressIndicator = new ProgressIndicator();
+        progressIndicator.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+        progressIndicator.setPrefSize(50, 50);
+        
+        // Create status label
+        Label statusLabel = new Label("Validating file...");
+        statusLabel.setStyle("-fx-font-weight: bold;");
+        
+        VBox content = new VBox(15, progressIndicator, statusLabel);
+        content.setAlignment(Pos.CENTER);
+        content.setPadding(new Insets(20));
+        progressDialog.getDialogPane().setContent(content);
+        progressDialog.getDialogPane().getButtonTypes().clear();
+        
+        // Add cancel button
+        Button cancelButton = new Button("Cancel");
+        cancelButton.setOnAction(e -> progressDialog.close());
+        progressDialog.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
+        
+        Task<ImportResult> importTask = new Task<ImportResult>() {
+            @Override
+            protected ImportResult call() throws Exception {
+                updateMessage("Reading file...");
+                Thread.sleep(100); // Give UI time to update
+                
+                updateMessage("Validating headers...");
+                Thread.sleep(100);
+                
+                updateMessage("Processing data...");
+                Thread.sleep(100);
+                
+                return importMaintenanceFromFile(selectedFile);
+            }
+        };
+        
+        // Update status label based on task message
+        importTask.messageProperty().addListener((obs, oldMsg, newMsg) -> {
+            if (newMsg != null) {
+                statusLabel.setText(newMsg);
+            }
+        });
+        
+        importTask.setOnSucceeded(event -> {
+            progressDialog.close();
+            ImportResult result = importTask.getValue();
+            showImportResults(result, selectedFile.getName());
+        });
+        
+        importTask.setOnFailed(event -> {
+            progressDialog.close();
+            Throwable exception = importTask.getException();
+            logger.error("Import failed", exception);
+            
+            Alert errorAlert = new Alert(Alert.AlertType.ERROR);
+            errorAlert.setTitle("Import Failed");
+            errorAlert.setHeaderText("Failed to import maintenance records");
+            errorAlert.setContentText("Error: " + exception.getMessage());
+            errorAlert.showAndWait();
+        });
+        
+        importTask.setOnCancelled(event -> {
+            progressDialog.close();
+            showAlert(Alert.AlertType.INFORMATION, "Import Cancelled", 
+                     "Import was cancelled by user.");
+        });
+        
+        // Start the task
+        new Thread(importTask).start();
+        progressDialog.showAndWait();
+    }
+    
+    /**
+     * Import maintenance records from CSV/XLSX file
+     */
+    private ImportResult importMaintenanceFromFile(File file) throws Exception {
+        ImportResult result = new ImportResult();
+        
+        try {
+            String fileName = file.getName().toLowerCase();
+            if (fileName.endsWith(".csv")) {
+                importFromCSV(file, result);
+            } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
+                importFromExcel(file, result);
+            } else {
+                throw new IllegalArgumentException("Unsupported file format. Please use CSV or Excel files.");
+            }
+        } catch (Exception e) {
+            logger.error("Import failed", e);
+            result.errors.add("Import failed: " + e.getMessage());
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Import from CSV file with better error handling
+     */
+    private void importFromCSV(File file, ImportResult result) throws Exception {
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line = reader.readLine(); // Read header
+            if (line == null) {
+                throw new IllegalArgumentException("File is empty or invalid");
+            }
+            
+            // Validate header
+            String[] headers = parseCSVLine(line);
+            validateHeaders(headers);
+            
+            int lineNumber = 1;
+            Set<String> existingInvoiceNumbers = getExistingInvoiceNumbers();
+            int processedLines = 0;
+            
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                processedLines++;
+                
+                // Skip empty lines
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+                
+                try {
+                    String[] values = parseCSVLine(line);
+                    
+                    // Ensure we have enough columns
+                    if (values.length < 9) {
+                        result.errors.add("Line " + lineNumber + ": Expected 9 columns, found " + values.length + " - skipped");
+                        continue;
+                    }
+                    
+                    // Validate required fields
+                    if (values[0].trim().isEmpty()) {
+                        result.errors.add("Line " + lineNumber + ": Date is required - skipped");
+                        continue;
+                    }
+                    
+                    if (values[1].trim().isEmpty()) {
+                        result.errors.add("Line " + lineNumber + ": Unit Type is required - skipped");
+                        continue;
+                    }
+                    
+                    if (values[2].trim().isEmpty()) {
+                        result.errors.add("Line " + lineNumber + ": Unit Number is required - skipped");
+                        continue;
+                    }
+                    
+                    if (values[3].trim().isEmpty()) {
+                        result.errors.add("Line " + lineNumber + ": Service Type is required - skipped");
+                        continue;
+                    }
+                    
+                    if (values[5].trim().isEmpty()) {
+                        result.errors.add("Line " + lineNumber + ": Cost is required - skipped");
+                        continue;
+                    }
+                    
+                    MaintenanceRecord record = createMaintenanceFromValues(values);
+                    
+                    // Check for duplicate invoice number
+                    if (record.getReceiptNumber() != null && !record.getReceiptNumber().trim().isEmpty()) {
+                        if (existingInvoiceNumbers.contains(record.getReceiptNumber().trim())) {
+                            result.skipped++;
+                            result.errors.add("Line " + lineNumber + ": Duplicate invoice number '" + 
+                                           record.getReceiptNumber() + "' - skipped");
+                            continue;
+                        }
+                        existingInvoiceNumbers.add(record.getReceiptNumber().trim());
+                    }
+                    
+                    maintenanceDAO.save(record);
+                    result.imported++;
+                    result.totalFound++;
+                    
+                } catch (Exception e) {
+                    result.errors.add("Line " + lineNumber + ": " + e.getMessage());
+                }
+            }
+            
+            if (processedLines == 0) {
+                throw new IllegalArgumentException("No data rows found in file");
+            }
+        }
+    }
+    
+    /**
+     * Import from Excel file
+     */
+    private void importFromExcel(File file, ImportResult result) throws Exception {
+        try (FileInputStream fis = new FileInputStream(file);
+             Workbook workbook = WorkbookFactory.create(fis)) {
+            
+            Sheet sheet = workbook.getSheetAt(0);
+            if (sheet == null) {
+                throw new IllegalArgumentException("No data found in Excel file");
+            }
+            
+            // Validate header
+            Row headerRow = sheet.getRow(0);
+            if (headerRow == null) {
+                throw new IllegalArgumentException("No header row found");
+            }
+            
+            String[] headers = new String[headerRow.getLastCellNum()];
+            for (int i = 0; i < headerRow.getLastCellNum(); i++) {
+                Cell cell = headerRow.getCell(i);
+                headers[i] = cell != null ? cell.toString().trim() : "";
+            }
+            validateHeaders(headers);
+            
+            Set<String> existingInvoiceNumbers = getExistingInvoiceNumbers();
+            
+            for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
+                Row row = sheet.getRow(rowNum);
+                if (row == null) continue;
+                
+                try {
+                    String[] values = new String[9];
+                    for (int i = 0; i < 9 && i < row.getLastCellNum(); i++) {
+                        Cell cell = row.getCell(i);
+                        values[i] = cell != null ? cell.toString().trim() : "";
+                    }
+                    
+                    MaintenanceRecord record = createMaintenanceFromValues(values);
+                    
+                    // Check for duplicate invoice number
+                    if (record.getReceiptNumber() != null && !record.getReceiptNumber().trim().isEmpty()) {
+                        if (existingInvoiceNumbers.contains(record.getReceiptNumber().trim())) {
+                            result.skipped++;
+                            result.errors.add("Row " + (rowNum + 1) + ": Duplicate invoice number '" + 
+                                           record.getReceiptNumber() + "' - skipped");
+                            continue;
+                        }
+                        existingInvoiceNumbers.add(record.getReceiptNumber().trim());
+                    }
+                    
+                    maintenanceDAO.save(record);
+                    result.imported++;
+                    result.totalFound++;
+                } catch (Exception e) {
+                    result.errors.add("Row " + (rowNum + 1) + ": " + e.getMessage());
+                }
+            }
+        }
+    }
+    
+    /**
+     * Validate CSV/Excel headers
+     */
+    private void validateHeaders(String[] headers) throws Exception {
+        String[] expectedHeaders = {"Date", "Unit Type", "Unit Number", "Service Type", 
+                                  "Mileage", "Cost", "Vendor", "Invoice #", "Notes"};
+        
+        if (headers.length < expectedHeaders.length) {
+            throw new IllegalArgumentException("Invalid header format. Expected columns: " + 
+                                           String.join(", ", expectedHeaders));
+        }
+        
+        for (int i = 0; i < expectedHeaders.length; i++) {
+            if (!headers[i].trim().equalsIgnoreCase(expectedHeaders[i])) {
+                throw new IllegalArgumentException("Invalid header at column " + (i + 1) + 
+                                               ". Expected: " + expectedHeaders[i] + 
+                                               ", Found: " + headers[i]);
+            }
+        }
+    }
+    
+    /**
+     * Parse CSV line handling quoted values and edge cases
+     */
+    private String[] parseCSVLine(String line) {
+        List<String> values = new ArrayList<>();
+        StringBuilder currentValue = new StringBuilder();
+        boolean inQuotes = false;
+        
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            } else if (c == ',' && !inQuotes) {
+                values.add(currentValue.toString().trim());
+                currentValue = new StringBuilder();
+            } else {
+                currentValue.append(c);
+            }
+        }
+        
+        // Add the last value
+        values.add(currentValue.toString().trim());
+        
+        // Ensure we have exactly 9 values
+        while (values.size() < 9) {
+            values.add("");
+        }
+        
+        // Trim all values and handle nulls
+        for (int i = 0; i < values.size(); i++) {
+            String value = values.get(i);
+            if (value == null) {
+                values.set(i, "");
+            } else {
+                values.set(i, value.trim());
+            }
+        }
+        
+        return values.toArray(new String[0]);
+    }
+    
+    /**
+     * Create MaintenanceRecord from CSV/Excel values
+     */
+    private MaintenanceRecord createMaintenanceFromValues(String[] values) throws Exception {
+        MaintenanceRecord record = new MaintenanceRecord();
+        
+        // Date
+        try {
+            String dateStr = values[0].trim();
+            if (!dateStr.isEmpty()) {
+                LocalDate date = parseDateFlexible(dateStr);
+                record.setDate(date);
+            } else {
+                record.setDate(LocalDate.now());
+            }
+        } catch (Exception e) {
+            throw new Exception("Invalid date format: " + values[0] + ". Expected MM/dd/yyyy, MM-dd-yyyy, or MM/dd/yy");
+        }
+        
+        // Unit Type
+        String unitType = values[1].trim();
+        if (unitType.equalsIgnoreCase("truck")) {
+            record.setVehicleType(MaintenanceRecord.VehicleType.TRUCK);
+        } else if (unitType.equalsIgnoreCase("trailer")) {
+            record.setVehicleType(MaintenanceRecord.VehicleType.TRAILER);
+        } else {
+            throw new Exception("Invalid unit type: " + unitType + ". Expected 'Truck' or 'Trailer'");
+        }
+        
+        // Unit Number
+        record.setVehicle(values[2].trim());
+        
+        // Service Type
+        record.setServiceType(values[3].trim());
+        
+        // Mileage
+        try {
+            String mileageStr = values[4].trim();
+            if (!mileageStr.isEmpty()) {
+                // Remove commas from mileage
+                mileageStr = mileageStr.replaceAll(",", "");
+                record.setMileage(Integer.parseInt(mileageStr));
+            } else {
+                record.setMileage(0);
+            }
+        } catch (NumberFormatException e) {
+            throw new Exception("Invalid mileage: " + values[4]);
+        }
+        
+        // Cost
+        try {
+            String costStr = values[5].trim();
+            // Remove currency symbols, commas, and spaces
+            costStr = costStr.replaceAll("[$,€£¥\\s]", "");
+            // Handle negative amounts in parentheses
+            if (costStr.startsWith("(") && costStr.endsWith(")")) {
+                costStr = "-" + costStr.substring(1, costStr.length() - 1);
+            }
+            record.setCost(Double.parseDouble(costStr));
+        } catch (NumberFormatException e) {
+            throw new Exception("Invalid cost: " + values[5]);
+        }
+        
+        // Vendor
+        record.setServiceProvider(values[6].trim());
+        
+        // Invoice Number
+        record.setReceiptNumber(values[7].trim());
+        
+        // Notes
+        record.setNotes(values[8].trim());
+        
+        // Set default status
+        record.setStatus("Completed");
+        
+        return record;
+    }
+    
+    /**
+     * Parse date with multiple format support
+     */
+    private LocalDate parseDateFlexible(String dateStr) throws Exception {
+        String[] patterns = {
+            "MM/dd/yyyy",
+            "MM-dd-yyyy", 
+            "MM/dd/yy",
+            "MM-dd-yy",
+            "M/d/yyyy",
+            "M-d-yyyy",
+            "M/d/yy",
+            "M-d-yy"
+        };
+        
+        for (String pattern : patterns) {
+            try {
+                return LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern));
+            } catch (Exception e) {
+                // Continue to next pattern
+            }
+        }
+        
+        throw new Exception("Unable to parse date: " + dateStr);
+    }
+    
+    /**
+     * Get existing invoice numbers to prevent duplicates
+     */
+    private Set<String> getExistingInvoiceNumbers() {
+        Set<String> invoiceNumbers = new HashSet<>();
+        try {
+            List<MaintenanceRecord> existingRecords = maintenanceDAO.findAll();
+            for (MaintenanceRecord record : existingRecords) {
+                if (record.getReceiptNumber() != null && !record.getReceiptNumber().trim().isEmpty()) {
+                    invoiceNumbers.add(record.getReceiptNumber().trim());
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Failed to get existing invoice numbers", e);
+        }
+        return invoiceNumbers;
+    }
+    
+    /**
+     * Show import results dialog
+     */
+    private void showImportResults(ImportResult result, String fileName) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Import Results");
+        alert.setHeaderText("Import completed for " + fileName);
+        
+        StringBuilder content = new StringBuilder();
+        content.append("Total records found: ").append(result.totalFound).append("\n");
+        content.append("Successfully imported: ").append(result.imported).append("\n");
+        content.append("Skipped (duplicates): ").append(result.skipped).append("\n");
+        
+        if (!result.errors.isEmpty()) {
+            content.append("\nErrors:\n");
+            for (String error : result.errors) {
+                content.append("• ").append(error).append("\n");
+            }
+        }
+        
+        alert.setContentText(content.toString());
+        
+        // Add scrollable text area for errors if there are many
+        if (result.errors.size() > 10) {
+            TextArea errorArea = new TextArea(content.toString());
+            errorArea.setEditable(false);
+            errorArea.setPrefRowCount(15);
+            errorArea.setPrefColumnCount(80);
+            alert.getDialogPane().setContent(errorArea);
+        }
+        
+        alert.showAndWait();
+        
+        // Refresh data after import
+        loadData();
+    }
+    
+    /**
+     * Import result class
+     */
+    private static class ImportResult {
+        int totalFound = 0;
+        int imported = 0;
+        int skipped = 0;
+        List<String> errors = new ArrayList<>();
     }
 }

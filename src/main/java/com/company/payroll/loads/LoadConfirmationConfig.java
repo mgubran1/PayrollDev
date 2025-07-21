@@ -4,6 +4,7 @@ import java.io.*;
 import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.company.payroll.util.ConfigMigrator;
 
 public class LoadConfirmationConfig {
     private static final Logger logger = LoggerFactory.getLogger(LoadConfirmationConfig.class);
@@ -17,10 +18,16 @@ public class LoadConfirmationConfig {
     private String dispatcherFax = "";
     private String companyLogoPath = "";
     
+    // Configuration options
+    private boolean showGrossAmount = true;
+    private boolean fitToPage = true;
+    
     // Singleton instance
     private static LoadConfirmationConfig instance;
     
     private LoadConfirmationConfig() {
+        // Migrate configuration first
+        ConfigMigrator.migrateLoadConfirmationConfig();
         load();
     }
     
@@ -46,6 +53,10 @@ public class LoadConfirmationConfig {
                 dispatcherFax = props.getProperty("dispatcher.fax", "");
                 companyLogoPath = props.getProperty("company.logo.path", "");
                 
+                // Load configuration options
+                showGrossAmount = Boolean.parseBoolean(props.getProperty("show.gross.amount", "true"));
+                fitToPage = Boolean.parseBoolean(props.getProperty("fit.to.page", "true"));
+                
                 logger.info("Load confirmation configuration loaded successfully");
             } catch (IOException e) {
                 logger.error("Error loading configuration: {}", e.getMessage(), e);
@@ -70,6 +81,10 @@ public class LoadConfirmationConfig {
         props.setProperty("dispatcher.email", dispatcherEmail);
         props.setProperty("dispatcher.fax", dispatcherFax);
         props.setProperty("company.logo.path", companyLogoPath);
+        
+        // Save configuration options
+        props.setProperty("show.gross.amount", String.valueOf(showGrossAmount));
+        props.setProperty("fit.to.page", String.valueOf(fitToPage));
         
         try (FileOutputStream fos = new FileOutputStream(CONFIG_FILE)) {
             props.store(fos, "Load Confirmation Configuration");
@@ -126,5 +141,22 @@ public class LoadConfirmationConfig {
     
     public void setCompanyLogoPath(String companyLogoPath) {
         this.companyLogoPath = companyLogoPath;
+    }
+    
+    // Getters and setters for configuration options
+    public boolean isShowGrossAmount() {
+        return showGrossAmount;
+    }
+    
+    public void setShowGrossAmount(boolean showGrossAmount) {
+        this.showGrossAmount = showGrossAmount;
+    }
+    
+    public boolean isFitToPage() {
+        return fitToPage;
+    }
+    
+    public void setFitToPage(boolean fitToPage) {
+        this.fitToPage = fitToPage;
     }
 }

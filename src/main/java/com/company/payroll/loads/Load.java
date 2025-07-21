@@ -21,6 +21,7 @@ public class Load {
     private String poNumber;
     private String customer;  // Customer for pickup location
     private String customer2; // Customer for drop location (new field)
+    private String billTo;    // Customer to bill for the load
     private String pickUpLocation;
     private String dropLocation;
     private Employee driver;
@@ -51,7 +52,7 @@ public class Load {
     private String deliveryState;
     private double driverRate;
 
-    public Load(int id, String loadNumber, String poNumber, String customer, String customer2, String pickUpLocation, String dropLocation,
+    public Load(int id, String loadNumber, String poNumber, String customer, String customer2, String billTo, String pickUpLocation, String dropLocation,
                 Employee driver, String truckUnitSnapshot, Status status, double grossAmount, String notes, 
                 LocalDate pickUpDate, LocalTime pickUpTime, LocalDate deliveryDate, LocalTime deliveryTime, 
                 String reminder, boolean hasLumper, boolean hasRevisedRateConfirmation) {
@@ -60,6 +61,7 @@ public class Load {
         this.poNumber = poNumber;
         this.customer = customer;
         this.customer2 = customer2;
+        this.billTo = billTo;
         this.pickUpLocation = pickUpLocation;
         this.dropLocation = dropLocation;
         this.driver = driver;
@@ -85,12 +87,12 @@ public class Load {
         parseLocations();
     }
     
-    // Backward compatible constructor without customer2
+    // Backward compatible constructor without customer2 and billTo
     public Load(int id, String loadNumber, String poNumber, String customer, String pickUpLocation, String dropLocation,
                 Employee driver, String truckUnitSnapshot, Status status, double grossAmount, String notes, 
                 LocalDate pickUpDate, LocalTime pickUpTime, LocalDate deliveryDate, LocalTime deliveryTime, 
                 String reminder, boolean hasLumper, boolean hasRevisedRateConfirmation) {
-        this(id, loadNumber, poNumber, customer, null, pickUpLocation, dropLocation, driver, truckUnitSnapshot, 
+        this(id, loadNumber, poNumber, customer, null, null, pickUpLocation, dropLocation, driver, truckUnitSnapshot, 
              status, grossAmount, notes, pickUpDate, pickUpTime, deliveryDate, deliveryTime, 
              reminder, hasLumper, hasRevisedRateConfirmation);
     }
@@ -186,6 +188,8 @@ public class Load {
     public void setCustomer(String customer) { this.customer = customer; }
     public String getCustomer2() { return customer2; }
     public void setCustomer2(String customer2) { this.customer2 = customer2; }
+    public String getBillTo() { return billTo; }
+    public void setBillTo(String billTo) { this.billTo = billTo; }
     public String getPickUpLocation() { return pickUpLocation; }
     public void setPickUpLocation(String pickUpLocation) { 
         this.pickUpLocation = pickUpLocation; 

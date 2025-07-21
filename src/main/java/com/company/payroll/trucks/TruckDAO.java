@@ -35,6 +35,7 @@ public class TruckDAO {
                 registration_expiry_date DATE,
                 insurance_expiry_date DATE,
                 next_inspection_due DATE,
+                inspection DATE,
                 permit_numbers TEXT,
                 driver TEXT,
                 assigned BOOLEAN DEFAULT 0
@@ -43,6 +44,14 @@ public class TruckDAO {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
+            
+            // Add inspection column if it doesn't exist (for existing databases)
+            try {
+                stmt.execute("ALTER TABLE trucks ADD COLUMN inspection DATE");
+                logger.info("Added inspection column to trucks table");
+            } catch (SQLException e) {
+                logger.debug("inspection column already exists");
+            }
         } catch (SQLException e) {
             logger.error("Failed to initialize trucks table", e);
             throw new DataAccessException("Failed to initialize trucks table", e);
@@ -63,8 +72,8 @@ public class TruckDAO {
             INSERT INTO trucks (
                 truck_number, vin, make, model, year, type, status,
                 license_plate, registration_expiry_date, insurance_expiry_date,
-                next_inspection_due, permit_numbers, driver, assigned
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                next_inspection_due, inspection, permit_numbers, driver, assigned
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
 
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -91,14 +100,14 @@ public class TruckDAO {
                 truck_number = ?, vin = ?, make = ?, model = ?, year = ?,
                 type = ?, status = ?, license_plate = ?,
                 registration_expiry_date = ?, insurance_expiry_date = ?,
-                next_inspection_due = ?, permit_numbers = ?, driver = ?, assigned = ?
+                next_inspection_due = ?, inspection = ?, permit_numbers = ?, driver = ?, assigned = ?
             WHERE id = ?
         """;
 
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement ps = conn.prepareStatement(sql)) {
             setParams(ps, truck);
-            ps.setInt(15, truck.getId());
+            ps.setInt(16, truck.getId());
             ps.executeUpdate();
             return truck;
         } catch (SQLException e) {
@@ -137,6 +146,138 @@ public class TruckDAO {
         }
     }
 
+    /**
+     * Add or update multiple trucks from import
+     * Checks for existing trucks by truck number and updates them, or adds new ones
+     * Returns the list of trucks with proper IDs assigned
+     */
+    public List<Truck> addOrUpdateAll(List<Truck> trucks) {
+        logger.info("Processing {} trucks for import", trucks.size());
+        List<Truck> resultTrucks = new ArrayList<>();
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            conn.setAutoCommit(false);
+            
+            try {
+                int added = 0;
+                int updated = 0;
+                
+                for (Truck importedTruck : trucks) {
+                    // Check if truck exists by truck number
+                    Truck existing = getByTruckNumber(importedTruck.getNumber());
+                    
+                    if (existing != null) {
+                        // Merge imported data with existing data
+                        mergeTruckData(existing, importedTruck);
+                        update(existing);
+                        resultTrucks.add(existing); // Use existing truck with proper ID
+                        updated++;
+                        logger.debug("Updated existing truck: {} (ID: {})", existing.getNumber(), existing.getId());
+                    } else {
+                        // Add new truck
+                        Truck insertedTruck = insert(importedTruck);
+                        resultTrucks.add(insertedTruck); // Use inserted truck with proper ID
+                        added++;
+                        logger.debug("Added new truck: {} (ID: {})", insertedTruck.getNumber(), insertedTruck.getId());
+                    }
+                }
+                
+                conn.commit();
+                logger.info("Import completed - Added: {}, Updated: {}", added, updated);
+                
+                // Validate that all result trucks have proper IDs
+                for (Truck truck : resultTrucks) {
+                    if (truck.getId() <= 0) {
+                        logger.error("CRITICAL: Truck {} has invalid ID: {}", truck.getNumber(), truck.getId());
+                    } else {
+                        logger.debug("Truck {} has valid ID: {}", truck.getNumber(), truck.getId());
+                    }
+                }
+                
+            } catch (Exception e) {
+                conn.rollback();
+                logger.error("Error during import, rolling back: {}", e.getMessage(), e);
+                throw new DataAccessException("Error during truck import", e);
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            logger.error("Database error during import: {}", e.getMessage(), e);
+            throw new DataAccessException("Database error during import", e);
+        }
+        
+        return resultTrucks;
+    }
+    
+    /**
+     * Merge imported truck data with existing truck data
+     * Preserves existing fields that are not provided in the import
+     */
+    private void mergeTruckData(Truck existing, Truck imported) {
+        // Only update fields that are provided in the import (not null/empty)
+        if (imported.getYear() > 0) {
+            existing.setYear(imported.getYear());
+        }
+        if (imported.getMake() != null && !imported.getMake().trim().isEmpty()) {
+            existing.setMake(imported.getMake());
+        }
+        if (imported.getModel() != null && !imported.getModel().trim().isEmpty()) {
+            existing.setModel(imported.getModel());
+        }
+        if (imported.getVin() != null && !imported.getVin().trim().isEmpty()) {
+            existing.setVin(imported.getVin());
+        }
+        if (imported.getLicensePlate() != null && !imported.getLicensePlate().trim().isEmpty()) {
+            existing.setLicensePlate(imported.getLicensePlate());
+        }
+        // Note: Driver assignment is handled separately in the UI, not during import
+        if (imported.getRegistrationExpiryDate() != null) {
+            existing.setRegistrationExpiryDate(imported.getRegistrationExpiryDate());
+        }
+        if (imported.getInspection() != null) {
+            existing.setInspection(imported.getInspection());
+        }
+        
+        // Set default values for new trucks if not already set
+        if (existing.getType() == null || existing.getType().trim().isEmpty()) {
+            existing.setType("Semi Truck (Tractor)");
+        }
+        if (existing.getStatus() == null || existing.getStatus().trim().isEmpty()) {
+            existing.setStatus("Active");
+        }
+        
+        // Auto-calculate Inspection Expiry if Inspection date is set
+        if (imported.getInspection() != null) {
+            LocalDate inspectionExpiry = imported.getInspection().plusDays(365);
+            existing.setNextInspectionDue(inspectionExpiry);
+        }
+    }
+    
+    /**
+     * Get truck by truck number (case-insensitive)
+     */
+    public Truck getByTruckNumber(String truckNumber) {
+        logger.debug("Getting truck by number: {}", truckNumber);
+        if (truckNumber == null || truckNumber.trim().isEmpty()) return null;
+        
+        String sql = "SELECT * FROM trucks WHERE LOWER(truck_number) = LOWER(?)";
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, truckNumber.trim());
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                Truck truck = map(rs);
+                logger.debug("Found truck: {} (ID: {})", truck.getNumber(), truck.getId());
+                return truck;
+            }
+            logger.debug("No truck found with number: {}", truckNumber);
+        } catch (SQLException e) {
+            logger.error("Error getting truck by number {}: {}", truckNumber, e.getMessage(), e);
+            throw new DataAccessException("Error getting truck by number", e);
+        }
+        return null;
+    }
+
     // -- Helpers ------------------------------------------------------------
 
     private void setParams(PreparedStatement ps, Truck t) throws SQLException {
@@ -151,9 +292,10 @@ public class TruckDAO {
         if (t.getRegistrationExpiryDate() != null) ps.setDate(9, Date.valueOf(t.getRegistrationExpiryDate())); else ps.setNull(9, Types.DATE);
         if (t.getInsuranceExpiryDate() != null) ps.setDate(10, Date.valueOf(t.getInsuranceExpiryDate())); else ps.setNull(10, Types.DATE);
         if (t.getNextInspectionDue() != null) ps.setDate(11, Date.valueOf(t.getNextInspectionDue())); else ps.setNull(11, Types.DATE);
-        ps.setString(12, t.getPermitNumbers());
-        ps.setString(13, t.getDriver());
-        ps.setBoolean(14, t.isAssigned());
+        if (t.getInspection() != null) ps.setDate(12, Date.valueOf(t.getInspection())); else ps.setNull(12, Types.DATE);
+        ps.setString(13, t.getPermitNumbers());
+        ps.setString(14, t.getDriver());
+        ps.setBoolean(15, t.isAssigned());
     }
 
     private Truck map(ResultSet rs) throws SQLException {
@@ -173,6 +315,8 @@ public class TruckDAO {
         if (ins != null) t.setInsuranceExpiryDate(ins.toLocalDate());
         Date insp = rs.getDate("next_inspection_due");
         if (insp != null) t.setNextInspectionDue(insp.toLocalDate());
+        Date inspDate = rs.getDate("inspection");
+        if (inspDate != null) t.setInspection(inspDate.toLocalDate());
         t.setPermitNumbers(rs.getString("permit_numbers"));
         t.setDriver(rs.getString("driver"));
         t.setAssigned(rs.getBoolean("assigned"));

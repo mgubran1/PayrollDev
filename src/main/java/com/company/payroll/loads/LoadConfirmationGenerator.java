@@ -26,7 +26,7 @@ import java.util.Properties;
 public class LoadConfirmationGenerator {
     private static final Logger logger = LoggerFactory.getLogger(LoadConfirmationGenerator.class);
     
-    private static final float MARGIN = 40;
+    private static final float MARGIN = 72; // 1 inch = 72 points for better centering
     private static final float LINE_HEIGHT = 12;
     private static final float SECTION_SPACING = 15;
     private static final float SMALL_LINE_HEIGHT = 10;
@@ -43,6 +43,8 @@ public class LoadConfirmationGenerator {
     
     public PDDocument generateLoadConfirmation(Load load) throws IOException {
         PDDocument document = new PDDocument();
+        
+        // Always use portrait orientation for consistency with print preview
         PDPage page = new PDPage(PDRectangle.LETTER);
         document.addPage(page);
         
@@ -51,144 +53,490 @@ public class LoadConfirmationGenerator {
             float height = page.getMediaBox().getHeight();
             float y = height - MARGIN;
             
-            // Add company logo if available
-            y = addCompanyLogo(document, contentStream, page, y);
-            
-            // Add header with Load # and dates, and driver info on right
+            // Add header
             y = addHeader(contentStream, load, y, width);
             
             // Add horizontal line
             y = addHorizontalLine(contentStream, y, width);
             
-            // Add pickup and drop information side by side
-            y = addPickupAndDropSideBySide(contentStream, load, y, width);
+            // Add main grid layout
+            // Add basic info section
+            y = addBasicInfo(contentStream, load, y, width);
+            
+            // Add separator
+            y = addHorizontalLine(contentStream, y, width);
+            
+            // Add pickup section
+            y = addPickupSection(contentStream, load, y, width);
+            
+            // Add separator
+            y = addHorizontalLine(contentStream, y, width);
+            
+            // Add drop section
+            y = addDropSection(contentStream, load, y, width);
             
             // Add notes if present
-            if (load.getNotes() != null && !load.getNotes().trim().isEmpty()) {
-                y = addNotes(contentStream, load, y, width);
+            if (load.getNotes() != null && !load.getNotes().isEmpty()) {
+                y = addNotesSection(contentStream, load, y, width);
             }
             
             // Add pickup and delivery policy
             y = addPickupDeliveryPolicy(contentStream, y, width);
             
             // Add dispatcher information at the bottom
-            addDispatcherInformation(contentStream, 80);
+            if (y > 100) {
+                addDispatcherInformation(contentStream, 60);
+            } else {
+                // Start new page if needed
+                contentStream.close();
+                PDPage newPage = new PDPage(PDRectangle.LETTER);
+                document.addPage(newPage);
+                PDPageContentStream newContentStream = new PDPageContentStream(document, newPage);
+                addDispatcherInformation(newContentStream, height - MARGIN - 20);
+                newContentStream.close();
+            }
         }
         
         return document;
     }
     
-    private float addCompanyLogo(PDDocument document, PDPageContentStream contentStream, PDPage page, float y) {
-        String logoPath = config.getCompanyLogoPath();
-        if (logoPath != null && !logoPath.isEmpty()) {
-            File logoFile = new File(logoPath);
-            if (logoFile.exists()) {
-                try {
-                    PDImageXObject logo = PDImageXObject.createFromFile(logoPath, document);
-                    float logoHeight = 60;
-                    float logoWidth = logo.getWidth() * (logoHeight / logo.getHeight());
-                    
-                    // Center the logo
-                    float x = (page.getMediaBox().getWidth() - logoWidth) / 2;
-                    contentStream.drawImage(logo, x, y - logoHeight, logoWidth, logoHeight);
-                    
-                    return y - logoHeight - 20;
-                } catch (IOException e) {
-                    logger.error("Error loading company logo: {}", e.getMessage());
-                }
-            }
-        }
-        return y;
-    }
-    
     private float addHeader(PDPageContentStream contentStream, Load load, float y, float width) throws IOException {
         // Company name
         String companyName = getCompanyNameFromConfig();
-        contentStream.setFont(boldFont, 20);
-        float companyWidth = boldFont.getStringWidth(companyName) / 1000 * 20;
+        contentStream.setFont(boldFont, 14);
+        float companyWidth = boldFont.getStringWidth(companyName) / 1000 * 14;
         contentStream.beginText();
         contentStream.newLineAtOffset((width - companyWidth) / 2, y);
         contentStream.showText(companyName);
         contentStream.endText();
-        y -= 25;
+        y -= 12;
         
         // Title
-        contentStream.setFont(boldFont, 16);
+        contentStream.setFont(boldFont, 12);
         String title = "LOAD CONFIRMATION";
-        float titleWidth = boldFont.getStringWidth(title) / 1000 * 16;
+        float titleWidth = boldFont.getStringWidth(title) / 1000 * 12;
         contentStream.beginText();
         contentStream.newLineAtOffset((width - titleWidth) / 2, y);
         contentStream.showText(title);
         contentStream.endText();
-        y -= 25;
+        y -= 10;
         
-        // Left side: Load number and dates
+        return y - 5;
+    }
+    
+    private float addBasicInfo(PDPageContentStream contentStream, Load load, float y, float width) throws IOException {
+        float contentWidth = width - 2 * MARGIN;
         float leftX = MARGIN;
-        float rightX = width / 2 + 20;
+        float rightX = MARGIN + (contentWidth * 0.6f); // 60% for left column
         
-        // Load number
-        contentStream.setFont(boldFont, 11);
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+        Employee driver = load.getDriver();
+        
+        // Left column
+        contentStream.setFont(boldFont, 10);
         contentStream.beginText();
         contentStream.newLineAtOffset(leftX, y);
-        contentStream.showText("Load #: " + load.getLoadNumber());
+        contentStream.showText("Load #:");
         contentStream.endText();
         
-        // Driver info on the right
-        Employee driver = load.getDriver();
+        contentStream.setFont(boldFont, 10);
+        contentStream.setNonStrokingColor(0.15f, 0.68f, 0.38f); // Green color
+        contentStream.beginText();
+        contentStream.newLineAtOffset(leftX + 50, y);
+        contentStream.showText(load.getLoadNumber());
+        contentStream.endText();
+        contentStream.setNonStrokingColor(0, 0, 0); // Back to black
+        
+        // Right column - Driver
         if (driver != null) {
             contentStream.setFont(boldFont, 10);
             contentStream.beginText();
             contentStream.newLineAtOffset(rightX, y);
-            contentStream.showText("Driver: ");
+            contentStream.showText("Driver:");
             contentStream.endText();
             
-            contentStream.setFont(normalFont, 10);
-            float driverLabelWidth = boldFont.getStringWidth("Driver: ") / 1000 * 10;
+            contentStream.setFont(boldFont, 10);
+            contentStream.setNonStrokingColor(0.15f, 0.68f, 0.38f); // Green color
             contentStream.beginText();
-            contentStream.newLineAtOffset(rightX + driverLabelWidth, y);
+            contentStream.newLineAtOffset(rightX + 45, y);
             contentStream.showText(driver.getName());
             contentStream.endText();
+            contentStream.setNonStrokingColor(0, 0, 0); // Back to black
         }
         y -= LINE_HEIGHT;
         
-        // Pickup date
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
-        contentStream.setFont(normalFont, 10);
-        String pickupDateStr = load.getPickUpDate() != null ? 
-            "Pickup: " + load.getPickUpDate().format(dateFormatter) : "Pickup: TBD";
+        // Pickup Date
+        contentStream.setFont(boldFont, 10);
         contentStream.beginText();
         contentStream.newLineAtOffset(leftX, y);
-        contentStream.showText(pickupDateStr);
+        contentStream.showText("Pickup Date:");
         contentStream.endText();
         
-        // Truck/Unit on the right
+        String pickupDate = load.getPickUpDate() != null ? load.getPickUpDate().format(dateFormatter) : "TBD";
+        contentStream.setFont(normalFont, 10);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(leftX + 70, y);
+        contentStream.showText(pickupDate);
+        contentStream.endText();
+        
+        // Truck
         if (driver != null) {
-            String truckUnit = load.getTruckUnitSnapshot() != null ? load.getTruckUnitSnapshot() : 
-                             (driver.getTruckUnit() != null ? driver.getTruckUnit() : "N/A");
             contentStream.setFont(boldFont, 10);
             contentStream.beginText();
             contentStream.newLineAtOffset(rightX, y);
-            contentStream.showText("Truck: ");
+            contentStream.showText("Truck:");
             contentStream.endText();
             
+            String truckUnit = load.getTruckUnitSnapshot() != null ? load.getTruckUnitSnapshot() : 
+                             (driver.getTruckUnit() != null ? driver.getTruckUnit() : "N/A");
             contentStream.setFont(normalFont, 10);
-            float truckLabelWidth = boldFont.getStringWidth("Truck: ") / 1000 * 10;
             contentStream.beginText();
-            contentStream.newLineAtOffset(rightX + truckLabelWidth, y);
+            contentStream.newLineAtOffset(rightX + 45, y);
             contentStream.showText(truckUnit);
             contentStream.endText();
         }
         y -= LINE_HEIGHT;
         
-        // Delivery date
-        String deliveryDateStr = load.getDeliveryDate() != null ? 
-            "Delivery: " + load.getDeliveryDate().format(dateFormatter) : "Delivery: TBD";
+        // Delivery Date
+        contentStream.setFont(boldFont, 10);
         contentStream.beginText();
         contentStream.newLineAtOffset(leftX, y);
-        contentStream.showText(deliveryDateStr);
+        contentStream.showText("Delivery Date:");
         contentStream.endText();
         
-        // Trailer on the right
+        String deliveryDate = load.getDeliveryDate() != null ? load.getDeliveryDate().format(dateFormatter) : "TBD";
+        contentStream.setFont(normalFont, 10);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(leftX + 75, y);
+        contentStream.showText(deliveryDate);
+        contentStream.endText();
+        
+        // Trailer
+        if (driver != null) {
+            contentStream.setFont(boldFont, 10);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(rightX, y);
+            contentStream.showText("Trailer:");
+            contentStream.endText();
+            
+            Trailer trailer = load.getTrailer();
+            String trailerInfo = "N/A";
+            if (trailer != null) {
+                trailerInfo = trailer.getTrailerNumber();
+                if (trailer.getType() != null && !trailer.getType().isEmpty()) {
+                    trailerInfo += " (" + trailer.getType() + ")";
+                }
+            } else if (load.getTrailerNumber() != null && !load.getTrailerNumber().isEmpty()) {
+                trailerInfo = load.getTrailerNumber();
+            }
+            
+            contentStream.setFont(normalFont, 10);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(rightX + 45, y);
+            contentStream.showText(trailerInfo);
+            contentStream.endText();
+        }
+        y -= LINE_HEIGHT;
+        
+        // Gross Amount and Mobile
+        if (config.isShowGrossAmount() && load.getGrossAmount() > 0.0) {
+            contentStream.setFont(boldFont, 10);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(leftX, y);
+            contentStream.showText("Gross Amount:");
+            contentStream.endText();
+            
+            contentStream.setFont(boldFont, 10);
+            contentStream.setNonStrokingColor(0.15f, 0.68f, 0.38f); // Green color
+            contentStream.beginText();
+            contentStream.newLineAtOffset(leftX + 80, y);
+            contentStream.showText("$" + String.format("%.2f", load.getGrossAmount()));
+            contentStream.endText();
+            contentStream.setNonStrokingColor(0, 0, 0); // Back to black
+        }
+        
+        if (driver != null && driver.getPhone() != null && !driver.getPhone().isEmpty()) {
+            contentStream.setFont(boldFont, 10);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(rightX, y);
+            contentStream.showText("Mobile:");
+            contentStream.endText();
+            
+            contentStream.setFont(normalFont, 10);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(rightX + 45, y);
+            contentStream.showText(driver.getPhone());
+            contentStream.endText();
+        }
+        
+        return y - SECTION_SPACING;
+    }
+    
+    private float addPickupSection(PDPageContentStream contentStream, Load load, float y, float width) throws IOException {
+        // Section header with gray background box
+        contentStream.setNonStrokingColor(0.94f, 0.94f, 0.94f);
+        contentStream.addRect(MARGIN, y - 12, width - 2 * MARGIN, 14);
+        contentStream.fill();
+        
+        // Black text for section header
+        contentStream.setNonStrokingColor(0, 0, 0);
+        contentStream.setFont(boldFont, 11);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(MARGIN + 5, y - 10);
+        contentStream.showText("PICKUP INFORMATION");
+        contentStream.endText();
+        y -= LINE_HEIGHT + 5;
+        
+        // Add double spacing after section header
+        y -= LINE_HEIGHT;
+        
+        // Pickup details with indentation
+        float indent = MARGIN + 20;
+        
+        // Customer
+        y = addDetailRow(contentStream, "Customer:", load.getCustomer(), indent, y);
+        
+        // Address
+        y = addDetailRow(contentStream, "Address:", load.getPickUpLocation(), indent, y);
+        
+        // Date/Time
+        String pickupDateTime = formatDateTime(load.getPickUpDate(), load.getPickUpTime());
+        y = addDetailRow(contentStream, "Date/Time:", pickupDateTime, indent, y);
+        
+        // PO Number
+        if (load.getPONumber() != null && !load.getPONumber().isEmpty()) {
+            y = addDetailRow(contentStream, "PO #:", load.getPONumber(), indent, y);
+        }
+        
+        // Additional pickup locations
+        List<LoadLocation> additionalPickups = getAdditionalLocations(load, LoadLocation.LocationType.PICKUP);
+        if (!additionalPickups.isEmpty()) {
+            y -= 5;
+            contentStream.setFont(boldFont, 10);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(indent, y);
+            contentStream.showText("Additional Pickup Locations:");
+            contentStream.endText();
+            y -= LINE_HEIGHT;
+            
+            for (int i = 0; i < additionalPickups.size(); i++) {
+                LoadLocation loc = additionalPickups.get(i);
+                String info = String.format("%d. %s - %s", 
+                    i + 1, 
+                    loc.getCustomer() != null ? loc.getCustomer() : "",
+                    formatLocationAddress(loc));
+                
+                if (loc.getTime() != null) {
+                    info += " @ " + loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a"));
+                }
+                
+                contentStream.setFont(normalFont, 9);
+                contentStream.beginText();
+                contentStream.newLineAtOffset(indent + 15, y);
+                contentStream.showText(info);
+                contentStream.endText();
+                y -= SMALL_LINE_HEIGHT;
+                
+                if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
+                    contentStream.setFont(normalFont, 8);
+                    contentStream.beginText();
+                    contentStream.newLineAtOffset(indent + 25, y);
+                    contentStream.showText("Notes: " + loc.getNotes());
+                    contentStream.endText();
+                    y -= SMALL_LINE_HEIGHT;
+                }
+            }
+        }
+        
+        return y - SECTION_SPACING;
+    }
+    
+    private float addDropSection(PDPageContentStream contentStream, Load load, float y, float width) throws IOException {
+        // Section header with gray background box
+        contentStream.setNonStrokingColor(0.94f, 0.94f, 0.94f);
+        contentStream.addRect(MARGIN, y - 12, width - 2 * MARGIN, 14);
+        contentStream.fill();
+        
+        // Black text for section header
+        contentStream.setNonStrokingColor(0, 0, 0);
+        contentStream.setFont(boldFont, 11);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(MARGIN + 5, y - 10);
+        contentStream.showText("DROP INFORMATION");
+        contentStream.endText();
+        y -= LINE_HEIGHT + 5;
+        
+        // Add double spacing after section header
+        y -= LINE_HEIGHT;
+        
+        // Drop details with indentation
+        float indent = MARGIN + 20;
+        
+        // Customer
+        String dropCustomer = load.getCustomer2() != null ? load.getCustomer2() : load.getCustomer();
+        y = addDetailRow(contentStream, "Customer:", dropCustomer, indent, y);
+        
+        // Address
+        y = addDetailRow(contentStream, "Address:", load.getDropLocation(), indent, y);
+        
+        // Date/Time
+        String dropDateTime = formatDateTime(load.getDeliveryDate(), load.getDeliveryTime());
+        y = addDetailRow(contentStream, "Date/Time:", dropDateTime, indent, y);
+        
+        // Additional drop locations
+        List<LoadLocation> additionalDrops = getAdditionalLocations(load, LoadLocation.LocationType.DROP);
+        if (!additionalDrops.isEmpty()) {
+            y -= 5;
+            contentStream.setFont(boldFont, 10);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(indent, y);
+            contentStream.showText("Additional Drop Locations:");
+            contentStream.endText();
+            y -= LINE_HEIGHT;
+            
+            for (int i = 0; i < additionalDrops.size(); i++) {
+                LoadLocation loc = additionalDrops.get(i);
+                String info = String.format("%d. %s - %s", 
+                    i + 1, 
+                    loc.getCustomer() != null ? loc.getCustomer() : "",
+                    formatLocationAddress(loc));
+                
+                if (loc.getTime() != null) {
+                    info += " @ " + loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a"));
+                }
+                
+                contentStream.setFont(normalFont, 9);
+                contentStream.beginText();
+                contentStream.newLineAtOffset(indent + 15, y);
+                contentStream.showText(info);
+                contentStream.endText();
+                y -= SMALL_LINE_HEIGHT;
+                
+                if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
+                    contentStream.setFont(normalFont, 8);
+                    contentStream.beginText();
+                    contentStream.newLineAtOffset(indent + 25, y);
+                    contentStream.showText("Notes: " + loc.getNotes());
+                    contentStream.endText();
+                    y -= SMALL_LINE_HEIGHT;
+                }
+            }
+        }
+        
+        return y - SECTION_SPACING;
+    }
+    
+    private float addNotesSection(PDPageContentStream contentStream, Load load, float y, float width) throws IOException {
+        // Section header with gray background box
+        contentStream.setNonStrokingColor(0.94f, 0.94f, 0.94f);
+        contentStream.addRect(MARGIN, y - 12, width - 2 * MARGIN, 14);
+        contentStream.fill();
+        
+        // Black text for section header
+        contentStream.setNonStrokingColor(0, 0, 0);
+        contentStream.setFont(boldFont, 11);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(MARGIN + 5, y - 10);
+        contentStream.showText("NOTES");
+        contentStream.endText();
+        y -= LINE_HEIGHT + 5;
+        
+        // Notes text in red
+        contentStream.setFont(boldFont, 10);
+        contentStream.setNonStrokingColor(0.91f, 0.30f, 0.24f); // Red color
+        
+        // Wrap notes text if needed
+        List<String> wrappedLines = wrapText(load.getNotes(), width - 2 * MARGIN - 40, boldFont, 10);
+        for (String line : wrappedLines) {
+            contentStream.beginText();
+            contentStream.newLineAtOffset(MARGIN + 20, y);
+            contentStream.showText(line);
+            contentStream.endText();
+            y -= LINE_HEIGHT;
+        }
+        
+        contentStream.setNonStrokingColor(0, 0, 0); // Back to black
+        return y - SECTION_SPACING;
+    }
+    
+    private float addDetailRow(PDPageContentStream contentStream, String label, String value, float x, float y) throws IOException {
+        contentStream.setFont(boldFont, 10);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(x, y);
+        contentStream.showText(label);
+        contentStream.endText();
+        
+        contentStream.setFont(normalFont, 10);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(x + 80, y);
+        contentStream.showText(value != null ? value : "");
+        contentStream.endText();
+        
+        return y - LINE_HEIGHT;
+    }
+    
+    private List<LoadLocation> getAdditionalLocations(Load load, LoadLocation.LocationType type) {
+        if (load.getLocations() == null) {
+            return new ArrayList<>();
+        }
+        
+        // Only return locations with sequence > 1 (additional locations)
+        // Primary locations (sequence 1) are already shown in the main pickup/drop sections
+        return load.getLocations().stream()
+            .filter(loc -> loc.getType() == type && loc.getSequence() > 1)
+            .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
+            .collect(java.util.stream.Collectors.toList());
+    }
+    
+    private float addMainGrid(PDPageContentStream contentStream, Load load, float y, float width) throws IOException {
+        float contentWidth = width - 2 * MARGIN;
+        float leftX = MARGIN;
+        float rightX = MARGIN + (contentWidth * 0.6f); // 60% for left column
+        
+        // Row 1: Load #, Driver
+        contentStream.setFont(boldFont, 8);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(leftX, y);
+        contentStream.showText("Load #: " + load.getLoadNumber());
+        contentStream.endText();
+        
+        Employee driver = load.getDriver();
+        if (driver != null) {
+            contentStream.beginText();
+            contentStream.newLineAtOffset(rightX, y);
+            contentStream.showText("Driver: " + driver.getName());
+            contentStream.endText();
+        }
+        y -= 6;
+        
+        // Row 2: Pickup Date, Truck
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+        String pickupDate = load.getPickUpDate() != null ? 
+            "Pickup Date: " + load.getPickUpDate().format(dateFormatter) : "Pickup Date: TBD";
+        contentStream.setFont(normalFont, 8);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(leftX, y);
+        contentStream.showText(pickupDate);
+        contentStream.endText();
+        
+        if (driver != null) {
+            String truckUnit = load.getTruckUnitSnapshot() != null ? load.getTruckUnitSnapshot() : 
+                             (driver.getTruckUnit() != null ? driver.getTruckUnit() : "N/A");
+            contentStream.beginText();
+            contentStream.newLineAtOffset(rightX, y);
+            contentStream.showText("Truck: " + truckUnit);
+            contentStream.endText();
+        }
+        y -= 6;
+        
+        // Row 3: Delivery Date, Trailer
+        String deliveryDate = load.getDeliveryDate() != null ? 
+            "Delivery Date: " + load.getDeliveryDate().format(dateFormatter) : "Delivery Date: TBD";
+        contentStream.beginText();
+        contentStream.newLineAtOffset(leftX, y);
+        contentStream.showText(deliveryDate);
+        contentStream.endText();
+        
         if (driver != null) {
             Trailer trailer = load.getTrailer();
             String trailerInfo = "N/A";
@@ -201,57 +549,144 @@ public class LoadConfirmationGenerator {
                 trailerInfo = load.getTrailerNumber();
             }
             
-            contentStream.setFont(boldFont, 10);
             contentStream.beginText();
             contentStream.newLineAtOffset(rightX, y);
-            contentStream.showText("Trailer: ");
+            contentStream.showText("Trailer: " + trailerInfo);
             contentStream.endText();
-            
-            contentStream.setFont(normalFont, 10);
-            float trailerLabelWidth = boldFont.getStringWidth("Trailer: ") / 1000 * 10;
+        }
+        y -= 6;
+        
+        // Row 4: Gross Amount, Mobile
+        if (config.isShowGrossAmount() && load.getGrossAmount() > 0.0) {
+            contentStream.setFont(boldFont, 8);
             contentStream.beginText();
-            contentStream.newLineAtOffset(rightX + trailerLabelWidth, y);
-            contentStream.showText(trailerInfo);
+            contentStream.newLineAtOffset(leftX, y);
+            contentStream.showText("Gross Amount: $" + String.format("%.2f", load.getGrossAmount()));
             contentStream.endText();
         }
-        y -= LINE_HEIGHT;
         
-        // Add driver mobile and email
-        if (driver != null) {
-            // Mobile number on the left
-            if (driver.getPhone() != null && !driver.getPhone().isEmpty()) {
-                contentStream.setFont(boldFont, 10);
-                contentStream.beginText();
-                contentStream.newLineAtOffset(leftX, y);
-                contentStream.showText("Mobile #: ");
-                contentStream.endText();
-                
-                contentStream.setFont(normalFont, 10);
-                float mobileLabelWidth = boldFont.getStringWidth("Mobile #: ") / 1000 * 10;
-                contentStream.beginText();
-                contentStream.newLineAtOffset(leftX + mobileLabelWidth, y);
-                contentStream.showText(driver.getPhone());
-                contentStream.endText();
-            }
+        if (driver != null && driver.getPhone() != null && !driver.getPhone().isEmpty()) {
+            contentStream.setFont(normalFont, 8);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(rightX, y);
+            contentStream.showText("Mobile: " + driver.getPhone());
+            contentStream.endText();
+        }
+        y -= 6;
+        
+        // Row 5: Pickup Customer, Pickup Address
+        contentStream.beginText();
+        contentStream.newLineAtOffset(leftX, y);
+        contentStream.showText("Pickup Customer: " + (load.getCustomer() != null ? load.getCustomer() : ""));
+        contentStream.endText();
+        
+        contentStream.beginText();
+        contentStream.newLineAtOffset(rightX, y);
+        contentStream.showText("Pickup Address: " + (load.getPickUpLocation() != null ? load.getPickUpLocation() : ""));
+        contentStream.endText();
+        y -= 6;
+        
+        // Row 6: Pickup Date/Time, PO #
+        String pickupDateTime = formatDateTime(load.getPickUpDate(), load.getPickUpTime());
+        contentStream.beginText();
+        contentStream.newLineAtOffset(leftX, y);
+        contentStream.showText("Pickup Date/Time: " + pickupDateTime);
+        contentStream.endText();
+        
+        if (load.getPONumber() != null && !load.getPONumber().isEmpty()) {
+            contentStream.beginText();
+            contentStream.newLineAtOffset(rightX, y);
+            contentStream.showText("PO #: " + load.getPONumber());
+            contentStream.endText();
+        }
+        y -= 6;
+        
+        // Row 7: Drop Customer, Drop Address
+        contentStream.beginText();
+        contentStream.newLineAtOffset(leftX, y);
+        contentStream.showText("Drop Customer: " + (load.getCustomer2() != null ? load.getCustomer2() : load.getCustomer()));
+        contentStream.endText();
+        
+        contentStream.beginText();
+        contentStream.newLineAtOffset(rightX, y);
+        contentStream.showText("Drop Address: " + (load.getDropLocation() != null ? load.getDropLocation() : ""));
+        contentStream.endText();
+        y -= 6;
+        
+        // Row 8: Drop Date/Time
+        String dropDateTime = formatDateTime(load.getDeliveryDate(), load.getDeliveryTime());
+        contentStream.beginText();
+        contentStream.newLineAtOffset(leftX, y);
+        contentStream.showText("Drop Date/Time: " + dropDateTime);
+        contentStream.endText();
+        y -= 6;
+        
+        // Add additional locations if any
+        List<LoadLocation> additionalPickups = new ArrayList<>();
+        List<LoadLocation> additionalDrops = new ArrayList<>();
+        if (load.getLocations() != null) {
+            additionalPickups = load.getLocations().stream()
+                .filter(loc -> loc.getType() == LoadLocation.LocationType.PICKUP && loc.getSequence() > 1)
+                .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
+                .collect(java.util.stream.Collectors.toList());
             
-            // Email on the right
-            if (driver.getEmail() != null && !driver.getEmail().isEmpty()) {
-                contentStream.setFont(boldFont, 10);
-                contentStream.beginText();
-                contentStream.newLineAtOffset(rightX, y);
-                contentStream.showText("Email: ");
-                contentStream.endText();
+            additionalDrops = load.getLocations().stream()
+                .filter(loc -> loc.getType() == LoadLocation.LocationType.DROP && loc.getSequence() > 1)
+                .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
+                .collect(java.util.stream.Collectors.toList());
+        }
+        
+        // Add additional pickup locations
+        if (!additionalPickups.isEmpty()) {
+            contentStream.setFont(boldFont, 8);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(leftX, y);
+            contentStream.showText("Additional Pickups:");
+            contentStream.endText();
+            y -= 6;
+            
+            for (int i = 0; i < additionalPickups.size(); i++) {
+                LoadLocation loc = additionalPickups.get(i);
+                String info = String.format("%d. %s - %s", 
+                    i + 1, 
+                    loc.getCustomer() != null ? loc.getCustomer() : "",
+                    formatLocationAddress(loc));
                 
-                contentStream.setFont(normalFont, 10);
-                float emailLabelWidth = boldFont.getStringWidth("Email: ") / 1000 * 10;
+                contentStream.setFont(normalFont, 7);
                 contentStream.beginText();
-                contentStream.newLineAtOffset(rightX + emailLabelWidth, y);
-                contentStream.showText(driver.getEmail());
+                contentStream.newLineAtOffset(leftX + 10, y);
+                contentStream.showText(info);
                 contentStream.endText();
+                y -= 5;
             }
         }
         
-        return y - 20;
+        // Add additional drop locations
+        if (!additionalDrops.isEmpty()) {
+            contentStream.setFont(boldFont, 8);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(rightX, y);
+            contentStream.showText("Additional Drops:");
+            contentStream.endText();
+            y -= 6;
+            
+            for (int i = 0; i < additionalDrops.size(); i++) {
+                LoadLocation loc = additionalDrops.get(i);
+                String info = String.format("%d. %s - %s", 
+                    i + 1, 
+                    loc.getCustomer() != null ? loc.getCustomer() : "",
+                    formatLocationAddress(loc));
+                
+                contentStream.setFont(normalFont, 7);
+                contentStream.beginText();
+                contentStream.newLineAtOffset(rightX + 10, y);
+                contentStream.showText(info);
+                contentStream.endText();
+                y -= 5;
+            }
+        }
+        
+        return y - 5;
     }
     
     private float addHorizontalLine(PDPageContentStream contentStream, float y, float width) throws IOException {
@@ -286,7 +721,7 @@ public class LoadConfirmationGenerator {
         List<LoadLocation> additionalPickups = new ArrayList<>();
         if (load.getLocations() != null) {
             additionalPickups = load.getLocations().stream()
-                .filter(loc -> loc.getType() == LoadLocation.LocationType.PICKUP)
+                .filter(loc -> loc.getType() == LoadLocation.LocationType.PICKUP && loc.getSequence() > 1)
                 .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
                 .collect(java.util.stream.Collectors.toList());
         }
@@ -356,7 +791,7 @@ public class LoadConfirmationGenerator {
         List<LoadLocation> additionalDrops = new ArrayList<>();
         if (load.getLocations() != null) {
             additionalDrops = load.getLocations().stream()
-                .filter(loc -> loc.getType() == LoadLocation.LocationType.DROP)
+                .filter(loc -> loc.getType() == LoadLocation.LocationType.DROP && loc.getSequence() > 1)
                 .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
                 .collect(java.util.stream.Collectors.toList());
         }
@@ -407,109 +842,119 @@ public class LoadConfirmationGenerator {
     }
     
     private float addNotes(PDPageContentStream contentStream, Load load, float y, float width) throws IOException {
-        contentStream.setFont(boldFont, 11);
+        contentStream.setFont(boldFont, 9); // Reduced font size
         contentStream.beginText();
         contentStream.newLineAtOffset(MARGIN, y);
         contentStream.showText("NOTES");
         contentStream.endText();
-        y -= 15;
+        y -= 8; // Reduced spacing
         
-        // Set red color for notes
-        contentStream.setNonStrokingColor(Color.RED);
-        contentStream.setFont(boldFont, 10);
+        contentStream.setFont(boldFont, 8); // Reduced font size
+        contentStream.beginText();
+        contentStream.newLineAtOffset(MARGIN + 15, y);
+        contentStream.showText(load.getNotes());
+        contentStream.endText();
         
-        // Wrap and display notes
-        List<String> lines = wrapText(load.getNotes(), width - (2 * MARGIN) - 40, boldFont, 10);
-        for (String line : lines) {
-            contentStream.beginText();
-            contentStream.newLineAtOffset(MARGIN + 20, y);
-            contentStream.showText(line);
-            contentStream.endText();
-            y -= LINE_HEIGHT;
-        }
-        
-        // Reset to black color
-        contentStream.setNonStrokingColor(Color.BLACK);
-        
-        return y - SECTION_SPACING;
+        return y - 15; // Reduced spacing
     }
     
     private float addPickupDeliveryPolicy(PDPageContentStream contentStream, float y, float width) throws IOException {
         String policy = config.getPickupDeliveryPolicy();
-        if (policy != null && !policy.isEmpty()) {
-            contentStream.setFont(boldFont, 10);
-            contentStream.beginText();
-            contentStream.newLineAtOffset(MARGIN, y);
-            contentStream.showText("PICKUP AND DELIVERY POLICY");
-            contentStream.endText();
-            y -= 12;
+        if (policy == null || policy.isEmpty()) {
+            return y;
+        }
+        
+        // Section header with gray background box
+        contentStream.setNonStrokingColor(0.94f, 0.94f, 0.94f);
+        contentStream.addRect(MARGIN, y - 12, width - 2 * MARGIN, 14);
+        contentStream.fill();
+        
+        // Black text for section header
+        contentStream.setNonStrokingColor(0, 0, 0);
+        contentStream.setFont(boldFont, 10);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(MARGIN + 5, y - 10);
+        contentStream.showText("PICKUP AND DELIVERY POLICY");
+        contentStream.endText();
+        y -= LINE_HEIGHT + 5;
+        
+        // Add double spacing after section header
+        y -= LINE_HEIGHT;
+        
+        // Split policy into lines and add them
+        String[] policyLines = policy.split("\n");
+        contentStream.setFont(normalFont, 8);
+        
+        for (String line : policyLines) {
+            if (line.trim().isEmpty()) continue;
             
-            contentStream.setFont(normalFont, 8);
-            String[] policyLines = policy.split("\n");
-            for (String line : policyLines) {
-                if (!line.trim().isEmpty()) {
-                    List<String> wrappedLines = wrapText(line, width - (2 * MARGIN) - 40, normalFont, 10);
-                    for (String wrappedLine : wrappedLines) {
-                        contentStream.beginText();
-                        contentStream.newLineAtOffset(MARGIN + 20, y);
-                        contentStream.showText(wrappedLine);
-                        contentStream.endText();
-                        y -= 10;
-                    }
-                }
+            // Wrap long lines
+            List<String> wrappedLines = wrapText(line.trim(), width - 2 * MARGIN - 40, normalFont, 8);
+            for (String wrappedLine : wrappedLines) {
+                contentStream.beginText();
+                contentStream.newLineAtOffset(MARGIN + 20, y);
+                contentStream.showText(wrappedLine);
+                contentStream.endText();
+                y -= SMALL_LINE_HEIGHT;
             }
         }
         
-        return y;
+        return y - SECTION_SPACING;
     }
     
     private void addDispatcherInformation(PDPageContentStream contentStream, float y) throws IOException {
-        contentStream.setFont(boldFont, 10);
+        // Center the dispatcher information
+        String title = "DISPATCHER INFORMATION";
+        contentStream.setFont(boldFont, 8);
+        float titleWidth = boldFont.getStringWidth(title) / 1000 * 8;
+        float pageWidth = PDRectangle.LETTER.getWidth();
+        
         contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, y);
-        contentStream.showText("DISPATCHER INFORMATION");
+        contentStream.newLineAtOffset((pageWidth - titleWidth) / 2, y);
+        contentStream.showText(title);
         contentStream.endText();
-        y -= 15;
         
-        contentStream.setFont(normalFont, 9);
-        
-        List<String> dispatcherInfo = new ArrayList<>();
+        StringBuilder info = new StringBuilder();
         if (!config.getDispatcherName().isEmpty()) {
-            dispatcherInfo.add("Name: " + config.getDispatcherName());
+            info.append("Name: ").append(config.getDispatcherName());
         }
         if (!config.getDispatcherPhone().isEmpty()) {
-            dispatcherInfo.add("Phone: " + config.getDispatcherPhone());
+            if (info.length() > 0) info.append(" | ");
+            info.append("Phone: ").append(config.getDispatcherPhone());
         }
         if (!config.getDispatcherEmail().isEmpty()) {
-            dispatcherInfo.add("Email: " + config.getDispatcherEmail());
+            if (info.length() > 0) info.append(" | ");
+            info.append("Email: ").append(config.getDispatcherEmail());
         }
         if (!config.getDispatcherFax().isEmpty()) {
-            dispatcherInfo.add("Fax: " + config.getDispatcherFax());
+            if (info.length() > 0) info.append(" | ");
+            info.append("Fax: ").append(config.getDispatcherFax());
         }
         
-        // Display dispatcher info in a single line if it fits, otherwise wrap
-        String infoLine = String.join(" | ", dispatcherInfo);
+        String infoStr = info.toString();
+        contentStream.setFont(normalFont, 7);
+        float infoWidth = normalFont.getStringWidth(infoStr) / 1000 * 7;
+        
         contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, y);
-        contentStream.showText(infoLine);
+        contentStream.newLineAtOffset((pageWidth - infoWidth) / 2, y - 10);
+        contentStream.showText(infoStr);
         contentStream.endText();
     }
     
     private float addLabelValue(PDPageContentStream contentStream, String label, String value, float x, float y) throws IOException {
-        contentStream.setFont(boldFont, 11);
+        contentStream.setFont(boldFont, 8); // Reduced font size
         contentStream.beginText();
-        contentStream.newLineAtOffset(x, y);
+        contentStream.newLineAtOffset(x + 10, y);
         contentStream.showText(label);
         contentStream.endText();
         
-        contentStream.setFont(normalFont, 10);
-        float labelWidth = boldFont.getStringWidth(label) / 1000 * 11;
+        contentStream.setFont(normalFont, 8); // Reduced font size
         contentStream.beginText();
-        contentStream.newLineAtOffset(x + labelWidth + 10, y);
+        contentStream.newLineAtOffset(x + 65, y);
         contentStream.showText(value != null ? value : "");
         contentStream.endText();
         
-        return y - LINE_HEIGHT;
+        return y - 6; // Reduced line height
     }
     
     private String formatDateTime(LocalDate date, LocalTime time) {
@@ -578,267 +1023,145 @@ public class LoadConfirmationGenerator {
     }
     
     private float addPickupAndDropSideBySide(PDPageContentStream contentStream, Load load, float y, float width) throws IOException {
-        float columnWidth = (width - 2 * MARGIN - 20) / 2; // 20 for middle spacing
         float leftX = MARGIN;
-        float rightX = MARGIN + columnWidth + 20;
-        float startY = y;
+        float rightX = width / 2 + 10;
+        float sectionWidth = (width - 2 * MARGIN - 10) / 2; // 10 is gap between sections
+        float height = 792; // Letter page height in points
         
-        // PICKUP INFORMATION on the left
-        contentStream.setFont(boldFont, 11);
+        // Pickup Information (Left Side)
+        contentStream.setFont(boldFont, 9); // Reduced font size
         contentStream.beginText();
         contentStream.newLineAtOffset(leftX, y);
         contentStream.showText("PICKUP INFORMATION");
         contentStream.endText();
-        y -= SMALL_LINE_HEIGHT;
+        y -= 8; // Reduced spacing
         
-        contentStream.setFont(normalFont, 9);
-        float pickupY = y;
+        // Pickup details
+        contentStream.setFont(normalFont, 8); // Reduced font size
+        y = addLabelValue(contentStream, "Customer:", load.getCustomer(), leftX, y);
+        y = addLabelValue(contentStream, "Address:", load.getPickUpLocation(), leftX, y);
         
-        // Customer
-        contentStream.setFont(boldFont, 9);
-        contentStream.beginText();
-        contentStream.newLineAtOffset(leftX + 10, pickupY);
-        contentStream.showText("Customer:");
-        contentStream.endText();
-        contentStream.setFont(normalFont, 9);
-        contentStream.beginText();
-        contentStream.newLineAtOffset(leftX + 65, pickupY);
-        contentStream.showText(load.getCustomer() != null ? load.getCustomer() : "");
-        contentStream.endText();
-        pickupY -= SMALL_LINE_HEIGHT;
+        String pickupDateTime = formatDateTime(load.getPickUpDate(), load.getPickUpTime());
+        y = addLabelValue(contentStream, "Date/Time:", pickupDateTime, leftX, y);
         
-        // Address
-        contentStream.setFont(boldFont, 9);
-        contentStream.beginText();
-        contentStream.newLineAtOffset(leftX + 10, pickupY);
-        contentStream.showText("Address:");
-        contentStream.endText();
-        contentStream.setFont(normalFont, 9);
-        String pickupAddr = load.getPickUpLocation() != null ? load.getPickUpLocation() : "";
-        // Wrap address if too long
-        List<String> pickupLines = wrapText(pickupAddr, columnWidth - 70, normalFont, 9);
-        for (int i = 0; i < pickupLines.size(); i++) {
+        if (load.getPONumber() != null && !load.getPONumber().isEmpty()) {
+            y = addLabelValue(contentStream, "PO #:", load.getPONumber(), leftX, y);
+        }
+        
+        // Additional pickup locations
+        List<LoadLocation> additionalPickups = new ArrayList<>();
+        if (load.getLocations() != null) {
+            additionalPickups = load.getLocations().stream()
+                .filter(loc -> loc.getType() == LoadLocation.LocationType.PICKUP && loc.getSequence() > 1)
+                .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
+                .collect(java.util.stream.Collectors.toList());
+        }
+        
+        if (!additionalPickups.isEmpty()) {
+            y -= 5; // Extra spacing
+            contentStream.setFont(boldFont, 7); // Reduced font size
             contentStream.beginText();
-            contentStream.newLineAtOffset(leftX + 65, pickupY);
-            contentStream.showText(pickupLines.get(i));
+            contentStream.newLineAtOffset(leftX, y);
+            contentStream.showText("Additional Pickup Locations:");
             contentStream.endText();
-            if (i < pickupLines.size() - 1) {
-                pickupY -= SMALL_LINE_HEIGHT;
+            y -= 6; // Reduced spacing
+            
+            for (int i = 0; i < additionalPickups.size(); i++) {
+                LoadLocation loc = additionalPickups.get(i);
+                String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
+                    loc.getCustomer() : "";
+                String address = formatLocationAddress(loc);
+                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
+                
+                String locationLine = String.format("%d. %s - %s - %s", 
+                    i + 1, customer, address, time);
+                
+                contentStream.setFont(normalFont, 7); // Reduced font size
+                contentStream.beginText();
+                contentStream.newLineAtOffset(leftX + 10, y);
+                contentStream.showText(locationLine);
+                contentStream.endText();
+                y -= 5; // Reduced spacing
+                
+                // Add notes if present
+                if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
+                    contentStream.setFont(normalFont, 6); // Reduced font size
+                    contentStream.beginText();
+                    contentStream.newLineAtOffset(leftX + 15, y);
+                    contentStream.showText("Notes: " + loc.getNotes());
+                    contentStream.endText();
+                    y -= 4; // Reduced spacing
+                }
             }
         }
-        pickupY -= SMALL_LINE_HEIGHT;
         
-        // Date/Time
-        String pickupDateTime = formatDateTime(load.getPickUpDate(), load.getPickUpTime());
-        contentStream.setFont(boldFont, 9);
-        contentStream.beginText();
-        contentStream.newLineAtOffset(leftX + 10, pickupY);
-        contentStream.showText("Date/Time:");
-        contentStream.endText();
-        contentStream.setFont(normalFont, 9);
-        contentStream.beginText();
-        contentStream.newLineAtOffset(leftX + 65, pickupY);
-        contentStream.showText(pickupDateTime);
-        contentStream.endText();
-        pickupY -= SMALL_LINE_HEIGHT;
+        // Reset Y position for drop section
+        y = height - MARGIN - 80; // Reset to same level as pickup section
         
-        // PO Number if present
-        if (load.getPONumber() != null && !load.getPONumber().isEmpty()) {
-            contentStream.setFont(boldFont, 9);
-            contentStream.beginText();
-            contentStream.newLineAtOffset(leftX + 10, pickupY);
-            contentStream.showText("PO #:");
-            contentStream.endText();
-            contentStream.setFont(normalFont, 9);
-            contentStream.beginText();
-            contentStream.newLineAtOffset(leftX + 65, pickupY);
-            contentStream.showText(load.getPONumber());
-            contentStream.endText();
-            pickupY -= SMALL_LINE_HEIGHT;
-        }
-        
-        // DROP INFORMATION on the right
-        y = startY;
-        contentStream.setFont(boldFont, 11);
+        // Drop Information (Right Side)
+        contentStream.setFont(boldFont, 9); // Reduced font size
         contentStream.beginText();
         contentStream.newLineAtOffset(rightX, y);
         contentStream.showText("DROP INFORMATION");
         contentStream.endText();
-        y -= SMALL_LINE_HEIGHT;
+        y -= 8; // Reduced spacing
         
-        contentStream.setFont(normalFont, 9);
-        float dropY = y;
+        // Drop details
+        contentStream.setFont(normalFont, 8); // Reduced font size
+        y = addLabelValue(contentStream, "Customer:", load.getCustomer2() != null ? load.getCustomer2() : load.getCustomer(), rightX, y);
+        y = addLabelValue(contentStream, "Address:", load.getDropLocation(), rightX, y);
         
-        // Customer
-        contentStream.setFont(boldFont, 9);
-        contentStream.beginText();
-        contentStream.newLineAtOffset(rightX + 10, dropY);
-        contentStream.showText("Customer:");
-        contentStream.endText();
-        contentStream.setFont(normalFont, 9);
-        contentStream.beginText();
-        contentStream.newLineAtOffset(rightX + 65, dropY);
-        contentStream.showText(load.getCustomer2() != null ? load.getCustomer2() : (load.getCustomer() != null ? load.getCustomer() : ""));
-        contentStream.endText();
-        dropY -= SMALL_LINE_HEIGHT;
-        
-        // Address
-        contentStream.setFont(boldFont, 9);
-        contentStream.beginText();
-        contentStream.newLineAtOffset(rightX + 10, dropY);
-        contentStream.showText("Address:");
-        contentStream.endText();
-        contentStream.setFont(normalFont, 9);
-        String dropAddr = load.getDropLocation() != null ? load.getDropLocation() : "";
-        // Wrap address if too long
-        List<String> dropLines = wrapText(dropAddr, columnWidth - 70, normalFont, 9);
-        for (int i = 0; i < dropLines.size(); i++) {
-            contentStream.beginText();
-            contentStream.newLineAtOffset(rightX + 65, dropY);
-            contentStream.showText(dropLines.get(i));
-            contentStream.endText();
-            if (i < dropLines.size() - 1) {
-                dropY -= SMALL_LINE_HEIGHT;
-            }
-        }
-        dropY -= SMALL_LINE_HEIGHT;
-        
-        // Date/Time
         String dropDateTime = formatDateTime(load.getDeliveryDate(), load.getDeliveryTime());
-        contentStream.setFont(boldFont, 9);
-        contentStream.beginText();
-        contentStream.newLineAtOffset(rightX + 10, dropY);
-        contentStream.showText("Date/Time:");
-        contentStream.endText();
-        contentStream.setFont(normalFont, 9);
-        contentStream.beginText();
-        contentStream.newLineAtOffset(rightX + 65, dropY);
-        contentStream.showText(dropDateTime);
-        contentStream.endText();
-        dropY -= SMALL_LINE_HEIGHT;
+        y = addLabelValue(contentStream, "Date/Time:", dropDateTime, rightX, y);
         
-        // Check for additional locations
-        List<LoadLocation> additionalPickups = load.getLocations().stream()
-            .filter(loc -> loc.getType() == LoadLocation.LocationType.PICKUP)
-            .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
-            .collect(java.util.stream.Collectors.toList());
+        // Additional drop locations
+        List<LoadLocation> additionalDrops = new ArrayList<>();
+        if (load.getLocations() != null) {
+            additionalDrops = load.getLocations().stream()
+                .filter(loc -> loc.getType() == LoadLocation.LocationType.DROP && loc.getSequence() > 1)
+                .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
+                .collect(java.util.stream.Collectors.toList());
+        }
+        
+        if (!additionalDrops.isEmpty()) {
+            y -= 5; // Extra spacing
+            contentStream.setFont(boldFont, 7); // Reduced font size
+            contentStream.beginText();
+            contentStream.newLineAtOffset(rightX, y);
+            contentStream.showText("Additional Drop Locations:");
+            contentStream.endText();
+            y -= 6; // Reduced spacing
             
-        List<LoadLocation> additionalDrops = load.getLocations().stream()
-            .filter(loc -> loc.getType() == LoadLocation.LocationType.DROP)
-            .sorted((a, b) -> Integer.compare(a.getSequence(), b.getSequence()))
-            .collect(java.util.stream.Collectors.toList());
-        
-        float lowestY = Math.min(pickupY, dropY);
-        
-        // Add additional locations if any
-        if (!additionalPickups.isEmpty() || !additionalDrops.isEmpty()) {
-            lowestY -= 10; // Small spacing before additional locations
-            
-            // Additional pickup locations on the left
-            if (!additionalPickups.isEmpty()) {
-                contentStream.setFont(boldFont, 9);
+            for (int i = 0; i < additionalDrops.size(); i++) {
+                LoadLocation loc = additionalDrops.get(i);
+                String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
+                    loc.getCustomer() : "";
+                String address = formatLocationAddress(loc);
+                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
+                
+                String locationLine = String.format("%d. %s - %s - %s", 
+                    i + 1, customer, address, time);
+                
+                contentStream.setFont(normalFont, 7); // Reduced font size
                 contentStream.beginText();
-                contentStream.newLineAtOffset(leftX + 10, lowestY);
-                contentStream.showText("Additional Pickup Locations:");
+                contentStream.newLineAtOffset(rightX + 10, y);
+                contentStream.showText(locationLine);
                 contentStream.endText();
-                lowestY -= SMALL_LINE_HEIGHT;
+                y -= 5; // Reduced spacing
                 
-                for (int i = 0; i < additionalPickups.size(); i++) {
-                    LoadLocation loc = additionalPickups.get(i);
-                    
-                    // Format location info
-                    String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
-                        loc.getCustomer() : "";
-                    String address = formatLocationAddress(loc);
-                    String time = loc.getTime() != null ? 
-                        loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
-                    
-                    String locationLine = String.format("%d. %s - %s - %s", 
-                        i + 1, customer, address, time);
-                    
-                    // Wrap text if too long
-                    List<String> lines = wrapText(locationLine, columnWidth - 20, normalFont, 8);
-                    contentStream.setFont(normalFont, 8);
-                    for (String line : lines) {
-                        contentStream.beginText();
-                        contentStream.newLineAtOffset(leftX + 20, lowestY);
-                        contentStream.showText(line);
-                        contentStream.endText();
-                        lowestY -= SMALL_LINE_HEIGHT;
-                    }
-                    
-                    // Add notes if present
-                    if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
-                        contentStream.setFont(normalFont, 7);
-                        List<String> noteLines = wrapText("Notes: " + loc.getNotes(), 
-                            columnWidth - 30, normalFont, 7);
-                        for (String noteLine : noteLines) {
-                            contentStream.beginText();
-                            contentStream.newLineAtOffset(leftX + 30, lowestY);
-                            contentStream.showText(noteLine);
-                            contentStream.endText();
-                            lowestY -= SMALL_LINE_HEIGHT;
-                        }
-                    }
+                // Add notes if present
+                if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
+                    contentStream.setFont(normalFont, 6); // Reduced font size
+                    contentStream.beginText();
+                    contentStream.newLineAtOffset(rightX + 15, y);
+                    contentStream.showText("Notes: " + loc.getNotes());
+                    contentStream.endText();
+                    y -= 4; // Reduced spacing
                 }
-            }
-            
-            // Additional drop locations on the right
-            float dropAdditionalY = Math.min(pickupY, dropY) - 10;
-            if (!additionalDrops.isEmpty()) {
-                contentStream.setFont(boldFont, 9);
-                contentStream.beginText();
-                contentStream.newLineAtOffset(rightX + 10, dropAdditionalY);
-                contentStream.showText("Additional Drop Locations:");
-                contentStream.endText();
-                dropAdditionalY -= SMALL_LINE_HEIGHT;
-                
-                for (int i = 0; i < additionalDrops.size(); i++) {
-                    LoadLocation loc = additionalDrops.get(i);
-                    
-                    // Format location info
-                    String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
-                        loc.getCustomer() : "";
-                    String address = formatLocationAddress(loc);
-                    String time = loc.getTime() != null ? 
-                        loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
-                    
-                    String locationLine = String.format("%d. %s - %s - %s", 
-                        i + 1, customer, address, time);
-                    
-                    // Wrap text if too long
-                    List<String> lines = wrapText(locationLine, columnWidth - 20, normalFont, 8);
-                    contentStream.setFont(normalFont, 8);
-                    for (String line : lines) {
-                        contentStream.beginText();
-                        contentStream.newLineAtOffset(rightX + 20, dropAdditionalY);
-                        contentStream.showText(line);
-                        contentStream.endText();
-                        dropAdditionalY -= SMALL_LINE_HEIGHT;
-                    }
-                    
-                    // Add notes if present
-                    if (loc.getNotes() != null && !loc.getNotes().isEmpty()) {
-                        contentStream.setFont(normalFont, 7);
-                        List<String> noteLines = wrapText("Notes: " + loc.getNotes(), 
-                            columnWidth - 30, normalFont, 7);
-                        for (String noteLine : noteLines) {
-                            contentStream.beginText();
-                            contentStream.newLineAtOffset(rightX + 30, dropAdditionalY);
-                            contentStream.showText(noteLine);
-                            contentStream.endText();
-                            dropAdditionalY -= SMALL_LINE_HEIGHT;
-                        }
-                    }
-                }
-                
-                // Update lowestY to be the minimum of both columns
-                lowestY = Math.min(lowestY, dropAdditionalY);
             }
         }
         
-        // Return the lower y position
-        return lowestY - SECTION_SPACING;
+        return y - 10; // Reduced spacing
     }
     
     private String getCompanyNameFromConfig() {

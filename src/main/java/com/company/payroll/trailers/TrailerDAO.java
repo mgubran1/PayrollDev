@@ -62,6 +62,7 @@ public class TrailerDAO {
                     current_location TEXT,
                     monthly_lease_cost REAL,
                     lease_details TEXT,
+                    lease_agreement_expiry_date TEXT,
                     insurance_policy_number TEXT,
                     last_inspection_date TEXT,
                     next_inspection_due_date TEXT,
@@ -89,6 +90,15 @@ public class TrailerDAO {
             
             logger.info("Trailer database initialized successfully");
             
+            // Add lease_agreement_expiry_date column if it doesn't exist
+            try {
+                stmt.execute("ALTER TABLE trailers ADD COLUMN lease_agreement_expiry_date TEXT");
+                logger.info("Added lease_agreement_expiry_date column to trailers table");
+            } catch (SQLException e) {
+                // Column might already exist, which is fine
+                logger.debug("lease_agreement_expiry_date column already exists or could not be added: {}", e.getMessage());
+            }
+            
         } catch (SQLException e) {
             logger.error("Failed to initialize trailer database", e);
             throw new DataAccessException("Failed to initialize database", e);
@@ -114,13 +124,13 @@ public class TrailerDAO {
                 max_weight, empty_weight, axle_count, suspension_type,
                 has_thermal_unit, thermal_unit_details, ownership_type,
                 purchase_price, purchase_date, current_value, current_location,
-                monthly_lease_cost, lease_details, insurance_policy_number,
+                monthly_lease_cost, lease_details, lease_agreement_expiry_date, insurance_policy_number,
                 last_inspection_date, next_inspection_due_date, last_service_date,
                 next_service_due_date, current_condition, maintenance_notes,
                 assigned_driver, assigned_truck, is_assigned, current_job_id,
                 last_updated, updated_by, notes, odometer_reading
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -160,7 +170,7 @@ public class TrailerDAO {
                 has_thermal_unit = ?, thermal_unit_details = ?, ownership_type = ?,
                 purchase_price = ?, purchase_date = ?, current_value = ?,
                 current_location = ?, monthly_lease_cost = ?, lease_details = ?,
-                insurance_policy_number = ?, last_inspection_date = ?,
+                lease_agreement_expiry_date = ?, insurance_policy_number = ?, last_inspection_date = ?,
                 next_inspection_due_date = ?, last_service_date = ?,
                 next_service_due_date = ?, current_condition = ?, maintenance_notes = ?,
                 assigned_driver = ?, assigned_truck = ?, is_assigned = ?,
@@ -173,7 +183,7 @@ public class TrailerDAO {
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             setTrailerParameters(pstmt, trailer);
-            pstmt.setInt(45, trailer.getId());
+            pstmt.setInt(46, trailer.getId());
             
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows == 0) {
@@ -511,6 +521,102 @@ public class TrailerDAO {
         }
     }
     
+    /**
+     * Add or update multiple trailers from import
+     * Checks for existing trailers by trailer number and updates them, or adds new ones
+     * Returns the list of trailers with proper IDs assigned
+     */
+    public List<Trailer> addOrUpdateAll(List<Trailer> trailers) {
+        logger.info("Processing {} trailers for import", trailers.size());
+        List<Trailer> resultTrailers = new ArrayList<>();
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            conn.setAutoCommit(false);
+            
+            try {
+                int added = 0;
+                int updated = 0;
+                
+                for (Trailer importedTrailer : trailers) {
+                    // Check if trailer exists by trailer number
+                    Trailer existing = findByTrailerNumber(importedTrailer.getTrailerNumber());
+                    
+                    if (existing != null) {
+                        // Merge imported data with existing data
+                        mergeTrailerData(existing, importedTrailer);
+                        update(existing);
+                        resultTrailers.add(existing); // Use existing trailer with proper ID
+                        updated++;
+                        logger.debug("Updated existing trailer: {} (ID: {})", existing.getTrailerNumber(), existing.getId());
+                    } else {
+                        // Add new trailer
+                        Trailer insertedTrailer = insert(importedTrailer);
+                        resultTrailers.add(insertedTrailer); // Use inserted trailer with proper ID
+                        added++;
+                        logger.debug("Added new trailer: {} (ID: {})", insertedTrailer.getTrailerNumber(), insertedTrailer.getId());
+                    }
+                }
+                
+                conn.commit();
+                logger.info("Import completed - Added: {}, Updated: {}", added, updated);
+                
+                // Validate that all result trailers have proper IDs
+                for (Trailer trailer : resultTrailers) {
+                    if (trailer.getId() <= 0) {
+                        logger.error("CRITICAL: Trailer {} has invalid ID: {}", trailer.getTrailerNumber(), trailer.getId());
+                    } else {
+                        logger.debug("Trailer {} has valid ID: {}", trailer.getTrailerNumber(), trailer.getId());
+                    }
+                }
+                
+            } catch (Exception e) {
+                conn.rollback();
+                logger.error("Import failed, rolling back transaction", e);
+                throw new DataAccessException("Import failed", e);
+            }
+        } catch (SQLException e) {
+            logger.error("Database connection error during import", e);
+            throw new DataAccessException("Database connection error", e);
+        }
+        
+        return resultTrailers;
+    }
+    
+    /**
+     * Merge imported trailer data with existing trailer data
+     * Only updates fields that are provided in the import, preserves existing data
+     */
+    private void mergeTrailerData(Trailer existing, Trailer imported) {
+        // Only update fields that are provided in the import
+        if (imported.getYear() > 0) {
+            existing.setYear(imported.getYear());
+        }
+        
+        if (imported.getLicensePlate() != null && !imported.getLicensePlate().isEmpty()) {
+            existing.setLicensePlate(imported.getLicensePlate());
+        }
+        
+        if (imported.getMake() != null && !imported.getMake().isEmpty()) {
+            existing.setMake(imported.getMake());
+        }
+        
+        if (imported.getVin() != null && !imported.getVin().isEmpty()) {
+            existing.setVin(imported.getVin());
+        }
+        
+        if (imported.getLastInspectionDate() != null) {
+            existing.setLastInspectionDate(imported.getLastInspectionDate());
+        }
+        
+        if (imported.getNextInspectionDueDate() != null) {
+            existing.setNextInspectionDueDate(imported.getNextInspectionDueDate());
+        }
+        
+        // Update last modified timestamp
+        existing.setLastUpdated(LocalDateTime.now());
+        existing.setUpdatedBy("IMPORT");
+    }
+    
     // Helper methods
     
     private void setTrailerParameters(PreparedStatement pstmt, Trailer trailer) throws SQLException {
@@ -548,24 +654,25 @@ public class TrailerDAO {
         pstmt.setString(27, trailer.getCurrentLocation());
         pstmt.setDouble(28, trailer.getMonthlyLeaseCost());
         pstmt.setString(29, trailer.getLeaseDetails());
-        pstmt.setString(30, trailer.getInsurancePolicyNumber());
+        pstmt.setString(30, trailer.getLeaseAgreementExpiryDate() != null ? trailer.getLeaseAgreementExpiryDate().toString() : null);
+        pstmt.setString(31, trailer.getInsurancePolicyNumber());
         
-        pstmt.setString(31, trailer.getLastInspectionDate() != null ? trailer.getLastInspectionDate().toString() : null);
-        pstmt.setString(32, trailer.getNextInspectionDueDate() != null ? trailer.getNextInspectionDueDate().toString() : null);
-        pstmt.setString(33, trailer.getLastServiceDate() != null ? trailer.getLastServiceDate().toString() : null);
-        pstmt.setString(34, trailer.getNextServiceDueDate() != null ? trailer.getNextServiceDueDate().toString() : null);
+        pstmt.setString(32, trailer.getLastInspectionDate() != null ? trailer.getLastInspectionDate().toString() : null);
+        pstmt.setString(33, trailer.getNextInspectionDueDate() != null ? trailer.getNextInspectionDueDate().toString() : null);
+        pstmt.setString(34, trailer.getLastServiceDate() != null ? trailer.getLastServiceDate().toString() : null);
+        pstmt.setString(35, trailer.getNextServiceDueDate() != null ? trailer.getNextServiceDueDate().toString() : null);
         
-        pstmt.setString(35, trailer.getCurrentCondition());
-        pstmt.setString(36, trailer.getMaintenanceNotes());
-        pstmt.setString(37, trailer.getAssignedDriver());
-        pstmt.setString(38, trailer.getAssignedTruck());
-        pstmt.setBoolean(39, trailer.isAssigned());
-        pstmt.setString(40, trailer.getCurrentJobId());
+        pstmt.setString(36, trailer.getCurrentCondition());
+        pstmt.setString(37, trailer.getMaintenanceNotes());
+        pstmt.setString(38, trailer.getAssignedDriver());
+        pstmt.setString(39, trailer.getAssignedTruck());
+        pstmt.setBoolean(40, trailer.isAssigned());
+        pstmt.setString(41, trailer.getCurrentJobId());
         
-        pstmt.setTimestamp(41, trailer.getLastUpdated() != null ? Timestamp.valueOf(trailer.getLastUpdated()) : Timestamp.valueOf(LocalDateTime.now()));
-        pstmt.setString(42, trailer.getUpdatedBy() != null ? trailer.getUpdatedBy() : "mgubran1");
-        pstmt.setString(43, trailer.getNotes());
-        pstmt.setInt(44, trailer.getOdometerReading());
+        pstmt.setTimestamp(42, trailer.getLastUpdated() != null ? Timestamp.valueOf(trailer.getLastUpdated()) : Timestamp.valueOf(LocalDateTime.now()));
+        pstmt.setString(43, trailer.getUpdatedBy() != null ? trailer.getUpdatedBy() : "mgubran1");
+        pstmt.setString(44, trailer.getNotes());
+        pstmt.setInt(45, trailer.getOdometerReading());
     }
     
     private Trailer mapResultSetToTrailer(ResultSet rs) throws SQLException {
@@ -653,6 +760,16 @@ public class TrailerDAO {
         trailer.setCurrentLocation(rs.getString("current_location"));
         trailer.setMonthlyLeaseCost(rs.getDouble("monthly_lease_cost"));
         trailer.setLeaseDetails(rs.getString("lease_details"));
+        
+        String leaseExpiry = rs.getString("lease_agreement_expiry_date");
+        if (leaseExpiry != null && !leaseExpiry.isEmpty()) {
+            try {
+                trailer.setLeaseAgreementExpiryDate(LocalDate.parse(leaseExpiry));
+            } catch (Exception e) {
+                logger.warn("Invalid lease agreement expiry date: {}", leaseExpiry);
+            }
+        }
+        
         trailer.setInsurancePolicyNumber(rs.getString("insurance_policy_number"));
         
         String lastInspection = rs.getString("last_inspection_date");

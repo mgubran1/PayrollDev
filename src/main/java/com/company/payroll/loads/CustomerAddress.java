@@ -14,6 +14,7 @@ public class CustomerAddress {
     private String state;
     private boolean isDefaultPickup; // Flag to mark default pickup location
     private boolean isDefaultDrop; // Flag to mark default drop location
+    private String customerName; // Customer name for display purposes
     
     public CustomerAddress() {
     }
@@ -95,6 +96,14 @@ public class CustomerAddress {
     
     public void setDefaultDrop(boolean isDefaultDrop) {
         this.isDefaultDrop = isDefaultDrop;
+    }
+    
+    public String getCustomerName() {
+        return customerName;
+    }
+    
+    public void setCustomerName(String customerName) {
+        this.customerName = customerName;
     }
     
     // Get full address as single line

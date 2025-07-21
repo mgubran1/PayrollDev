@@ -57,6 +57,8 @@ import javafx.scene.shape.ArcType;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.layout.StackPane;
 import com.company.payroll.export.PDFExporter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Professional Company Financials Tab - Displays comprehensive financial data including:
@@ -107,6 +109,8 @@ public class CompanyFinancialsTab extends BorderPane {
     
     // Company name
     private String companyName = "Company";
+    
+    private static final Logger logger = LoggerFactory.getLogger(CompanyFinancialsTab.class);
 
     public CompanyFinancialsTab(PayrollTab payrollTab, CompanyExpenseDAO companyExpenseDAO, MaintenanceDAO maintenanceDAO) {
         this.payrollTab = payrollTab;
@@ -1006,10 +1010,10 @@ public class CompanyFinancialsTab extends BorderPane {
         // Update charts
         updateCharts();
         
-        // Show success message
-        showInfo(String.format("Data refreshed for %s to %s", 
+        // Update status without showing dialog
+        logger.info("Data refreshed for {} to {}", 
             start.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")),
-            end.format(DateTimeFormatter.ofPattern("MM/dd/yyyy"))));
+            end.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")));
         
         // Update visual analytics
         updateVisualAnalytics();
@@ -1730,6 +1734,12 @@ public class CompanyFinancialsTab extends BorderPane {
     }
     
     private void showInfo(String message) {
+        // Don't show dialogs during jpackage testing
+        if ("true".equals(System.getProperty("jpackage.testing"))) {
+            logger.info("Suppressing dialog during jpackage testing: {}", message);
+            return;
+        }
+        
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Information");
         alert.setHeaderText(null);

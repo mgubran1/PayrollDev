@@ -48,6 +48,7 @@ public class Trailer {
     private final DoubleProperty currentValue = new SimpleDoubleProperty();
     private final DoubleProperty monthlyLeaseCost = new SimpleDoubleProperty();
     private final StringProperty leaseDetails = new SimpleStringProperty();
+    private final ObjectProperty<LocalDate> leaseAgreementExpiryDate = new SimpleObjectProperty<>();
     private final StringProperty insurancePolicyNumber = new SimpleStringProperty();
     private final ObjectProperty<LocalDate> insuranceExpiryDate = new SimpleObjectProperty<>();
     
@@ -117,6 +118,16 @@ public class Trailer {
     
     public long getDaysUntilInsuranceExpiry() {
         LocalDate expiry = insuranceExpiryDate.get();
+        return expiry != null ? ChronoUnit.DAYS.between(LocalDate.now(), expiry) : 0;
+    }
+    
+    public boolean isLeaseAgreementExpired() {
+        LocalDate expiry = leaseAgreementExpiryDate.get();
+        return expiry != null && expiry.isBefore(LocalDate.now());
+    }
+    
+    public long getDaysUntilLeaseAgreementExpiry() {
+        LocalDate expiry = leaseAgreementExpiryDate.get();
         return expiry != null ? ChronoUnit.DAYS.between(LocalDate.now(), expiry) : 0;
     }
     
@@ -262,6 +273,10 @@ public class Trailer {
     
     public StringProperty leaseDetailsProperty() {
         return leaseDetails;
+    }
+    
+    public ObjectProperty<LocalDate> leaseAgreementExpiryDateProperty() {
+        return leaseAgreementExpiryDate;
     }
     
     public StringProperty insurancePolicyNumberProperty() {
@@ -570,6 +585,15 @@ public class Trailer {
     
     public void setLeaseDetails(String leaseDetails) {
         this.leaseDetails.set(leaseDetails);
+        updateLastModified();
+    }
+    
+    public LocalDate getLeaseAgreementExpiryDate() {
+        return leaseAgreementExpiryDate.get();
+    }
+    
+    public void setLeaseAgreementExpiryDate(LocalDate leaseAgreementExpiryDate) {
+        this.leaseAgreementExpiryDate.set(leaseAgreementExpiryDate);
         updateLastModified();
     }
     

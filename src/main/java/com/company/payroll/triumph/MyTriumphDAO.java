@@ -46,7 +46,7 @@ public class MyTriumphDAO {
                 );
             """;
             conn.createStatement().execute(sql);
-            logger.info("MyTriumph audit table initialized successfully");
+            logger.info("Invoice audit table initialized successfully");
         } catch (SQLException e) {
             logger.error("Failed to initialize MyTriumphDAO: {}", e.getMessage(), e);
             throw new DataAccessException("Failed to initialize MyTriumphDAO", e);
@@ -54,7 +54,7 @@ public class MyTriumphDAO {
     }
 
     public List<MyTriumphRecord> getAll() {
-        logger.debug("Fetching all MyTriumph audit records");
+        logger.debug("Fetching all Invoice audit records");
         List<MyTriumphRecord> records = new ArrayList<>();
         try (Connection conn = DriverManager.getConnection(DB_URL)) {
             String sql = "SELECT * FROM mytriumph_audit ORDER BY invoice_date DESC";
@@ -62,9 +62,9 @@ public class MyTriumphDAO {
             while (rs.next()) {
                 records.add(mapRow(rs));
             }
-            logger.info("Retrieved {} MyTriumph audit records", records.size());
+            logger.info("Retrieved {} Invoice audit records", records.size());
         } catch (SQLException e) {
-            logger.error("Error fetching MyTriumph audit records: {}", e.getMessage(), e);
+            logger.error("Error fetching Invoice audit records: {}", e.getMessage(), e);
             throw new DataAccessException("Error fetching records", e);
         }
         return records;

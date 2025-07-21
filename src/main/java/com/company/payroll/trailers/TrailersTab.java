@@ -1,5 +1,7 @@
 package com.company.payroll.trailers;
 
+import com.company.payroll.config.DOTComplianceConfig;
+import com.company.payroll.config.DOTComplianceConfigDialog;
 import com.company.payroll.employees.Employee;
 import com.company.payroll.employees.EmployeeDAO;
 import javafx.beans.property.SimpleObjectProperty;
@@ -13,6 +15,7 @@ import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
 import javafx.util.Callback;
 import org.slf4j.Logger;
@@ -26,6 +29,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.util.*;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.concurrent.Task;
 
 /**
  * Enhanced Trailers tab for managing fleet information with focus on document tracking
@@ -124,6 +130,16 @@ public class TrailersTab extends BorderPane {
         insExpiryCol.setCellFactory(getExpiryDateCellFactory());
         insExpiryCol.setPrefWidth(150);
         
+        TableColumn<Trailer, LocalDate> leaseExpiryCol = new TableColumn<>("Lease Agreement Expiry");
+        leaseExpiryCol.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().getLeaseAgreementExpiryDate()));
+        leaseExpiryCol.setCellFactory(getExpiryDateCellFactory());
+        leaseExpiryCol.setPrefWidth(150);
+        
+        TableColumn<Trailer, LocalDate> inspectionCol = new TableColumn<>("Inspection");
+        inspectionCol.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().getLastInspectionDate()));
+        inspectionCol.setCellFactory(getInspectionDateCellFactory());
+        inspectionCol.setPrefWidth(120);
+        
         TableColumn<Trailer, LocalDate> inspExpiryCol = new TableColumn<>("Inspection Expiry");
         inspExpiryCol.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().getNextInspectionDueDate()));
         inspExpiryCol.setCellFactory(getExpiryDateCellFactory());
@@ -135,7 +151,7 @@ public class TrailersTab extends BorderPane {
         
         table.getColumns().setAll(java.util.List.of(
                 numberCol, vinCol, makeModelCol, typeCol, statusCol, assignedToCol,
-                regExpiryCol, insExpiryCol, inspExpiryCol, plateCol));
+                regExpiryCol, insExpiryCol, leaseExpiryCol, inspectionCol, inspExpiryCol, plateCol));
         
         // --- FILTERED/SORTED VIEW ---
         FilteredList<Trailer> filteredTrailers = new FilteredList<>(trailers, p -> true);
@@ -169,11 +185,13 @@ public class TrailersTab extends BorderPane {
         Button editBtn = ModernButtonStyles.createSecondaryButton("✏️ Edit");
         Button deleteBtn = ModernButtonStyles.createDangerButton("🗑️ Delete");
         Button refreshBtn = ModernButtonStyles.createSuccessButton("🔄 Refresh");
+        Button importBtn = ModernButtonStyles.createInfoButton("📥 Import CSV/XLSX");
         Button uploadBtn = ModernButtonStyles.createInfoButton("📤 Upload Document");
         Button printBtn = ModernButtonStyles.createSecondaryButton("🖨️ Print Document");
         
         uploadBtn.setOnAction(e -> uploadDocument());
         printBtn.setOnAction(e -> printSelectedTrailerDocuments());
+        importBtn.setOnAction(e -> showImportDialog());
         
         addBtn.setOnAction(e -> {
             logger.info("Add trailer button clicked");
@@ -212,7 +230,7 @@ public class TrailersTab extends BorderPane {
             loadData();
         });
         
-        HBox btnBox = new HBox(12, addBtn, editBtn, deleteBtn, refreshBtn, uploadBtn, printBtn);
+        HBox btnBox = new HBox(12, addBtn, editBtn, deleteBtn, refreshBtn, importBtn, uploadBtn, printBtn);
         btnBox.setPadding(new Insets(12));
         btnBox.setAlignment(Pos.CENTER_LEFT);
         
@@ -253,6 +271,12 @@ public class TrailersTab extends BorderPane {
                 // Check insurance expiry
                 if (t.getInsuranceExpiryDate() != null && 
                     t.getInsuranceExpiryDate().isBefore(thirtyDaysFromNow)) {
+                    expiringCount++;
+                    continue;
+                }
+                // Check lease agreement expiry
+                if (t.getLeaseAgreementExpiryDate() != null && 
+                    t.getLeaseAgreementExpiryDate().isBefore(thirtyDaysFromNow)) {
                     expiringCount++;
                     continue;
                 }
@@ -333,6 +357,8 @@ public class TrailersTab extends BorderPane {
         statusBox.setValue(TrailerStatus.ACTIVE); // Set default value for new trailers
         DatePicker regExpiryPicker = new DatePicker();
         DatePicker insExpiryPicker = new DatePicker();
+        DatePicker leaseExpiryPicker = new DatePicker();
+        DatePicker inspectionPicker = new DatePicker();
         DatePicker inspExpiryPicker = new DatePicker();
         TextField plateField = new TextField();
         TextField lengthField = new TextField();
@@ -349,6 +375,8 @@ public class TrailersTab extends BorderPane {
             statusBox.setValue(trailer.getStatus());
             regExpiryPicker.setValue(trailer.getRegistrationExpiryDate());
             insExpiryPicker.setValue(trailer.getInsuranceExpiryDate());
+            leaseExpiryPicker.setValue(trailer.getLeaseAgreementExpiryDate());
+            inspectionPicker.setValue(trailer.getLastInspectionDate());
             inspExpiryPicker.setValue(trailer.getNextInspectionDueDate());
             plateField.setText(trailer.getLicensePlate());
             lengthField.setText(trailer.getLength() > 0 ? String.valueOf(trailer.getLength()) : "");
@@ -398,6 +426,12 @@ public class TrailersTab extends BorderPane {
         grid.add(new Label("Insurance Expiry:"), 0, row);
         grid.add(insExpiryPicker, 1, row++);
         
+        grid.add(new Label("Lease Agreement Expiry:"), 0, row);
+        grid.add(leaseExpiryPicker, 1, row++);
+        
+        grid.add(new Label("Inspection:"), 0, row);
+        grid.add(inspectionPicker, 1, row++);
+        
         grid.add(new Label("Inspection Expiry:"), 0, row);
         grid.add(inspExpiryPicker, 1, row++);
         
@@ -428,41 +462,58 @@ public class TrailersTab extends BorderPane {
             if (dialogButton == ButtonType.OK) {
                 try {
                     Trailer result = trailer != null ? trailer : new Trailer();
-                    result.setTrailerNumber(numberField.getText().trim());
-                    result.setVin(vinField.getText().trim());
-                    result.setMake(makeField.getText().trim());
-                    result.setModel(modelField.getText().trim());
                     
-                    try {
-                        if (!yearField.getText().trim().isEmpty()) {
+                    // Safe text extraction with null checks
+                    result.setTrailerNumber(numberField != null ? numberField.getText() : "");
+                    if (result.getTrailerNumber() != null) result.setTrailerNumber(result.getTrailerNumber().trim());
+                    
+                    result.setVin(vinField != null ? vinField.getText() : "");
+                    if (result.getVin() != null) result.setVin(result.getVin().trim());
+                    
+                    result.setMake(makeField != null ? makeField.getText() : "");
+                    if (result.getMake() != null) result.setMake(result.getMake().trim());
+                    
+                    result.setModel(modelField != null ? modelField.getText() : "");
+                    if (result.getModel() != null) result.setModel(result.getModel().trim());
+                    
+                    // Safe year parsing
+                    if (yearField != null && yearField.getText() != null && !yearField.getText().trim().isEmpty()) {
+                        try {
                             result.setYear(Integer.parseInt(yearField.getText().trim()));
+                        } catch (NumberFormatException e) {
+                            logger.warn("Invalid year format: {}", yearField != null ? yearField.getText() : "null");
                         }
-                    } catch (NumberFormatException e) {
-                        logger.warn("Invalid year format: {}", yearField.getText());
                     }
                     
-                    try {
-                        if (!lengthField.getText().trim().isEmpty()) {
+                    // Safe length parsing
+                    if (lengthField != null && lengthField.getText() != null && !lengthField.getText().trim().isEmpty()) {
+                        try {
                             result.setLength(Double.parseDouble(lengthField.getText().trim()));
+                        } catch (NumberFormatException e) {
+                            logger.warn("Invalid length format: {}", lengthField != null ? lengthField.getText() : "null");
                         }
-                    } catch (NumberFormatException e) {
-                        logger.warn("Invalid length format: {}", lengthField.getText());
                     }
                     
-                    try {
-                        if (!capacityField.getText().trim().isEmpty()) {
+                    // Safe capacity parsing
+                    if (capacityField != null && capacityField.getText() != null && !capacityField.getText().trim().isEmpty()) {
+                        try {
                             result.setCapacity(Double.parseDouble(capacityField.getText().trim()));
+                        } catch (NumberFormatException e) {
+                            logger.warn("Invalid capacity format: {}", capacityField != null ? capacityField.getText() : "null");
                         }
-                    } catch (NumberFormatException e) {
-                        logger.warn("Invalid capacity format: {}", capacityField.getText());
                     }
                     
-                    result.setType(typeBox.getValue());
-                    result.setStatus(statusBox.getValue() != null ? statusBox.getValue() : TrailerStatus.ACTIVE);
-                    result.setLicensePlate(plateField.getText().trim());
-                    result.setRegistrationExpiryDate(regExpiryPicker.getValue());
-                    result.setInsuranceExpiryDate(insExpiryPicker.getValue());
-                    result.setNextInspectionDueDate(inspExpiryPicker.getValue());
+                    result.setType(typeBox != null ? typeBox.getValue() : null);
+                    result.setStatus(statusBox != null ? statusBox.getValue() : TrailerStatus.ACTIVE);
+                    
+                    result.setLicensePlate(plateField != null ? plateField.getText() : "");
+                    if (result.getLicensePlate() != null) result.setLicensePlate(result.getLicensePlate().trim());
+                    
+                    result.setRegistrationExpiryDate(regExpiryPicker != null ? regExpiryPicker.getValue() : null);
+                    result.setInsuranceExpiryDate(insExpiryPicker != null ? insExpiryPicker.getValue() : null);
+                    result.setLeaseAgreementExpiryDate(leaseExpiryPicker != null ? leaseExpiryPicker.getValue() : null);
+                    result.setLastInspectionDate(inspectionPicker != null ? inspectionPicker.getValue() : null);
+                    result.setNextInspectionDueDate(inspExpiryPicker != null ? inspExpiryPicker.getValue() : null);
                     
                     return result;
                 } catch (Exception ex) {
@@ -500,56 +551,32 @@ public class TrailersTab extends BorderPane {
         dialog.setTitle("Document Manager - " + selected.getTrailerNumber());
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         
-        // Create document list view
-        ListView<String> docListView = new ListView<>();
-        updateDocumentList(docListView, selected.getTrailerNumber());
+        // Create main layout
+        VBox mainContent = new VBox(15);
+        mainContent.setPadding(new Insets(20));
+        mainContent.setPrefWidth(800);
+        mainContent.setPrefHeight(600);
         
-        // Buttons for document operations
-        Button uploadBtn = ModernButtonStyles.createPrimaryButton("📤 Upload");
-        Button viewBtn = ModernButtonStyles.createInfoButton("👁️ View");
-        Button printBtn = ModernButtonStyles.createSecondaryButton("🖨️ Print");
-        Button deleteBtn = ModernButtonStyles.createDangerButton("🗑️ Delete");
+        // Header with compliance status
+        HBox headerBox = new HBox(15);
+        headerBox.setAlignment(Pos.CENTER_LEFT);
         
-        uploadBtn.setOnAction(e -> {
-            uploadDocumentForTrailer(selected.getTrailerNumber());
-            updateDocumentList(docListView, selected.getTrailerNumber());
-        });
+        Label titleLabel = new Label("Documents for " + selected.getTrailerNumber());
+        titleLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         
-        viewBtn.setOnAction(e -> {
-            String selectedDoc = docListView.getSelectionModel().getSelectedItem();
-            if (selectedDoc != null) {
-                viewDocument(selected.getTrailerNumber(), selectedDoc);
-            }
-        });
+        // Compliance status indicator
+        HBox complianceBox = createComplianceStatusIndicator(selected.getTrailerNumber());
         
-        printBtn.setOnAction(e -> {
-            String selectedDoc = docListView.getSelectionModel().getSelectedItem();
-            if (selectedDoc != null) {
-                printDocument(selected.getTrailerNumber(), selectedDoc);
-            }
-        });
+        headerBox.getChildren().addAll(titleLabel, complianceBox);
         
-        deleteBtn.setOnAction(e -> {
-            String selectedDoc = docListView.getSelectionModel().getSelectedItem();
-            if (selectedDoc != null) {
-                deleteDocument(selected.getTrailerNumber(), selectedDoc);
-                updateDocumentList(docListView, selected.getTrailerNumber());
-            }
-        });
+        // Document list with enhanced features
+        VBox documentSection = createDocumentListSection(selected.getTrailerNumber());
         
-        HBox buttonBox = new HBox(10, uploadBtn, viewBtn, printBtn, deleteBtn);
-        buttonBox.setPadding(new Insets(10, 0, 0, 0));
-        buttonBox.setAlignment(Pos.CENTER);
+        // Action buttons
+        HBox actionButtons = createDocumentActionButtons(selected.getTrailerNumber(), documentSection);
         
-        VBox content = new VBox(10, 
-                               new Label("Documents for " + selected.getTrailerNumber()), 
-                               docListView, 
-                               buttonBox);
-        content.setPadding(new Insets(20));
-        content.setPrefWidth(500);
-        content.setPrefHeight(400);
-        
-        dialog.getDialogPane().setContent(content);
+        mainContent.getChildren().addAll(headerBox, documentSection, actionButtons);
+        dialog.getDialogPane().setContent(mainContent);
         dialog.showAndWait();
     }
     
@@ -563,6 +590,162 @@ public class TrailersTab extends BorderPane {
         }
         
         uploadDocumentForTrailer(selected.getTrailerNumber());
+    }
+    
+    /**
+     * Create compliance status indicator showing required documents
+     */
+    private HBox createComplianceStatusIndicator(String trailerNumber) {
+        HBox complianceBox = new HBox(10);
+        complianceBox.setAlignment(Pos.CENTER_LEFT);
+        
+        // Get configuration and check for required documents
+        DOTComplianceConfig config = DOTComplianceConfig.getInstance();
+        List<String> requiredDocs = config.getRequiredDocuments("trailer");
+        
+        // Check which required documents are present
+        Set<String> availableDocs = new HashSet<>();
+        for (String docType : requiredDocs) {
+            if (hasDocument(trailerNumber, docType)) {
+                availableDocs.add(docType);
+            }
+        }
+        
+        boolean allCompliant = config.isCompliant("trailer", availableDocs);
+        List<String> missingDocs = config.getMissingDocuments("trailer", availableDocs);
+        
+        // Create status indicators for each required document
+        VBox statusIndicators = new VBox(5);
+        for (String docType : requiredDocs) {
+            boolean hasDoc = availableDocs.contains(docType);
+            Circle statusLight = new Circle(6);
+            statusLight.setFill(hasDoc ? Color.GREEN : Color.RED);
+            Label docLabel = new Label(docType);
+            docLabel.setFont(Font.font("Arial", 10));
+            
+            VBox indicator = new VBox(2, statusLight, docLabel);
+            statusIndicators.getChildren().add(indicator);
+        }
+        
+        // Overall compliance status
+        Circle overallStatus = new Circle(10);
+        overallStatus.setFill(allCompliant ? Color.GREEN : Color.ORANGE);
+        String statusText = allCompliant ? "Compliant" : "Missing Documents";
+        if (!allCompliant && !missingDocs.isEmpty()) {
+            statusText += " (" + missingDocs.size() + " missing)";
+        }
+        Label overallLabel = new Label(statusText);
+        overallLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+        
+        // Add configuration button
+        Button configBtn = new Button("⚙️ Configure");
+        configBtn.setStyle("-fx-font-size: 10px;");
+        configBtn.setOnAction(e -> showComplianceConfiguration());
+        
+        complianceBox.getChildren().addAll(statusIndicators, new VBox(2, overallStatus, overallLabel), configBtn);
+        
+        return complianceBox;
+    }
+    
+    private void showComplianceConfiguration() {
+        DOTComplianceConfigDialog dialog = new DOTComplianceConfigDialog();
+        dialog.showAndWait();
+        
+        // Refresh the document manager if it's open
+        // This will update the compliance status with new configuration
+    }
+    
+    /**
+     * Create enhanced document list section with categorization
+     */
+    private VBox createDocumentListSection(String trailerNumber) {
+        VBox documentSection = new VBox(10);
+        
+        // Get categories from configuration
+        DOTComplianceConfig config = DOTComplianceConfig.getInstance();
+        Map<String, Boolean> trailerReqs = config.getTrailerRequirements();
+        String[] categories = trailerReqs.keySet().toArray(new String[0]);
+        
+        // Create categorized document list
+        ListView<DocumentItem> docListView = new ListView<>();
+        docListView.setCellFactory(param -> new DocumentListCell());
+        docListView.setPrefHeight(300);
+        
+        // Load and categorize documents
+        ObservableList<DocumentItem> documents = loadCategorizedDocuments(trailerNumber, categories);
+        docListView.setItems(documents);
+        
+        // Add selection listener for multiple selection
+        docListView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        
+        documentSection.getChildren().addAll(
+            new Label("Documents (Select multiple for merge):"),
+            docListView
+        );
+        
+        return documentSection;
+    }
+    
+    /**
+     * Create action buttons for document management
+     */
+    private HBox createDocumentActionButtons(String trailerNumber, VBox documentSection) {
+        HBox actionButtons = new HBox(10);
+        actionButtons.setAlignment(Pos.CENTER);
+        actionButtons.setPadding(new Insets(10, 0, 0, 0));
+        
+        Button uploadBtn = ModernButtonStyles.createPrimaryButton("📤 Upload Document");
+        Button viewBtn = ModernButtonStyles.createInfoButton("👁️ View Selected");
+        Button mergeBtn = ModernButtonStyles.createSecondaryButton("🔗 Merge Selected");
+        Button printBtn = ModernButtonStyles.createSecondaryButton("🖨️ Print Selected");
+        Button deleteBtn = ModernButtonStyles.createDangerButton("🗑️ Delete Selected");
+        Button folderBtn = ModernButtonStyles.createSecondaryButton("📁 Open Folder");
+        
+        // Get the ListView from the document section
+        ListView<DocumentItem> docListView = (ListView<DocumentItem>) documentSection.getChildren().get(1);
+        
+        uploadBtn.setOnAction(e -> {
+            uploadDocumentForTrailerEnhanced(trailerNumber);
+            refreshDocumentList(docListView, trailerNumber);
+        });
+        
+        viewBtn.setOnAction(e -> {
+            ObservableList<DocumentItem> selectedDocs = docListView.getSelectionModel().getSelectedItems();
+            for (DocumentItem doc : selectedDocs) {
+                viewDocument(trailerNumber, doc.getFileName());
+            }
+        });
+        
+        mergeBtn.setOnAction(e -> {
+            ObservableList<DocumentItem> selectedDocs = docListView.getSelectionModel().getSelectedItems();
+            if (selectedDocs.size() > 1) {
+                mergeDocuments(trailerNumber, selectedDocs);
+            } else {
+                new Alert(Alert.AlertType.INFORMATION, 
+                         "Please select multiple documents to merge", 
+                         ButtonType.OK).showAndWait();
+            }
+        });
+        
+        printBtn.setOnAction(e -> {
+            ObservableList<DocumentItem> selectedDocs = docListView.getSelectionModel().getSelectedItems();
+            for (DocumentItem doc : selectedDocs) {
+                printDocument(trailerNumber, doc.getFileName());
+            }
+        });
+        
+        deleteBtn.setOnAction(e -> {
+            ObservableList<DocumentItem> selectedDocs = docListView.getSelectionModel().getSelectedItems();
+            if (!selectedDocs.isEmpty()) {
+                deleteSelectedDocuments(trailerNumber, selectedDocs);
+                refreshDocumentList(docListView, trailerNumber);
+            }
+        });
+        
+        folderBtn.setOnAction(e -> openTrailerFolder(trailerNumber));
+        
+        actionButtons.getChildren().addAll(uploadBtn, viewBtn, mergeBtn, printBtn, deleteBtn, folderBtn);
+        return actionButtons;
     }
     
     private void uploadDocumentForTrailer(String trailerNumber) {
@@ -580,8 +763,13 @@ public class TrailersTab extends BorderPane {
             typeDialog.setTitle("Document Type");
             typeDialog.setHeaderText("Select document type");
             
-            ComboBox<String> typeCombo = new ComboBox<>(FXCollections.observableArrayList(
-                    "Registration", "Insurance", "Inspection", "Maintenance", "Repair", "Other"));
+            // Get document types from configuration
+            DOTComplianceConfig config = DOTComplianceConfig.getInstance();
+            Map<String, Boolean> requirements = config.getTrailerRequirements();
+            List<String> documentTypes = new ArrayList<>(requirements.keySet());
+            documentTypes.add("Other"); // Always include Other option
+            
+            ComboBox<String> typeCombo = new ComboBox<>(FXCollections.observableArrayList(documentTypes));
             typeCombo.setValue("Other");
             
             TextField descField = new TextField();
@@ -602,7 +790,7 @@ public class TrailersTab extends BorderPane {
             typeDialog.setResultConverter(dialogButton -> {
                 if (dialogButton == ButtonType.OK) {
                     String type = typeCombo.getValue();
-                    String desc = descField.getText();
+                    String desc = descField != null ? descField.getText() : "";
                     if (desc == null || desc.trim().isEmpty()) {
                         return type;
                     }
@@ -791,11 +979,48 @@ public class TrailersTab extends BorderPane {
         }
     }
     
+    private <T> Callback<TableColumn<Trailer, LocalDate>, TableCell<Trailer, LocalDate>> 
+    getExpiryDateCellFactory() {
+        return col -> new TableCell<Trailer, LocalDate>() {
+            @Override
+            protected void updateItem(LocalDate date, boolean empty) {
+                super.updateItem(date, empty);
+                setText(date == null ? "" : date.toString());
+                if (!empty && date != null) {
+                    LocalDate now = LocalDate.now();
+                    if (date.isBefore(now)) {
+                        setStyle("-fx-background-color: #ffcccc; -fx-font-weight: bold;"); // Red
+                    } else if (date.isBefore(now.plusMonths(2))) {
+                        setStyle("-fx-background-color: #fff3cd; -fx-font-weight: bold;"); // Yellow
+                    } else {
+                        setStyle("");
+                    }
+                } else {
+                    setStyle("");
+                }
+            }
+        };
+    }
+    
+    private <T> Callback<TableColumn<Trailer, LocalDate>, TableCell<Trailer, LocalDate>> 
+    getInspectionDateCellFactory() {
+        return col -> new TableCell<Trailer, LocalDate>() {
+            @Override
+            protected void updateItem(LocalDate date, boolean empty) {
+                super.updateItem(date, empty);
+                setText(date == null ? "" : date.toString());
+                // No color coding for inspection dates - they are not expiry dates
+                setStyle("");
+            }
+        };
+    }
+    
     private void showExpiryAlerts() {
         LocalDate thirtyDaysFromNow = LocalDate.now().plusDays(30);
         List<ExpiryInfo> allExpiries = new ArrayList<>();
+        List<DocumentComplianceInfo> missingDocuments = new ArrayList<>();
         
-        // Collect all expiring items
+        // Collect all expiring items and check document compliance
         for (Trailer trailer : trailers) {
             // Check registration expiry
             if (trailer.getRegistrationExpiryDate() != null && 
@@ -811,12 +1036,22 @@ public class TrailersTab extends BorderPane {
                     trailer.getInsuranceExpiryDate()));
             }
             
+            // Check lease agreement expiry
+            if (trailer.getLeaseAgreementExpiryDate() != null && 
+                trailer.getLeaseAgreementExpiryDate().isBefore(thirtyDaysFromNow)) {
+                allExpiries.add(new ExpiryInfo(trailer, "Lease Agreement", 
+                    trailer.getLeaseAgreementExpiryDate()));
+            }
+            
             // Check inspection expiry
             if (trailer.getNextInspectionDueDate() != null && 
                 trailer.getNextInspectionDueDate().isBefore(thirtyDaysFromNow)) {
                 allExpiries.add(new ExpiryInfo(trailer, "Inspection", 
                     trailer.getNextInspectionDueDate()));
             }
+            
+            // Check for missing required documents
+            checkMissingDocuments(trailer, missingDocuments);
         }
         
         if (allExpiries.isEmpty()) {
@@ -866,6 +1101,9 @@ public class TrailersTab extends BorderPane {
                             break;
                         case "Insurance":
                             setStyle("-fx-text-fill: #388E3C; -fx-font-weight: bold;");
+                            break;
+                        case "Lease Agreement":
+                            setStyle("-fx-text-fill: #9C27B0; -fx-font-weight: bold;");
                             break;
                         case "Inspection":
                             setStyle("-fx-text-fill: #F57C00; -fx-font-weight: bold;");
@@ -954,37 +1192,6 @@ public class TrailersTab extends BorderPane {
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.showAndWait();
     }
-    
-    private <T> Callback<TableColumn<Trailer, LocalDate>, TableCell<Trailer, LocalDate>> 
-    getExpiryDateCellFactory() {
-        return column -> new TableCell<>() {
-            @Override
-            protected void updateItem(LocalDate date, boolean empty) {
-                super.updateItem(date, empty);
-                
-                if (empty || date == null) {
-                    setText(null);
-                    setStyle("");
-                } else {
-                    setText(date.toString());
-                    
-                    LocalDate now = LocalDate.now();
-                    if (date.isBefore(now)) {
-                        // Expired
-                        setStyle("-fx-background-color: #ffcccc; -fx-text-fill: red; -fx-font-weight: bold;");
-                    } else if (date.isBefore(now.plusWeeks(2))) {
-                        // Warning: Expiring within 2 weeks
-                        setStyle("-fx-background-color: #fff2cc; -fx-text-fill: #7F6000; -fx-font-weight: bold;");
-                    } else if (date.isBefore(now.plusMonths(1))) {
-                        // Notice: Expiring within a month
-                        setStyle("-fx-background-color: #e6f2ff; -fx-text-fill: #0066cc;");
-                    } else {
-                        setStyle("");
-                    }
-                }
-            }
-        };
-    }
 
     public void refreshFromEmployeeChanges(List<Employee> employees) {
         logger.info("Refreshing trailers based on employee changes");
@@ -1062,6 +1269,684 @@ public class TrailersTab extends BorderPane {
             this.trailer = trailer;
             this.documentType = documentType;
             this.expiryDate = expiryDate;
+        }
+    }
+    
+    private static class DocumentComplianceInfo {
+        final Trailer trailer;
+        final String missingDocument;
+        final String severity;
+        
+        DocumentComplianceInfo(Trailer trailer, String missingDocument, String severity) {
+            this.trailer = trailer;
+            this.missingDocument = missingDocument;
+            this.severity = severity;
+        }
+    }
+
+    /**
+     * Show import dialog
+     */
+    private void showImportDialog() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Import Trailer Data");
+        fileChooser.getExtensionFilters().addAll(
+            new FileChooser.ExtensionFilter("CSV Files", "*.csv"),
+            new FileChooser.ExtensionFilter("Excel Files", "*.xlsx", "*.xls")
+        );
+
+        File selectedFile = fileChooser.showOpenDialog(getScene().getWindow());
+        if (selectedFile != null) {
+            // Show progress dialog
+            showImportProgressDialog(selectedFile);
+        }
+    }
+    
+    /**
+     * Show import progress dialog with detailed feedback
+     */
+    private void showImportProgressDialog(File selectedFile) {
+        Dialog<Void> progressDialog = new Dialog<>();
+        progressDialog.setTitle("Importing Trailers");
+        progressDialog.setHeaderText("Importing trailer data from " + selectedFile.getName());
+        progressDialog.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
+        
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(20));
+        
+        Label statusLabel = new Label("Reading file...");
+        statusLabel.setFont(Font.font("Arial", 14));
+        
+        ProgressBar progressBar = new ProgressBar();
+        progressBar.setPrefWidth(400);
+        progressBar.setVisible(false);
+        
+        Label detailLabel = new Label("");
+        detailLabel.setFont(Font.font("Arial", 12));
+        detailLabel.setTextFill(Color.web("#666666"));
+        
+        content.getChildren().addAll(statusLabel, progressBar, detailLabel);
+        progressDialog.getDialogPane().setContent(content);
+        
+        // Create import task
+        Task<ImportResult> importTask = new Task<ImportResult>() {
+            @Override
+            protected ImportResult call() throws Exception {
+                ImportResult result = new ImportResult();
+                
+                try {
+                    updateMessage("Reading file...");
+                    updateProgress(0, 100);
+                    
+                    List<Trailer> trailerList = TrailerCSVImporter.importTrailers(selectedFile.toPath());
+                    result.totalFound = trailerList.size();
+                    
+                    updateMessage("Processing trailers...");
+                    updateProgress(50, 100);
+                    
+                    if (!trailerList.isEmpty()) {
+                        updateMessage("Saving to database...");
+                        updateProgress(75, 100);
+                        
+                        List<Trailer> savedTrailers = trailerDAO.addOrUpdateAll(trailerList);
+                        result.imported = savedTrailers.size();
+                        result.savedTrailers = savedTrailers; // Store for later use
+                        
+                        updateMessage("Import completed successfully!");
+                        updateProgress(100, 100);
+                    } else {
+                        updateMessage("No valid trailers found in file");
+                        result.errors.add("No valid trailer data found in the file");
+                    }
+                    
+                } catch (Exception e) {
+                    logger.error("Import failed", e);
+                    result.errors.add("Import failed: " + e.getMessage());
+                    throw e;
+                }
+                
+                return result;
+            }
+        };
+        
+        // Update UI based on task progress
+        importTask.messageProperty().addListener((obs, oldVal, newVal) -> {
+            statusLabel.setText(newVal);
+        });
+        
+        importTask.progressProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                progressBar.setVisible(true);
+                progressBar.setProgress(newVal.doubleValue());
+            }
+        });
+        
+        // Handle completion
+        importTask.setOnSucceeded(e -> {
+            ImportResult result = importTask.getValue();
+            progressDialog.close();
+            
+            // Use the saved trailers that already have proper IDs
+            List<Trailer> savedTrailers = result.savedTrailers;
+            logger.info("Import completed with {} trailers, refreshing UI", savedTrailers.size());
+            
+            // Log IDs for debugging
+            for (Trailer trailer : savedTrailers) {
+                logger.debug("Trailer in result: {} (ID: {})", trailer.getTrailerNumber(), trailer.getId());
+            }
+            
+            // Clear and reload the observable list with the correct data
+            trailers.clear();
+            trailers.addAll(savedTrailers);
+            logger.info("Updated observable list with {} trailers", trailers.size());
+            
+            // Update driver assignments
+            updateDriverAssignments();
+            
+            // Force refresh the table to show changes immediately
+            forceRefreshTable();
+            
+            // Notify data change listeners
+            notifyDataChange();
+            
+            // Show results
+            showImportResults(result, selectedFile.getName());
+        });
+        
+        importTask.setOnFailed(e -> {
+            progressDialog.close();
+            Throwable error = importTask.getException();
+            logger.error("Import failed", error);
+            
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Import Error");
+            alert.setHeaderText("Failed to import trailers");
+            alert.setContentText("Error: " + error.getMessage());
+            alert.showAndWait();
+        });
+        
+        // Handle cancellation
+        progressDialog.setOnCloseRequest(e -> {
+            if (importTask.isRunning()) {
+                importTask.cancel();
+            }
+        });
+        
+        // Start import
+        Thread importThread = new Thread(importTask);
+        importThread.setDaemon(true);
+        importThread.start();
+        
+        progressDialog.showAndWait();
+    }
+    
+    /**
+     * Show import results dialog
+     */
+    private void showImportResults(ImportResult result, String fileName) {
+        Dialog<Void> resultsDialog = new Dialog<>();
+        resultsDialog.setTitle("Import Results");
+        resultsDialog.setHeaderText("Import completed for " + fileName);
+        resultsDialog.getDialogPane().getButtonTypes().add(ButtonType.OK);
+        
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(20));
+        
+        Label summaryLabel = new Label();
+        summaryLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+        
+        if (result.imported > 0) {
+            summaryLabel.setText("✓ Successfully imported " + result.imported + " trailers");
+            summaryLabel.setTextFill(Color.web("#4CAF50"));
+        } else {
+            summaryLabel.setText("⚠ No trailers were imported");
+            summaryLabel.setTextFill(Color.web("#FF9800"));
+        }
+        
+        Label detailsLabel = new Label();
+        detailsLabel.setFont(Font.font("Arial", 12));
+        detailsLabel.setTextFill(Color.web("#666666"));
+        
+        StringBuilder details = new StringBuilder();
+        details.append("Total records found: ").append(result.totalFound).append("\n");
+        details.append("Successfully imported: ").append(result.imported).append("\n");
+        
+        if (!result.errors.isEmpty()) {
+            details.append("\nErrors:\n");
+            for (String error : result.errors) {
+                details.append("• ").append(error).append("\n");
+            }
+        }
+        
+        detailsLabel.setText(details.toString());
+        
+        content.getChildren().addAll(summaryLabel, detailsLabel);
+        resultsDialog.getDialogPane().setContent(content);
+        
+        resultsDialog.showAndWait();
+    }
+    
+    /**
+     * Import result class
+     */
+    private static class ImportResult {
+        int totalFound = 0;
+        int imported = 0;
+        List<String> errors = new ArrayList<>();
+        List<Trailer> savedTrailers = new ArrayList<>(); // Added for storing saved trailers
+    }
+    
+    /**
+     * Update driver assignments for all trailers
+     */
+    private void updateDriverAssignments() {
+        List<Employee> employees = employeeDAO.getAll();
+        
+        // Create a map of trailer number to driver
+        driverMap.clear();
+        for (Employee emp : employees) {
+            if (emp.getTrailerNumber() != null && !emp.getTrailerNumber().isEmpty()) {
+                driverMap.put(emp.getTrailerNumber(), emp);
+            }
+        }
+        
+        // Set driver names based on assignments
+        for (Trailer trailer : trailers) {
+            Employee driver = driverMap.get(trailer.getTrailerNumber());
+            if (driver != null) {
+                trailer.setAssignedDriver(driver.getName());
+            }
+        }
+    }
+
+    /**
+     * Force refresh the entire table and all related data structures
+     */
+    private void forceRefreshTable() {
+        logger.debug("Forcing table refresh");
+        
+        // Simply refresh the table - this is the safest approach
+        // The observable list will automatically update the table
+        table.refresh();
+        
+        // Update status bar
+        updateStatusBar();
+    }
+    
+    /**
+     * Update status bar with current counts
+     */
+    private void updateStatusBar() {
+        // This will be called by the existing listener in createStatusBar()
+        // The listener automatically updates when trailers list changes
+    }
+    
+    // ========== ENHANCED DOCUMENT MANAGEMENT HELPER METHODS ==========
+    
+    /**
+     * Check for missing required documents for a trailer
+     */
+    private void checkMissingDocuments(Trailer trailer, List<DocumentComplianceInfo> missingDocuments) {
+        String trailerNumber = trailer.getTrailerNumber();
+        
+        // Get configuration and check for required documents
+        DOTComplianceConfig config = DOTComplianceConfig.getInstance();
+        Map<String, Boolean> requirements = config.getTrailerRequirements();
+        
+        for (Map.Entry<String, Boolean> entry : requirements.entrySet()) {
+            if (entry.getValue() && !hasDocument(trailerNumber, entry.getKey())) {
+                // Determine severity based on document type
+                String severity = isCriticalDocument(entry.getKey()) ? "HIGH" : 
+                                isImportantDocument(entry.getKey()) ? "MEDIUM" : "LOW";
+                missingDocuments.add(new DocumentComplianceInfo(trailer, entry.getKey(), severity));
+            }
+        }
+    }
+    
+    private boolean isCriticalDocument(String documentType) {
+        String[] criticalDocs = {
+            "Annual DOT Inspection", "Registration Document"
+        };
+        for (String critical : criticalDocs) {
+            if (documentType.contains(critical)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    private boolean isImportantDocument(String documentType) {
+        String[] importantDocs = {
+            "Insurance Documents", "Trailer DOT Inspection"
+        };
+        for (String important : importantDocs) {
+            if (documentType.contains(important)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Check if a trailer has a specific document type
+     */
+    private boolean hasDocument(String trailerNumber, String documentType) {
+        try {
+            Path trailerDir = Paths.get(docStoragePath, trailerNumber);
+            if (!Files.exists(trailerDir)) {
+                return false;
+            }
+            
+            return Files.list(trailerDir)
+                .anyMatch(file -> file.getFileName().toString().contains(documentType));
+        } catch (Exception e) {
+            logger.error("Error checking document existence", e);
+            return false;
+        }
+    }
+    
+    /**
+     * Load and categorize documents for a trailer
+     */
+    private ObservableList<DocumentItem> loadCategorizedDocuments(String trailerNumber, String[] categories) {
+        ObservableList<DocumentItem> documents = FXCollections.observableArrayList();
+        
+        try {
+            Path trailerDir = Paths.get(docStoragePath, trailerNumber);
+            if (!Files.exists(trailerDir)) {
+                return documents;
+            }
+            
+            Files.list(trailerDir)
+                .filter(Files::isRegularFile)
+                .forEach(file -> {
+                    String fileName = file.getFileName().toString();
+                    String category = determineDocumentCategory(fileName, categories);
+                    documents.add(new DocumentItem(fileName, category, file.toFile()));
+                });
+            
+            // Sort by category and then by filename
+            documents.sort((a, b) -> {
+                int catCompare = a.getCategory().compareTo(b.getCategory());
+                return catCompare != 0 ? catCompare : a.getFileName().compareTo(b.getFileName());
+            });
+            
+        } catch (Exception e) {
+            logger.error("Error loading categorized documents", e);
+        }
+        
+        return documents;
+    }
+    
+    /**
+     * Determine document category based on filename
+     */
+    private String determineDocumentCategory(String fileName, String[] categories) {
+        String lowerFileName = fileName.toLowerCase();
+        
+        for (String category : categories) {
+            String lowerCategory = category.toLowerCase();
+            if (lowerFileName.contains(lowerCategory.replace(" ", "")) ||
+                lowerFileName.contains(lowerCategory.replace(" ", "_"))) {
+                return category;
+            }
+        }
+        
+        return "Other";
+    }
+    
+    /**
+     * Enhanced upload with proper file naming
+     */
+    private void uploadDocumentForTrailerEnhanced(String trailerNumber) {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select Document to Upload");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("PDF Files", "*.pdf"),
+                new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg"),
+                new FileChooser.ExtensionFilter("All Files", "*.*"));
+        
+        File selectedFile = fileChooser.showOpenDialog(getScene().getWindow());
+        if (selectedFile != null) {
+            showDocumentTypeDialog(trailerNumber, selectedFile);
+        }
+    }
+    
+    /**
+     * Show document type selection dialog with enhanced categories
+     */
+    private void showDocumentTypeDialog(String trailerNumber, File selectedFile) {
+        Dialog<String> typeDialog = new Dialog<>();
+        typeDialog.setTitle("Document Type");
+        typeDialog.setHeaderText("Select document type for " + trailerNumber);
+        
+        ComboBox<String> typeCombo = new ComboBox<>(FXCollections.observableArrayList(
+                "Annual DOT Inspection", "Insurance Documents", "Registration Document",
+                "Trailer DOT Inspection", "Lease Agreement Expiry", "Trailer Lease Expiry",
+                "Tire Inspection or Replacement Records", "Other"));
+        typeCombo.setValue("Other");
+        
+        TextField descField = new TextField();
+        descField.setPromptText("Document description (optional)");
+        
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20));
+        grid.add(new Label("Type:"), 0, 0);
+        grid.add(typeCombo, 1, 0);
+        grid.add(new Label("Description:"), 0, 1);
+        grid.add(descField, 1, 1);
+        
+        typeDialog.getDialogPane().setContent(grid);
+        typeDialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        
+        typeDialog.setResultConverter(dialogButton -> {
+            if (dialogButton == ButtonType.OK) {
+                String type = typeCombo.getValue();
+                String desc = descField != null ? descField.getText() : "";
+                if (desc == null || desc.trim().isEmpty()) {
+                    return type;
+                }
+                return type + " - " + desc;
+            }
+            return null;
+        });
+        
+        Optional<String> docType = typeDialog.showAndWait();
+        
+        if (docType.isPresent()) {
+            saveDocumentWithProperNaming(trailerNumber, selectedFile, docType.get());
+        }
+    }
+    
+    /**
+     * Save document with proper naming convention
+     */
+    private void saveDocumentWithProperNaming(String trailerNumber, File selectedFile, String docType) {
+        try {
+            // Create trailer's directory if it doesn't exist
+            Path trailerDir = Paths.get(docStoragePath, trailerNumber);
+            Files.createDirectories(trailerDir);
+            
+            // Create filename following the convention: TrailerNumber_DocumentType.ext
+            String extension = selectedFile.getName().substring(
+                    selectedFile.getName().lastIndexOf('.'));
+            
+            // Clean document type for filename
+            String cleanDocType = docType.replaceAll("[\\\\/:*?\"<>|]", "_")
+                                       .replaceAll("\\s+", "");
+            
+            String newFileName = trailerNumber + "_" + cleanDocType + extension;
+            
+            // Check if file exists and add counter if needed
+            Path destPath = trailerDir.resolve(newFileName);
+            int counter = 1;
+            while (Files.exists(destPath)) {
+                String baseName = newFileName.substring(0, newFileName.lastIndexOf('.'));
+                String ext = newFileName.substring(newFileName.lastIndexOf('.'));
+                newFileName = baseName + "_" + counter + ext;
+                destPath = trailerDir.resolve(newFileName);
+                counter++;
+            }
+            
+            Files.copy(selectedFile.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
+            
+            logger.info("Uploaded document for trailer {}: {}", trailerNumber, newFileName);
+            new Alert(Alert.AlertType.INFORMATION, 
+                     "Document uploaded successfully: " + newFileName, 
+                     ButtonType.OK).showAndWait();
+            
+        } catch (Exception e) {
+            logger.error("Failed to upload document", e);
+            new Alert(Alert.AlertType.ERROR, 
+                     "Failed to upload document: " + e.getMessage(), 
+                     ButtonType.OK).showAndWait();
+        }
+    }
+    
+    /**
+     * Refresh document list
+     */
+    private void refreshDocumentList(ListView<DocumentItem> docListView, String trailerNumber) {
+        // Get categories from configuration
+        DOTComplianceConfig config = DOTComplianceConfig.getInstance();
+        Map<String, Boolean> trailerReqs = config.getTrailerRequirements();
+        String[] categories = trailerReqs.keySet().toArray(new String[0]);
+        
+        ObservableList<DocumentItem> documents = loadCategorizedDocuments(trailerNumber, categories);
+        docListView.setItems(documents);
+    }
+    
+    /**
+     * Merge selected documents into a single PDF
+     */
+    private void mergeDocuments(String trailerNumber, ObservableList<DocumentItem> selectedDocs) {
+        try {
+            // For now, we'll create a simple text file listing the documents
+            // In a full implementation, you'd use a PDF library like iText or Apache PDFBox
+            Path trailerDir = Paths.get(docStoragePath, trailerNumber);
+            String timestamp = String.valueOf(System.currentTimeMillis());
+            Path mergedFile = trailerDir.resolve(trailerNumber + "_MergedDocuments_" + timestamp + ".txt");
+            
+            List<String> content = new ArrayList<>();
+            content.add("Merged Documents for Trailer: " + trailerNumber);
+            content.add("Generated: " + java.time.LocalDateTime.now());
+            content.add("");
+            
+            for (DocumentItem doc : selectedDocs) {
+                content.add("Document: " + doc.getFileName());
+                content.add("Category: " + doc.getCategory());
+                content.add("Path: " + doc.getFile().getAbsolutePath());
+                content.add("");
+            }
+            
+            Files.write(mergedFile, content);
+            
+            logger.info("Created merged document list: {}", mergedFile);
+            new Alert(Alert.AlertType.INFORMATION, 
+                     "Documents merged successfully. File: " + mergedFile.getFileName(), 
+                     ButtonType.OK).showAndWait();
+            
+        } catch (Exception e) {
+            logger.error("Failed to merge documents", e);
+            new Alert(Alert.AlertType.ERROR, 
+                     "Failed to merge documents: " + e.getMessage(), 
+                     ButtonType.OK).showAndWait();
+        }
+    }
+    
+    /**
+     * Delete selected documents
+     */
+    private void deleteSelectedDocuments(String trailerNumber, ObservableList<DocumentItem> selectedDocs) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Confirm Deletion");
+        confirm.setHeaderText("Delete Selected Documents");
+        confirm.setContentText("Are you sure you want to delete " + selectedDocs.size() + " document(s)?");
+        
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                int deletedCount = 0;
+                for (DocumentItem doc : selectedDocs) {
+                    try {
+                        Path docPath = Paths.get(docStoragePath, trailerNumber, doc.getFileName());
+                        if (Files.exists(docPath)) {
+                            Files.delete(docPath);
+                            deletedCount++;
+                            logger.info("Deleted document: {}", doc.getFileName());
+                        }
+                    } catch (Exception e) {
+                        logger.error("Failed to delete document: {}", doc.getFileName(), e);
+                    }
+                }
+                
+                new Alert(Alert.AlertType.INFORMATION, 
+                         "Deleted " + deletedCount + " document(s)", 
+                         ButtonType.OK).showAndWait();
+            }
+        });
+    }
+    
+    // ========== HELPER CLASSES ==========
+    
+    /**
+     * Document item class for enhanced document management
+     */
+    private static class DocumentItem {
+        private final String fileName;
+        private final String category;
+        private final File file;
+        
+        public DocumentItem(String fileName, String category, File file) {
+            this.fileName = fileName;
+            this.category = category;
+            this.file = file;
+        }
+        
+        public String getFileName() { return fileName; }
+        public String getCategory() { return category; }
+        public File getFile() { return file; }
+        
+        @Override
+        public String toString() {
+            return category + ": " + fileName;
+        }
+    }
+    
+    /**
+     * Custom cell factory for document list
+     */
+    private static class DocumentListCell extends ListCell<DocumentItem> {
+        @Override
+        protected void updateItem(DocumentItem item, boolean empty) {
+            super.updateItem(item, empty);
+            
+            if (empty || item == null) {
+                setText(null);
+                setGraphic(null);
+            } else {
+                HBox content = new HBox(10);
+                content.setAlignment(Pos.CENTER_LEFT);
+                
+                // Category indicator
+                Circle indicator = new Circle(6);
+                indicator.setFill(getCategoryColor(item.getCategory()));
+                
+                // Document info
+                VBox info = new VBox(2);
+                Label nameLabel = new Label(item.getFileName());
+                nameLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
+                Label categoryLabel = new Label(item.getCategory());
+                categoryLabel.setFont(Font.font("Arial", 10));
+                categoryLabel.setTextFill(Color.GRAY);
+                
+                info.getChildren().addAll(nameLabel, categoryLabel);
+                content.getChildren().addAll(indicator, info);
+                
+                setGraphic(content);
+                setText(null);
+            }
+        }
+        
+        private Color getCategoryColor(String category) {
+            return switch (category) {
+                case "Annual DOT Inspection" -> Color.GREEN;
+                case "Registration Document" -> Color.BLUE;
+                case "Insurance Documents" -> Color.ORANGE;
+                case "Trailer DOT Inspection" -> Color.PURPLE;
+                case "Lease Agreement Expiry" -> Color.RED;
+                case "Trailer Lease Expiry" -> Color.DARKRED;
+                case "Tire Inspection or Replacement Records" -> Color.BROWN;
+                default -> Color.GRAY;
+            };
+        }
+    }
+    
+    /**
+     * Open trailer's document folder
+     */
+    private void openTrailerFolder(String trailerNumber) {
+        try {
+            Path trailerDir = Paths.get(docStoragePath, trailerNumber);
+            if (!Files.exists(trailerDir)) {
+                Files.createDirectories(trailerDir);
+            }
+            
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(trailerDir.toFile());
+            } else {
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Folder Location");
+                alert.setContentText("Trailer folder: " + trailerDir.toString());
+                alert.showAndWait();
+            }
+        } catch (Exception e) {
+            logger.error("Failed to open trailer folder", e);
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Open Failed");
+            alert.setContentText("Failed to open folder: " + e.getMessage());
+            alert.showAndWait();
         }
     }
 }
