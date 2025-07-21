@@ -41,11 +41,14 @@
     </appender>
     
     <!-- Application logging -->
-    <logger name="com.company.payroll" level="INFO"/>
+    <logger name="com.company.payroll" level="DEBUG"/>
     
     <!-- Database logging -->
     <logger name="com.company.payroll.employees.EmployeeDAO" level="DEBUG"/>
     <logger name="com.company.payroll.loads.LoadDAO" level="DEBUG"/>
+    <logger name="com.company.payroll.loads.LoadsPanel" level="DEBUG"/>
+    <logger name="com.company.payroll.loads.EnhancedLocationField" level="DEBUG"/>
+    <logger name="com.company.payroll.loads.CustomerAddress" level="DEBUG"/>
     <logger name="com.company.payroll.fuel.FuelTransactionDAO" level="DEBUG"/>
     <logger name="com.company.payroll.triumph.MyTriumphDAO" level="DEBUG"/>
     
@@ -92,7 +95,7 @@
     <logger name="org.apache.logging.log4j" level="ERROR"/>
     
     <!-- Root logger -->
-    <root level="INFO">
+    <root level="DEBUG">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="ASYNC"/>
     </root>

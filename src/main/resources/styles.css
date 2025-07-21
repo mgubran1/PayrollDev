@@ -176,22 +176,28 @@
 
 /* Load Blocks */
 .load-block {
-    -fx-background-radius: 6px;
-    -fx-border-radius: 6px;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 4, 0, 0, 2);
+    -fx-background-radius: 8px;
+    -fx-border-radius: 8px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 6, 0, 0, 2);
     -fx-cursor: hand;
+    -fx-background-color: white;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 1px;
 }
 
 .load-block:hover {
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 8, 0, 0, 3);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 10, 0, 0, 4);
+    -fx-background-color: #f8f9fa;
 }
 
 /* Modern Buttons */
 .modern-button {
-    -fx-background-radius: 5px;
+    -fx-background-radius: 6px;
     -fx-font-weight: 600;
     -fx-cursor: hand;
     -fx-effect: none;
+    -fx-padding: 10 20 10 20;
+    -fx-font-size: 14px;
 }
 
 .modern-button-primary {
@@ -201,18 +207,75 @@
 
 .modern-button-primary:hover {
     -fx-background-color: #1976D2;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0, 0, 2);
+    -fx-effect: dropshadow(gaussian, rgba(33, 150, 243, 0.3), 8, 0, 0, 3);
 }
 
 .modern-button-secondary {
     -fx-background-color: white;
     -fx-text-fill: #2196F3;
     -fx-border-color: #2196F3;
-    -fx-border-width: 1;
+    -fx-border-width: 1.5;
 }
 
 .modern-button-secondary:hover {
     -fx-background-color: #E3F2FD;
+    -fx-border-color: #1976D2;
+}
+
+/* Load Dialog Styling */
+.load-dialog-section {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 8px;
+    -fx-border-color: #e1e4e8;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-padding: 15px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 4, 0, 0, 2);
+}
+
+.load-dialog-field {
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+    -fx-border-color: #d1d5da;
+    -fx-border-width: 1px;
+    -fx-font-size: 13px;
+    -fx-padding: 8px;
+}
+
+.load-dialog-field:focused {
+    -fx-border-color: #2196F3;
+    -fx-border-width: 2px;
+    -fx-background-color: white;
+}
+
+.load-dialog-label {
+    -fx-font-weight: 600;
+    -fx-text-fill: #24292e;
+    -fx-font-size: 13px;
+}
+
+/* Time Spinner Styling */
+.time-spinner {
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+    -fx-border-color: #d1d5da;
+    -fx-border-width: 1px;
+}
+
+.time-spinner:focused {
+    -fx-border-color: #2196F3;
+    -fx-border-width: 2px;
+}
+
+.time-spinner .increment-arrow-button,
+.time-spinner .decrement-arrow-button {
+    -fx-background-color: #f6f8fa;
+    -fx-border-color: #d1d5da;
+}
+
+.time-spinner .increment-arrow-button:hover,
+.time-spinner .decrement-arrow-button:hover {
+    -fx-background-color: #e1e4e8;
 }
 
 /* Fleet Status Cards */
@@ -803,6 +866,76 @@
     -fx-accent: #3498db;
 }
 
+/* Additional Location Styles for Load Dialog */
+.additional-location-container {
+    -fx-background-color: #f8f9fa;
+    -fx-background-radius: 8px;
+    -fx-padding: 10px;
+    -fx-border-color: #e1e4e8;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+}
+
+.additional-location-row {
+    -fx-background-color: white;
+    -fx-background-radius: 6px;
+    -fx-padding: 8px 12px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 4, 0, 0, 1);
+}
+
+.additional-location-row:hover {
+    -fx-background-color: #f8f9fa;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 6, 0, 0, 2);
+}
+
+.additional-location-label {
+    -fx-font-weight: 600;
+    -fx-text-fill: #495057;
+    -fx-font-size: 12px;
+}
+
+.additional-location-combo {
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+    -fx-border-color: #ced4da;
+    -fx-border-width: 1px;
+    -fx-font-size: 12px;
+    -fx-padding: 6px;
+}
+
+.additional-location-combo:focused {
+    -fx-border-color: #2196F3;
+    -fx-border-width: 2px;
+}
+
+.add-location-button {
+    -fx-background-color: #2196F3;
+    -fx-text-fill: white;
+    -fx-background-radius: 4px;
+    -fx-padding: 6px 12px;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-cursor: hand;
+}
+
+.add-location-button:hover {
+    -fx-background-color: #1976D2;
+    -fx-effect: dropshadow(gaussian, rgba(33, 150, 243, 0.3), 6, 0, 0, 2);
+}
+
+.remove-location-button {
+    -fx-background-color: #dc3545;
+    -fx-text-fill: white;
+    -fx-background-radius: 4px;
+    -fx-padding: 4px 8px;
+    -fx-font-size: 11px;
+    -fx-cursor: hand;
+}
+
+.remove-location-button:hover {
+    -fx-background-color: #c82333;
+}
+
 /* Enhanced Header Styles */
 .header-button {
     -fx-background-color: transparent;
@@ -1075,3 +1208,59 @@
 .default-color5.chart-pie { -fx-pie-color: #00BCD4; }
 .default-color6.chart-pie { -fx-pie-color: #FFC107; }
 .default-color7.chart-pie { -fx-pie-color: #795548; }
+
+/* Invoice Config Dialog Styles */
+.invoice-config-dialog {
+    -fx-background-color: #ffffff;
+}
+
+.invoice-config-dialog .label {
+    -fx-text-fill: #000000 !important;
+    -fx-font-weight: normal;
+}
+
+.invoice-config-dialog .text-field,
+.invoice-config-dialog .text-area {
+    -fx-text-fill: #000000 !important;
+    -fx-prompt-text-fill: #666666;
+}
+
+.invoice-config-dialog .dialog-pane {
+    -fx-background-color: #ffffff;
+}
+
+.invoice-config-dialog .dialog-pane .header-panel {
+    -fx-background-color: #ffffff;
+}
+
+.invoice-config-dialog .dialog-pane .header-panel .label {
+    -fx-text-fill: #000000 !important;
+}
+
+.invoice-config-dialog .section-title {
+    -fx-text-fill: #34495e !important;
+    -fx-font-weight: bold;
+}
+
+/* MyTriumph Tab Invoice Button */
+.triumph-invoice-button {
+    -fx-background-color: #007bff;
+    -fx-text-fill: white;
+    -fx-font-size: 11px;
+    -fx-padding: 3 8 3 8;
+    -fx-background-radius: 4px;
+    -fx-cursor: hand;
+}
+
+.triumph-invoice-button:hover {
+    -fx-background-color: #0056b3;
+}
+
+/* Force all text in dialogs to be black */
+.dialog-pane,
+.dialog-pane .content,
+.dialog-pane .label,
+.dialog-pane .text-field,
+.dialog-pane .text-area {
+    -fx-text-fill: #000000 !important;
+}
