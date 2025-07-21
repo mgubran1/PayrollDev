@@ -212,6 +212,13 @@ public class EnhancedLocationField extends HBox {
         this.currentCustomer = customer;
         refreshLocations();
     }
+
+    /**
+     * Return the customer currently associated with this field.
+     */
+    public String getCurrentCustomer() {
+        return currentCustomer;
+    }
     
     private void refreshLocations() {
         if (currentCustomer != null && !currentCustomer.isEmpty()) {
