@@ -10,6 +10,7 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.company.payroll.payroll.ModernButtonStyles;
+import com.company.payroll.loads.EnterpriseDataCacheManager;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -39,6 +40,7 @@ public class DocumentManagerSettingsDialog extends Dialog<Void> {
     private Button testLoadsButton;
     private Button testMergedLoadsButton;
     private Button resetButton;
+    private Button refreshCachesButton;
     
     // Preview components
     private TextArea maintenancePreviewArea;
@@ -286,8 +288,27 @@ public class DocumentManagerSettingsDialog extends Dialog<Void> {
         
         resetButton = ModernButtonStyles.createWarningButton("Reset to Defaults");
         resetButton.setOnAction(e -> resetToDefaults());
-        
-        buttonBox.getChildren().add(resetButton);
+
+        refreshCachesButton = ModernButtonStyles.createInfoButton("Refresh Data");
+        refreshCachesButton.setOnAction(e -> {
+            refreshCachesButton.setDisable(true);
+            EnterpriseDataCacheManager.getInstance().invalidateAllCaches()
+                    .thenRun(() -> Platform.runLater(() -> {
+                        refreshCachesButton.setDisable(false);
+                        showAlert(Alert.AlertType.INFORMATION, "Data Refreshed",
+                                "All cached data has been refreshed.");
+                    }))
+                    .exceptionally(ex -> {
+                        Platform.runLater(() -> {
+                            refreshCachesButton.setDisable(false);
+                            showAlert(Alert.AlertType.ERROR, "Refresh Failed",
+                                    "Failed to refresh data: " + ex.getMessage());
+                        });
+                        return null;
+                    });
+        });
+
+        buttonBox.getChildren().addAll(refreshCachesButton, resetButton);
         
         return buttonBox;
     }

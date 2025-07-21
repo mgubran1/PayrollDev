@@ -4571,11 +4571,6 @@ public class LoadsPanel extends BorderPane {
         // Customer & Location Section
         VBox customerLocationSection = createSection("Customer & Location Details", "Enter pickup and drop information");
         
-        // Create refresh button for Customer & Location section
-        Button refreshAddressesBtn = createInlineButton("🔄", "#007bff", "white");
-        refreshAddressesBtn.setTooltip(new Tooltip("Refresh customer addresses and locations"));
-        refreshAddressesBtn.setPrefWidth(100);
-        refreshAddressesBtn.setText("🔄 Refresh");
         
         // Pickup Customer
         dialogFields.pickupCustomerBox = new ComboBox<>();
@@ -4754,61 +4749,6 @@ public class LoadsPanel extends BorderPane {
             .filter(node -> node instanceof Label)
             .forEach(node -> ((Label) node).setStyle("-fx-font-weight: bold; -fx-text-fill: black;"));
         
-        // Add refresh button to the section header
-        if (customerLocationSection.getChildren().size() >= 3) {
-            // Get the header elements (title, description, separator)
-            Node titleNode = customerLocationSection.getChildren().get(0);
-            if (titleNode instanceof Label) {
-                // Create a new HBox for title and refresh button
-                HBox titleBox = new HBox(10);
-                titleBox.setAlignment(Pos.CENTER_LEFT);
-                
-                Label titleLabel = (Label) titleNode;
-                customerLocationSection.getChildren().remove(0);
-                
-                Region spacer = new Region();
-                HBox.setHgrow(spacer, Priority.ALWAYS);
-                
-                titleBox.getChildren().addAll(titleLabel, spacer, refreshAddressesBtn);
-                customerLocationSection.getChildren().add(0, titleBox);
-            }
-        }
-        
-        customerLocationSection.getChildren().add(customerLocationGrid);
-        
-        // Now that all combo boxes are created, set up the refresh button action
-        refreshAddressesBtn.setOnAction(e -> {
-            refreshAddressesBtn.setDisable(true);
-            refreshAddressesBtn.setText("Loading...");
-            
-            // Use EnterpriseDataCacheManager to refresh all data
-            EnterpriseDataCacheManager.getInstance().invalidateAllCaches()
-                .thenRun(() -> {
-                    Platform.runLater(() -> {
-                        // Re-enable location filtering with fresh data
-                        enableLocationFiltering(pickupLocationCombo, true);
-                        enableLocationFiltering(dropLocationCombo, true);
-                        
-                        // Refresh customer lists with fresh data from cache
-                        loadCustomersIntoComboBox(dialogFields.pickupCustomerBox);
-                        loadCustomersIntoComboBox(dialogFields.dropCustomerBox);
-                        loadBillingEntitiesIntoComboBox(dialogFields.billToBox);
-                        
-                        refreshAddressesBtn.setDisable(false);
-                        refreshAddressesBtn.setText("🔄 Refresh");
-                        showInfo("All data refreshed successfully!");
-                    });
-                })
-                .exceptionally(ex -> {
-                    logger.error("Error refreshing data", ex);
-                    Platform.runLater(() -> {
-                        refreshAddressesBtn.setDisable(false);
-                        refreshAddressesBtn.setText("🔄 Refresh");
-                        showError("Failed to refresh data: " + ex.getMessage());
-                    });
-                    return null;
-                });
-        });
         
         // Pre-fill customer and location data if editing
         if (load != null) {

@@ -13,6 +13,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
+
+import com.company.payroll.loads.EnterpriseDataCacheManager;
 
 public class Main extends Application {
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
@@ -73,6 +76,12 @@ public class Main extends Application {
             
             logger.debug("Showing primary stage");
             primaryStage.show();
+
+            // Warm up enterprise caches in background for instant dialogs
+            CompletableFuture.runAsync(() -> {
+                EnterpriseDataCacheManager cacheManager = EnterpriseDataCacheManager.getInstance();
+                cacheManager.getCachedCustomers().forEach(c -> cacheManager.getCustomerAddressesAsync(c));
+            });
             
             logger.info("=== Application started successfully ===");
             logger.info("Window dimensions: {}x{}", primaryStage.getWidth(), primaryStage.getHeight());
