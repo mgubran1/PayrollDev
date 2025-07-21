@@ -205,7 +205,72 @@
                         --add-opens java.base/java.lang=ALL-UNNAMED
                         --add-opens java.base/java.util=ALL-UNNAMED
                     </argLine>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/Test*.java</include>
+                    </includes>
                 </configuration>
+            </plugin>
+            
+            <!-- Failsafe plugin for integration tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <argLine>
+                        --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.base/java.util=ALL-UNNAMED
+                    </argLine>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            
+            <!-- Clean plugin for better cleanup -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>3.3.2</version>
+                <configuration>
+                    <filesets>
+                        <fileset>
+                            <directory>logs</directory>
+                            <includes>
+                                <include>**/*.log</include>
+                            </includes>
+                            <followSymlinks>false</followSymlinks>
+                        </fileset>
+                    </filesets>
+                    <!-- Do not fail the build if a log file is locked by another process -->
+                    <failOnError>false</failOnError>
+                </configuration>
+            </plugin>
+            
+            <!-- Dependency plugin for better dependency management -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <id>analyze</id>
+                        <goals>
+                            <goal>analyze-only</goal>
+                        </goals>
+                        <configuration>
+                            <failOnWarning>false</failOnWarning>
+                            <ignoreNonCompile>true</ignoreNonCompile>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
@@ -238,6 +303,163 @@
                             <optimize>true</optimize>
                             <debug>false</debug>
                         </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        
+        <!-- Build validation profile -->
+        <profile>
+            <id>validate</id>
+            <build>
+                <plugins>
+                    <!-- Enhanced compiler settings for validation -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <source>${maven.compiler.source}</source>
+                            <target>${maven.compiler.target}</target>
+                            <compilerArgs>
+                                <arg>-Xlint:all</arg>
+                                <arg>-Werror</arg>
+                                <arg>-parameters</arg>
+                            </compilerArgs>
+                            <showWarnings>true</showWarnings>
+                            <showDeprecation>true</showDeprecation>
+                        </configuration>
+                    </plugin>
+                    
+                    <!-- Enforce build standards -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <version>3.4.1</version>
+                        <executions>
+                            <execution>
+                                <id>enforce-maven</id>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireMavenVersion>
+                                            <version>3.6.0</version>
+                                        </requireMavenVersion>
+                                        <requireJavaVersion>
+                                            <version>24</version>
+                                        </requireJavaVersion>
+                                        <bannedDependencies>
+                                            <excludes>
+                                                <exclude>commons-logging</exclude>
+                                            </excludes>
+                                        </bannedDependencies>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        
+        <!-- Windows installer profile -->
+        <profile>
+            <id>windows-installer</id>
+            <properties>
+                <app.name>PayrollDesktop</app.name>
+                <app.version>${project.version}</app.version>
+                <app.vendor>MFG UNITED LLC</app.vendor>
+                <app.description>Payroll Desktop Application</app.description>
+            </properties>
+            <build>
+                <plugins>
+                    <!-- First, create a custom runtime image -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>create-installer</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <!-- Create app directory -->
+                                        <mkdir dir="${project.build.directory}/app"/>
+                                        
+                                        <!-- Copy JAR file -->
+                                        <copy file="${project.build.directory}/${project.artifactId}-${project.version}-jar-with-dependencies.jar" 
+                                              tofile="${project.build.directory}/app/${app.name}.jar"/>
+                                        
+                                        <!-- Copy icon if exists -->
+                                        <copy file="${basedir}/src/main/resources/icon.ico" 
+                                              tofile="${project.build.directory}/app/icon.ico"
+                                              failonerror="false"/>
+                                        
+                                        <!-- Run jpackage with proper JavaFX configuration -->
+                                        <exec executable="${java.home}/bin/jpackage.exe" failonerror="true">
+                                            <arg value="--type"/>
+                                            <arg value="exe"/>
+                                            <arg value="--input"/>
+                                            <arg value="${project.build.directory}/app"/>
+                                            <arg value="--name"/>
+                                            <arg value="${app.name}"/>
+                                            <arg value="--main-jar"/>
+                                            <arg value="${app.name}.jar"/>
+                                            <arg value="--main-class"/>
+                                            <arg value="com.company.payroll.Main"/>
+                                            <arg value="--app-version"/>
+                                            <arg value="${app.version}"/>
+                                            <arg value="--vendor"/>
+                                            <arg value="${app.vendor}"/>
+                                            <arg value="--description"/>
+                                            <arg value="${app.description}"/>
+                                            <arg value="--dest"/>
+                                            <arg value="${project.build.directory}/installer"/>
+                                            <arg value="--win-dir-chooser"/>
+                                            <arg value="--win-menu"/>
+                                            <arg value="--win-shortcut"/>
+                                            <arg value="--win-shortcut-prompt"/>
+                                            <arg value="--icon"/>
+                                            <arg value="${project.build.directory}/app/icon.ico"/>
+                                            <!-- JavaFX Module Configuration -->
+                                            <arg value="--add-modules"/>
+                                            <arg value="javafx.controls,javafx.fxml,javafx.graphics,javafx.base"/>
+                                            <!-- Essential JVM Options for JavaFX -->
+                                            <arg value="--java-options"/>
+                                            <arg value="--enable-native-access=javafx.graphics"/>
+                                            <arg value="--java-options"/>
+                                            <arg value="--enable-native-access=ALL-UNNAMED"/>
+                                            <arg value="--java-options"/>
+                                            <arg value="--add-opens=java.base/java.lang=ALL-UNNAMED"/>
+                                            <arg value="--java-options"/>
+                                            <arg value="--add-opens=java.base/java.util=ALL-UNNAMED"/>
+                                            <arg value="--java-options"/>
+                                            <arg value="--add-opens=java.desktop/java.awt=ALL-UNNAMED"/>
+                                            <arg value="--java-options"/>
+                                            <arg value="--add-opens=java.desktop/java.awt.event=ALL-UNNAMED"/>
+                                            <arg value="--java-options"/>
+                                            <arg value="-Dfile.encoding=UTF-8"/>
+                                            <arg value="--java-options"/>
+                                            <arg value="-Dprism.lcdtext=false"/>
+                                            <arg value="--java-options"/>
+                                            <arg value="-Dprism.text=t2k"/>
+                                            <arg value="--java-options"/>
+                                            <arg value="-Djava.awt.headless=false"/>
+                                            <!-- Memory settings for better performance -->
+                                            <arg value="--java-options"/>
+                                            <arg value="-Xms256m"/>
+                                            <arg value="--java-options"/>
+                                            <arg value="-Xmx1024m"/>
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>
