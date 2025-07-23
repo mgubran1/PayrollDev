@@ -25,11 +25,17 @@ import org.slf4j.LoggerFactory;
 import com.company.payroll.payroll.ModernButtonStyles;
 
 import java.io.File;
+import java.io.BufferedWriter;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -197,6 +203,7 @@ public class TrucksTab extends BorderPane {
         Button importBtn = ModernButtonStyles.createInfoButton("📥 Import CSV/XLSX");
         Button uploadBtn = ModernButtonStyles.createInfoButton("📤 Upload Document");
         Button printBtn = ModernButtonStyles.createSecondaryButton("🖨️ Print Document");
+        Button exportBtn = ModernButtonStyles.createInfoButton("📊 Export");
         
         uploadBtn.setOnAction(e -> uploadDocument());
         printBtn.setOnAction(e -> printSelectedTruckDocuments());
@@ -243,7 +250,12 @@ public class TrucksTab extends BorderPane {
             showImportDialog();
         });
         
-        HBox btnBox = new HBox(12, addBtn, editBtn, deleteBtn, refreshBtn, importBtn, uploadBtn, printBtn);
+        exportBtn.setOnAction(e -> {
+            logger.info("Export button clicked");
+            showExportDialog();
+        });
+        
+        HBox btnBox = new HBox(12, addBtn, editBtn, deleteBtn, refreshBtn, importBtn, exportBtn, uploadBtn, printBtn);
         btnBox.setPadding(new Insets(12));
         btnBox.setAlignment(Pos.CENTER_LEFT);
         
@@ -1580,14 +1592,20 @@ public class TrucksTab extends BorderPane {
         // Get the current items from the table
         ObservableList<Truck> currentItems = table.getItems();
         
-        // If we have a SortedList, we need to refresh it properly
+        // If we have a SortedList with a FilteredList source, trigger refresh on the filtered list
         if (currentItems instanceof SortedList) {
-            SortedList<Truck> sortedList = (SortedList<Truck>) currentItems;
-            // Trigger a refresh by temporarily changing the comparator
             @SuppressWarnings("unchecked")
-            Comparator<Truck> currentComparator = (Comparator<Truck>) sortedList.getComparator();
-            sortedList.setComparator(null);
-            sortedList.setComparator(currentComparator);
+            SortedList<Truck> sortedList = (SortedList<Truck>) currentItems;
+            ObservableList<? extends Truck> source = sortedList.getSource();
+            
+            if (source instanceof FilteredList) {
+                @SuppressWarnings("unchecked")
+                FilteredList<Truck> filteredList = (FilteredList<Truck>) source;
+                // Trigger a refresh by temporarily changing the predicate
+                java.util.function.Predicate<? super Truck> currentPredicate = filteredList.getPredicate();
+                filteredList.setPredicate(null);
+                filteredList.setPredicate(currentPredicate);
+            }
         }
         
         // Force table refresh
@@ -1946,5 +1964,245 @@ public class TrucksTab extends BorderPane {
             alert.setContentText("Failed to open folder: " + e.getMessage());
             alert.showAndWait();
         }
+    }
+
+    /**
+     * Show export dialog for CSV/XLSX files.
+     */
+    private void showExportDialog() {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Export Trucks");
+        dialog.setHeaderText("Choose export format");
+        
+        ButtonType csvButtonType = new ButtonType("CSV", ButtonBar.ButtonData.OK_DONE);
+        ButtonType xlsxButtonType = new ButtonType("XLSX", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancelButtonType = ButtonType.CANCEL;
+        
+        dialog.getDialogPane().getButtonTypes().addAll(csvButtonType, xlsxButtonType, cancelButtonType);
+        
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == csvButtonType) {
+                return "CSV";
+            } else if (dialogButton == xlsxButtonType) {
+                return "XLSX";
+            }
+            return null;
+        });
+        
+        dialog.showAndWait().ifPresent(format -> {
+            if (format.equals("CSV")) {
+                exportToCSV();
+            } else if (format.equals("XLSX")) {
+                exportToXLSX();
+            }
+        });
+    }
+    
+    /**
+     * Export trucks data to CSV file
+     */
+    private void exportToCSV() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Trucks to CSV");
+        fileChooser.setInitialFileName("trucks_" + 
+                java.time.LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ".csv");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("CSV Files", "*.csv"));
+        
+        File file = fileChooser.showSaveDialog(getScene().getWindow());
+        if (file != null) {
+            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
+                    new FileOutputStream(file), StandardCharsets.UTF_8))) {
+                
+                // Write BOM for Excel UTF-8 recognition
+                writer.write('\ufeff');
+                
+                // Write headers
+                writer.write("Truck/Unit,VIN#,Make,Model,Year,Type,Status,Registration Expiry," +
+                           "Insurance Expiry,Inspection Expiry,Inspection,Permit,License Plate,Driver");
+                writer.newLine();
+                
+                // Filter the trucks if search filter is applied
+                List<Truck> exportList = new ArrayList<>();
+                if (table.getItems() != null) {
+                    exportList.addAll(table.getItems());
+                } else {
+                    exportList.addAll(trucks);
+                }
+                
+                // Write data
+                DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+                for (Truck truck : exportList) {
+                    StringBuilder line = new StringBuilder();
+                    line.append(escapeCSV(truck.getNumber())).append(",");
+                    line.append(escapeCSV(truck.getVin())).append(",");
+                    line.append(escapeCSV(truck.getMake())).append(",");
+                    line.append(escapeCSV(truck.getModel())).append(",");
+                    line.append(truck.getYear()).append(",");
+                    line.append(escapeCSV(truck.getType())).append(",");
+                    line.append(escapeCSV(truck.getStatus())).append(",");
+                    line.append(truck.getRegistrationExpiryDate() != null ? 
+                            truck.getRegistrationExpiryDate().format(dateFormatter) : "").append(",");
+                    line.append(truck.getInsuranceExpiryDate() != null ? 
+                            truck.getInsuranceExpiryDate().format(dateFormatter) : "").append(",");
+                    line.append(truck.getNextInspectionDue() != null ? 
+                            truck.getNextInspectionDue().format(dateFormatter) : "").append(",");
+                    line.append(truck.getInspection() != null ? 
+                            truck.getInspection().format(dateFormatter) : "").append(",");
+                    line.append(escapeCSV(truck.getPermitNumbers())).append(",");
+                    line.append(escapeCSV(truck.getLicensePlate())).append(",");
+                    line.append(escapeCSV(truck.getDriver()));
+                    
+                    writer.write(line.toString());
+                    writer.newLine();
+                }
+                
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Export Successful");
+                alert.setHeaderText("Export Completed");
+                alert.setContentText("Exported " + exportList.size() + " trucks to CSV successfully.");
+                alert.showAndWait();
+                
+            } catch (IOException e) {
+                logger.error("Failed to export to CSV", e);
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Export Failed");
+                alert.setHeaderText("Export Error");
+                alert.setContentText("Failed to export data: " + e.getMessage());
+                alert.showAndWait();
+            }
+        }
+    }
+    
+    /**
+     * Export trucks data to XLSX file
+     */
+    private void exportToXLSX() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Trucks to Excel");
+        fileChooser.setInitialFileName("trucks_" + 
+                java.time.LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ".xlsx");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Excel Files", "*.xlsx"));
+        
+        File file = fileChooser.showSaveDialog(getScene().getWindow());
+        if (file != null) {
+            try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+                org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("Trucks");
+                
+                // Create header row
+                String[] headers = {"Truck/Unit", "VIN#", "Make", "Model", "Year", "Type", "Status", 
+                                   "Registration Expiry", "Insurance Expiry", "Inspection Expiry", 
+                                   "Inspection", "Permit", "License Plate", "Driver"};
+                
+                org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
+                for (int i = 0; i < headers.length; i++) {
+                    org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
+                    cell.setCellValue(headers[i]);
+                    // Make the header bold
+                    org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
+                    org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+                    headerFont.setBold(true);
+                    headerStyle.setFont(headerFont);
+                    cell.setCellStyle(headerStyle);
+                }
+                
+                // Filter the trucks if search filter is applied
+                List<Truck> exportList = new ArrayList<>();
+                if (table.getItems() != null) {
+                    exportList.addAll(table.getItems());
+                } else {
+                    exportList.addAll(trucks);
+                }
+                
+                // Create data rows
+                int rowNum = 1;
+                org.apache.poi.ss.usermodel.CellStyle dateStyle = workbook.createCellStyle();
+                dateStyle.setDataFormat(workbook.createDataFormat().getFormat("mm/dd/yyyy"));
+                
+                for (Truck truck : exportList) {
+                    org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowNum++);
+                    
+                    row.createCell(0).setCellValue(truck.getNumber());
+                    row.createCell(1).setCellValue(truck.getVin());
+                    row.createCell(2).setCellValue(truck.getMake());
+                    row.createCell(3).setCellValue(truck.getModel());
+                    row.createCell(4).setCellValue(truck.getYear());
+                    row.createCell(5).setCellValue(truck.getType());
+                    row.createCell(6).setCellValue(truck.getStatus());
+                    
+                    // Registration expiry date
+                    org.apache.poi.ss.usermodel.Cell regExpiryCell = row.createCell(7);
+                    if (truck.getRegistrationExpiryDate() != null) {
+                        regExpiryCell.setCellValue(java.util.Date.from(truck.getRegistrationExpiryDate().atStartOfDay(
+                                java.time.ZoneId.systemDefault()).toInstant()));
+                        regExpiryCell.setCellStyle(dateStyle);
+                    }
+                    
+                    // Insurance expiry date
+                    org.apache.poi.ss.usermodel.Cell insExpiryCell = row.createCell(8);
+                    if (truck.getInsuranceExpiryDate() != null) {
+                        insExpiryCell.setCellValue(java.util.Date.from(truck.getInsuranceExpiryDate().atStartOfDay(
+                                java.time.ZoneId.systemDefault()).toInstant()));
+                        insExpiryCell.setCellStyle(dateStyle);
+                    }
+                    
+                    // Inspection expiry date
+                    org.apache.poi.ss.usermodel.Cell inspExpiryCell = row.createCell(9);
+                    if (truck.getNextInspectionDue() != null) {
+                        inspExpiryCell.setCellValue(java.util.Date.from(truck.getNextInspectionDue().atStartOfDay(
+                                java.time.ZoneId.systemDefault()).toInstant()));
+                        inspExpiryCell.setCellStyle(dateStyle);
+                    }
+                    
+                    // Inspection date
+                    org.apache.poi.ss.usermodel.Cell inspCell = row.createCell(10);
+                    if (truck.getInspection() != null) {
+                        inspCell.setCellValue(java.util.Date.from(truck.getInspection().atStartOfDay(
+                                java.time.ZoneId.systemDefault()).toInstant()));
+                        inspCell.setCellStyle(dateStyle);
+                    }
+                    
+                    row.createCell(11).setCellValue(truck.getPermitNumbers());
+                    row.createCell(12).setCellValue(truck.getLicensePlate());
+                    row.createCell(13).setCellValue(truck.getDriver());
+                }
+                
+                // Auto-size columns for better readability
+                for (int i = 0; i < headers.length; i++) {
+                    sheet.autoSizeColumn(i);
+                }
+                
+                // Write to file
+                try (FileOutputStream outputStream = new FileOutputStream(file)) {
+                    workbook.write(outputStream);
+                }
+                
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Export Successful");
+                alert.setHeaderText("Export Completed");
+                alert.setContentText("Exported " + exportList.size() + " trucks to Excel successfully.");
+                alert.showAndWait();
+                
+            } catch (Exception e) {
+                logger.error("Failed to export to Excel", e);
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Export Failed");
+                alert.setHeaderText("Export Error");
+                alert.setContentText("Failed to export data: " + e.getMessage());
+                alert.showAndWait();
+            }
+        }
+    }
+    
+    /**
+     * Escape special characters for CSV format
+     */
+    private String escapeCSV(String value) {
+        if (value == null) return "";
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
     }
 }

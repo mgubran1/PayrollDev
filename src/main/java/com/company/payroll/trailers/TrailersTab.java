@@ -23,6 +23,11 @@ import org.slf4j.LoggerFactory;
 import com.company.payroll.payroll.ModernButtonStyles;
 
 import java.io.File;
+import java.io.BufferedWriter;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -32,6 +37,11 @@ import java.util.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.concurrent.Task;
+import java.io.BufferedWriter;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Enhanced Trailers tab for managing fleet information with focus on document tracking
@@ -186,12 +196,14 @@ public class TrailersTab extends BorderPane {
         Button deleteBtn = ModernButtonStyles.createDangerButton("🗑️ Delete");
         Button refreshBtn = ModernButtonStyles.createSuccessButton("🔄 Refresh");
         Button importBtn = ModernButtonStyles.createInfoButton("📥 Import CSV/XLSX");
+        Button exportBtn = ModernButtonStyles.createInfoButton("📊 Export");
         Button uploadBtn = ModernButtonStyles.createInfoButton("📤 Upload Document");
         Button printBtn = ModernButtonStyles.createSecondaryButton("🖨️ Print Document");
         
         uploadBtn.setOnAction(e -> uploadDocument());
         printBtn.setOnAction(e -> printSelectedTrailerDocuments());
         importBtn.setOnAction(e -> showImportDialog());
+        exportBtn.setOnAction(e -> showExportDialog());
         
         addBtn.setOnAction(e -> {
             logger.info("Add trailer button clicked");
@@ -230,7 +242,7 @@ public class TrailersTab extends BorderPane {
             loadData();
         });
         
-        HBox btnBox = new HBox(12, addBtn, editBtn, deleteBtn, refreshBtn, importBtn, uploadBtn, printBtn);
+        HBox btnBox = new HBox(12, addBtn, editBtn, deleteBtn, refreshBtn, importBtn, exportBtn, uploadBtn, printBtn);
         btnBox.setPadding(new Insets(12));
         btnBox.setAlignment(Pos.CENTER_LEFT);
         
@@ -1948,5 +1960,252 @@ public class TrailersTab extends BorderPane {
             alert.setContentText("Failed to open folder: " + e.getMessage());
             alert.showAndWait();
         }
+    }
+    
+    /**
+     * Show export dialog for CSV/XLSX files.
+     */
+    private void showExportDialog() {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Export Trailers");
+        dialog.setHeaderText("Choose export format");
+        
+        ButtonType csvButtonType = new ButtonType("CSV", ButtonBar.ButtonData.OK_DONE);
+        ButtonType xlsxButtonType = new ButtonType("XLSX", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancelButtonType = ButtonType.CANCEL;
+        
+        dialog.getDialogPane().getButtonTypes().addAll(csvButtonType, xlsxButtonType, cancelButtonType);
+        
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == csvButtonType) {
+                return "CSV";
+            } else if (dialogButton == xlsxButtonType) {
+                return "XLSX";
+            }
+            return null;
+        });
+        
+        dialog.showAndWait().ifPresent(format -> {
+            if (format.equals("CSV")) {
+                exportToCSV();
+            } else if (format.equals("XLSX")) {
+                exportToXLSX();
+            }
+        });
+    }
+    
+    /**
+     * Export trailers data to CSV file
+     */
+    private void exportToCSV() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Trailers to CSV");
+        fileChooser.setInitialFileName("trailers_" + 
+                java.time.LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ".csv");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("CSV Files", "*.csv"));
+        
+        File file = fileChooser.showSaveDialog(getScene().getWindow());
+        if (file != null) {
+            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
+                    new FileOutputStream(file), StandardCharsets.UTF_8))) {
+                
+                // Write BOM for Excel UTF-8 recognition
+                writer.write('\ufeff');
+                
+                // Write headers
+                writer.write("Trailer Number,Year,Make,Model,VIN,Type,Status,License Plate,Registration Expiry," +
+                           "Insurance Expiry,Last Inspection Date,Next Inspection Due,Current Location," +
+                           "Assigned Truck,Assigned Driver");
+                writer.newLine();
+                
+                // Filter the trailers if search filter is applied
+                List<Trailer> exportList = new ArrayList<>();
+                if (table.getItems() != null) {
+                    exportList.addAll(table.getItems());
+                } else {
+                    exportList.addAll(trailers);
+                }
+                
+                // Write data
+                DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+                for (Trailer trailer : exportList) {
+                    StringBuilder line = new StringBuilder();
+                    line.append(escapeCSV(trailer.getTrailerNumber())).append(",");
+                    line.append(trailer.getYear() > 0 ? trailer.getYear() : "").append(",");
+                    line.append(escapeCSV(trailer.getMake())).append(",");
+                    line.append(escapeCSV(trailer.getModel())).append(",");
+                    line.append(escapeCSV(trailer.getVin())).append(",");
+                    line.append(escapeCSV(trailer.getType())).append(",");
+                    line.append(trailer.getStatus() != null ? trailer.getStatus().name() : "ACTIVE").append(",");
+                    line.append(escapeCSV(trailer.getLicensePlate())).append(",");
+                    line.append(trailer.getRegistrationExpiryDate() != null ? 
+                            trailer.getRegistrationExpiryDate().format(dateFormatter) : "").append(",");
+                    line.append(trailer.getInsuranceExpiryDate() != null ? 
+                            trailer.getInsuranceExpiryDate().format(dateFormatter) : "").append(",");
+                    line.append(trailer.getLastInspectionDate() != null ? 
+                            trailer.getLastInspectionDate().format(dateFormatter) : "").append(",");
+                    line.append(trailer.getNextInspectionDueDate() != null ? 
+                            trailer.getNextInspectionDueDate().format(dateFormatter) : "").append(",");
+                    line.append(escapeCSV(trailer.getCurrentLocation())).append(",");
+                    line.append(escapeCSV(trailer.getAssignedTruck())).append(",");
+                    line.append(escapeCSV(trailer.getAssignedDriver()));
+                    
+                    writer.write(line.toString());
+                    writer.newLine();
+                }
+                
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Export Successful");
+                alert.setHeaderText("Export Completed");
+                alert.setContentText("Exported " + exportList.size() + " trailers to CSV successfully.");
+                alert.showAndWait();
+                
+            } catch (IOException e) {
+                logger.error("Failed to export to CSV", e);
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Export Failed");
+                alert.setHeaderText("Export Error");
+                alert.setContentText("Failed to export data: " + e.getMessage());
+                alert.showAndWait();
+            }
+        }
+    }
+    
+    /**
+     * Export trailers data to XLSX file
+     */
+    private void exportToXLSX() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Trailers to Excel");
+        fileChooser.setInitialFileName("trailers_" + 
+                java.time.LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ".xlsx");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Excel Files", "*.xlsx"));
+        
+        File file = fileChooser.showSaveDialog(getScene().getWindow());
+        if (file != null) {
+            try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+                org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("Trailers");
+                
+                // Create header row
+                String[] headers = {"Trailer Number", "Year", "Make", "Model", "VIN", "Type", "Status", 
+                                   "License Plate", "Registration Expiry", "Insurance Expiry", 
+                                   "Last Inspection Date", "Next Inspection Due", "Current Location",
+                                   "Assigned Truck", "Assigned Driver"};
+                
+                org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
+                for (int i = 0; i < headers.length; i++) {
+                    org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
+                    cell.setCellValue(headers[i]);
+                    // Make the header bold
+                    org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
+                    org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+                    headerFont.setBold(true);
+                    headerStyle.setFont(headerFont);
+                    cell.setCellStyle(headerStyle);
+                }
+                
+                // Filter the trailers if search filter is applied
+                List<Trailer> exportList = new ArrayList<>();
+                if (table.getItems() != null) {
+                    exportList.addAll(table.getItems());
+                } else {
+                    exportList.addAll(trailers);
+                }
+                
+                // Create data rows
+                int rowNum = 1;
+                org.apache.poi.ss.usermodel.CellStyle dateStyle = workbook.createCellStyle();
+                dateStyle.setDataFormat(workbook.createDataFormat().getFormat("mm/dd/yyyy"));
+                
+                for (Trailer trailer : exportList) {
+                    org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowNum++);
+                    
+                    row.createCell(0).setCellValue(trailer.getTrailerNumber());
+                    if (trailer.getYear() > 0) {
+                        row.createCell(1).setCellValue(trailer.getYear());
+                    }
+                    row.createCell(2).setCellValue(trailer.getMake());
+                    row.createCell(3).setCellValue(trailer.getModel());
+                    row.createCell(4).setCellValue(trailer.getVin());
+                    row.createCell(5).setCellValue(trailer.getType());
+                    row.createCell(6).setCellValue(trailer.getStatus() != null ? 
+                            trailer.getStatus().name() : "ACTIVE");
+                    row.createCell(7).setCellValue(trailer.getLicensePlate());
+                    
+                    // Registration expiry date
+                    org.apache.poi.ss.usermodel.Cell regExpiryCell = row.createCell(8);
+                    if (trailer.getRegistrationExpiryDate() != null) {
+                        regExpiryCell.setCellValue(java.util.Date.from(trailer.getRegistrationExpiryDate().atStartOfDay(
+                                java.time.ZoneId.systemDefault()).toInstant()));
+                        regExpiryCell.setCellStyle(dateStyle);
+                    }
+                    
+                    // Insurance expiry date
+                    org.apache.poi.ss.usermodel.Cell insExpiryCell = row.createCell(9);
+                    if (trailer.getInsuranceExpiryDate() != null) {
+                        insExpiryCell.setCellValue(java.util.Date.from(trailer.getInsuranceExpiryDate().atStartOfDay(
+                                java.time.ZoneId.systemDefault()).toInstant()));
+                        insExpiryCell.setCellStyle(dateStyle);
+                    }
+                    
+                    // Last inspection date
+                    org.apache.poi.ss.usermodel.Cell lastInspCell = row.createCell(10);
+                    if (trailer.getLastInspectionDate() != null) {
+                        lastInspCell.setCellValue(java.util.Date.from(trailer.getLastInspectionDate().atStartOfDay(
+                                java.time.ZoneId.systemDefault()).toInstant()));
+                        lastInspCell.setCellStyle(dateStyle);
+                    }
+                    
+                    // Next inspection due date
+                    org.apache.poi.ss.usermodel.Cell nextInspCell = row.createCell(11);
+                    if (trailer.getNextInspectionDueDate() != null) {
+                        nextInspCell.setCellValue(java.util.Date.from(trailer.getNextInspectionDueDate().atStartOfDay(
+                                java.time.ZoneId.systemDefault()).toInstant()));
+                        nextInspCell.setCellStyle(dateStyle);
+                    }
+                    
+                    row.createCell(12).setCellValue(trailer.getCurrentLocation());
+                    row.createCell(13).setCellValue(trailer.getAssignedTruck());
+                    row.createCell(14).setCellValue(trailer.getAssignedDriver());
+                }
+                
+                // Auto-size columns for better readability
+                for (int i = 0; i < headers.length; i++) {
+                    sheet.autoSizeColumn(i);
+                }
+                
+                // Write to file
+                try (FileOutputStream outputStream = new FileOutputStream(file)) {
+                    workbook.write(outputStream);
+                }
+                
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Export Successful");
+                alert.setHeaderText("Export Completed");
+                alert.setContentText("Exported " + exportList.size() + " trailers to Excel successfully.");
+                alert.showAndWait();
+                
+            } catch (Exception e) {
+                logger.error("Failed to export to Excel", e);
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Export Failed");
+                alert.setHeaderText("Export Error");
+                alert.setContentText("Failed to export data: " + e.getMessage());
+                alert.showAndWait();
+            }
+        }
+    }
+    
+    /**
+     * Escape special characters for CSV format
+     */
+    private String escapeCSV(String value) {
+        if (value == null) return "";
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
     }
 }

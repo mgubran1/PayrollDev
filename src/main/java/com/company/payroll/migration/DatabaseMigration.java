@@ -27,6 +27,11 @@ public class DatabaseMigration {
             updatePayrollHistoryTable();
             markMigrationApplied("update_payroll_history");
         }
+        
+        if (!isMigrationApplied("add_lumper_amount_column")) {
+            addLumperAmountColumn();
+            markMigrationApplied("add_lumper_amount_column");
+        }
     }
     
     private void createMigrationTable() throws SQLException {
@@ -143,6 +148,13 @@ public class DatabaseMigration {
                     // Column might already exist
                 }
             }
+        }
+    }
+    
+    private void addLumperAmountColumn() throws SQLException {
+        String sql = "ALTER TABLE loads ADD COLUMN lumper_amount REAL DEFAULT 0.0";
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute(sql);
         }
     }
 }

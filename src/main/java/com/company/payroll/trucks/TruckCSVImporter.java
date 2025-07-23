@@ -18,13 +18,15 @@ import java.util.*;
  * Importer for truck data from CSV and XLSX files.
  * Supports importing truck information with the following fields:
  * - Truck/Unit
- * - Year
+ * - VIN#
  * - Make/Model
- * - VIN
- * - License Plate
- * - Assigned Driver
+ * - Type
+ * - Status
  * - Registration Expiry
+ * - Insurance Expiry
+ * - Inspection Expiry
  * - Inspection
+ * - Permit
  */
 public class TruckCSVImporter {
     private static final Logger logger = LoggerFactory.getLogger(TruckCSVImporter.class);
@@ -60,7 +62,7 @@ public class TruckCSVImporter {
             }
             
             // Parse header to find column indices
-            String[] headers = line.split(",");
+            String[] headers = line.split(",", -1); // -1 to include trailing empty strings
             Map<String, Integer> columnIndices = getColumnIndices(headers);
             logger.debug("CSV column indices: {}", columnIndices);
             
@@ -218,15 +220,39 @@ public class TruckCSVImporter {
             } else if (header.equals("license plate") || header.equals("plate")) {
                 indices.put("License Plate", i);
             }
+            // More flexible matching for type
+            else if (header.equals("type")) {
+                indices.put("Type", i);
+            }
+            // More flexible matching for status
+            else if (header.equals("status")) {
+                indices.put("Status", i);
+            }
             // More flexible matching for registration expiry
             else if (header.contains("registration") && header.contains("expiry")) {
                 indices.put("Registration Expiry", i);
             } else if (header.equals("registration expiry") || header.equals("reg expiry")) {
                 indices.put("Registration Expiry", i);
             }
+            // More flexible matching for insurance expiry
+            else if (header.contains("insurance") && header.contains("expiry")) {
+                indices.put("Insurance Expiry", i);
+            } else if (header.equals("insurance expiry") || header.equals("ins expiry")) {
+                indices.put("Insurance Expiry", i);
+            }
             // More flexible matching for inspection
-            else if (header.contains("inspection")) {
+            else if (header.contains("inspection") && !header.contains("expiry")) {
                 indices.put("Inspection", i);
+            }
+            // More flexible matching for inspection expiry
+            else if (header.contains("inspection") && header.contains("expiry")) {
+                indices.put("Inspection Expiry", i);
+            } else if (header.equals("inspection expiry") || header.equals("insp expiry")) {
+                indices.put("Inspection Expiry", i);
+            }
+            // More flexible matching for permit
+            else if (header.contains("permit")) {
+                indices.put("Permit", i);
             }
         }
         
@@ -270,15 +296,39 @@ public class TruckCSVImporter {
                 } else if (header.equals("license plate") || header.equals("plate")) {
                     indices.put("License Plate", i);
                 }
+                // More flexible matching for type
+                else if (header.equals("type")) {
+                    indices.put("Type", i);
+                }
+                // More flexible matching for status
+                else if (header.equals("status")) {
+                    indices.put("Status", i);
+                }
                 // More flexible matching for registration expiry
                 else if (header.contains("registration") && header.contains("expiry")) {
                     indices.put("Registration Expiry", i);
                 } else if (header.equals("registration expiry") || header.equals("reg expiry")) {
                     indices.put("Registration Expiry", i);
                 }
+                // More flexible matching for insurance expiry
+                else if (header.contains("insurance") && header.contains("expiry")) {
+                    indices.put("Insurance Expiry", i);
+                } else if (header.equals("insurance expiry") || header.equals("ins expiry")) {
+                    indices.put("Insurance Expiry", i);
+                }
                 // More flexible matching for inspection
-                else if (header.contains("inspection")) {
+                else if (header.contains("inspection") && !header.contains("expiry")) {
                     indices.put("Inspection", i);
+                }
+                // More flexible matching for inspection expiry
+                else if (header.contains("inspection") && header.contains("expiry")) {
+                    indices.put("Inspection Expiry", i);
+                } else if (header.equals("inspection expiry") || header.equals("insp expiry")) {
+                    indices.put("Inspection Expiry", i);
+                }
+                // More flexible matching for permit
+                else if (header.contains("permit")) {
+                    indices.put("Permit", i);
                 }
             }
         }
@@ -290,7 +340,7 @@ public class TruckCSVImporter {
      * Parse a CSV row into a Truck object with improved validation
      */
     private static Truck parseCSVRow(String line, Map<String, Integer> columnIndices, int lineNumber) {
-        String[] values = line.split(",");
+        String[] values = line.split(",", -1); // -1 to include trailing empty strings
         
         // Extract values with better error handling
         String truckUnit = getValue(values, columnIndices, "Truck/Unit");
@@ -298,8 +348,13 @@ public class TruckCSVImporter {
         String makeModel = getValue(values, columnIndices, "Make/Model");
         String vin = getValue(values, columnIndices, "VIN");
         String licensePlate = getValue(values, columnIndices, "License Plate");
+        String type = getValue(values, columnIndices, "Type");
+        String status = getValue(values, columnIndices, "Status");
         LocalDate registrationExpiry = parseDate(getValue(values, columnIndices, "Registration Expiry"));
+        LocalDate insuranceExpiry = parseDate(getValue(values, columnIndices, "Insurance Expiry"));
+        LocalDate inspectionExpiry = parseDate(getValue(values, columnIndices, "Inspection Expiry"));
         LocalDate inspection = parseDate(getValue(values, columnIndices, "Inspection"));
+        String permitNumbers = getValue(values, columnIndices, "Permit");
         
         // Validate required fields
         if (truckUnit == null || truckUnit.trim().isEmpty()) {
@@ -332,17 +387,21 @@ public class TruckCSVImporter {
         truck.setModel(model);
         truck.setVin(vin != null ? vin.trim() : "");
         truck.setLicensePlate(licensePlate != null ? licensePlate.trim() : "");
+        truck.setType(type != null && !type.trim().isEmpty() ? type.trim() : "Semi Truck (Tractor)");
+        truck.setStatus(status != null && !status.trim().isEmpty() ? status.trim() : "Active");
         truck.setRegistrationExpiryDate(registrationExpiry);
+        truck.setInsuranceExpiryDate(insuranceExpiry);
         truck.setInspection(inspection);
+        truck.setPermitNumbers(permitNumbers != null ? permitNumbers.trim() : "");
         
-        // Auto-calculate Inspection Expiry as 365 days after Inspection date
-        if (inspection != null) {
-            LocalDate inspectionExpiry = inspection.plusDays(365);
+        // Auto-calculate Inspection Expiry if not provided but inspection date is available
+        if (inspectionExpiry != null) {
             truck.setNextInspectionDue(inspectionExpiry);
+        } else if (inspection != null) {
+            LocalDate calculatedExpiry = inspection.plusDays(365);
+            truck.setNextInspectionDue(calculatedExpiry);
         }
         
-        truck.setStatus("Active"); // default status
-        truck.setType("Semi Truck (Tractor)"); // default type
         truck.setAssigned(false); // Assigned Driver column removed, so always false
         
         logger.debug("Parsed truck from line {}: {}", lineNumber, truckUnit);
@@ -359,8 +418,13 @@ public class TruckCSVImporter {
         String makeModel = getCellValue(row, columnIndices, "Make/Model");
         String vin = getCellValue(row, columnIndices, "VIN");
         String licensePlate = getCellValue(row, columnIndices, "License Plate");
+        String type = getCellValue(row, columnIndices, "Type");
+        String status = getCellValue(row, columnIndices, "Status");
         LocalDate registrationExpiry = parseDate(getCellValue(row, columnIndices, "Registration Expiry"));
+        LocalDate insuranceExpiry = parseDate(getCellValue(row, columnIndices, "Insurance Expiry"));
+        LocalDate inspectionExpiry = parseDate(getCellValue(row, columnIndices, "Inspection Expiry"));
         LocalDate inspection = parseDate(getCellValue(row, columnIndices, "Inspection"));
+        String permitNumbers = getCellValue(row, columnIndices, "Permit");
         
         // Validate required fields
         if (truckUnit == null || truckUnit.trim().isEmpty()) {
@@ -393,17 +457,21 @@ public class TruckCSVImporter {
         truck.setModel(model);
         truck.setVin(vin != null ? vin.trim() : "");
         truck.setLicensePlate(licensePlate != null ? licensePlate.trim() : "");
+        truck.setType(type != null && !type.trim().isEmpty() ? type.trim() : "Semi Truck (Tractor)");
+        truck.setStatus(status != null && !status.trim().isEmpty() ? status.trim() : "Active");
         truck.setRegistrationExpiryDate(registrationExpiry);
+        truck.setInsuranceExpiryDate(insuranceExpiry);
         truck.setInspection(inspection);
+        truck.setPermitNumbers(permitNumbers != null ? permitNumbers.trim() : "");
         
-        // Auto-calculate Inspection Expiry as 365 days after Inspection date
-        if (inspection != null) {
-            LocalDate inspectionExpiry = inspection.plusDays(365);
+        // Auto-calculate Inspection Expiry if not provided but inspection date is available
+        if (inspectionExpiry != null) {
             truck.setNextInspectionDue(inspectionExpiry);
+        } else if (inspection != null) {
+            LocalDate calculatedExpiry = inspection.plusDays(365);
+            truck.setNextInspectionDue(calculatedExpiry);
         }
         
-        truck.setStatus("Active"); // default status
-        truck.setType("Semi Truck (Tractor)"); // default type
         truck.setAssigned(false); // Assigned Driver column removed, so always false
         
         logger.debug("Parsed truck from row {}: {}", rowNumber, truckUnit);
@@ -449,6 +517,13 @@ public class TruckCSVImporter {
                 case STRING:
                     return cell.getStringCellValue().trim();
                 case NUMERIC:
+                    if (DateUtil.isCellDateFormatted(cell)) {
+                        try {
+                            return cell.getLocalDateTimeCellValue().toLocalDate().format(DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                        } catch (Exception e) {
+                            return "";
+                        }
+                    }
                     double value = cell.getNumericCellValue();
                     if (Math.floor(value) == value) {
                         return String.valueOf((long) value);

@@ -9,13 +9,13 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.company.payroll.database.DatabaseConfig;
+import com.company.payroll.loads.EnhancedAutocompleteField;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Locale;
-import java.util.concurrent.CompletableFuture;
-
-import com.company.payroll.loads.EnterpriseDataCacheManager;
 
 public class Main extends Application {
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
@@ -76,12 +76,6 @@ public class Main extends Application {
             
             logger.debug("Showing primary stage");
             primaryStage.show();
-
-            // Warm up enterprise caches in background for instant dialogs
-            CompletableFuture.runAsync(() -> {
-                EnterpriseDataCacheManager cacheManager = EnterpriseDataCacheManager.getInstance();
-                cacheManager.getCachedCustomers().forEach(c -> cacheManager.getCustomerAddressesAsync(c));
-            });
             
             logger.info("=== Application started successfully ===");
             logger.info("Window dimensions: {}x{}", primaryStage.getWidth(), primaryStage.getHeight());
@@ -131,9 +125,28 @@ public class Main extends Application {
     @Override
     public void stop() throws Exception {
         logger.info("Application stop() called - shutting down");
+        
+        // Shutdown main controller
         if (mainController != null) {
             mainController.shutdown();
         }
+        
+        // Shutdown database connection pool
+        try {
+            DatabaseConfig.shutdown();
+            logger.info("Database connection pool shut down successfully");
+        } catch (Exception e) {
+            logger.error("Error shutting down database connection pool", e);
+        }
+        
+        // Shutdown autocomplete field executor
+        try {
+            EnhancedAutocompleteField.shutdown();
+            logger.info("Autocomplete field executor shut down successfully");
+        } catch (Exception e) {
+            logger.error("Error shutting down autocomplete field executor", e);
+        }
+        
         super.stop();
         logger.info("Application shutdown complete");
     }

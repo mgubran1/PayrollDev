@@ -4,6 +4,8 @@ import com.company.payroll.loads.Load;
 import com.company.payroll.loads.LoadDAO;
 import com.company.payroll.config.InvoiceConfig;
 import com.company.payroll.config.InvoiceConfigDialog;
+import com.company.payroll.config.DocumentConfig;
+import com.company.payroll.config.DocumentConfigDialog;
 import com.company.payroll.export.InvoicePDFGenerator;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleDoubleProperty;
@@ -14,8 +16,10 @@ import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.geometry.Insets;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
+import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -81,8 +85,9 @@ public class MyTriumphTab extends Tab {
         Button syncFromLoadsBtn = ModernButtonStyles.createInfoButton("🔄 Sync from Loads");
         Button copyUnbilledBtn = ModernButtonStyles.createSecondaryButton("📋 Copy Unbilled for Excel");
         Button invoiceConfigBtn = ModernButtonStyles.createWarningButton("⚙️ Invoice Config");
+        Button documentConfigBtn = ModernButtonStyles.createInfoButton("📁 Document Config");
 
-        HBox buttonBox = new HBox(8, importBtn, addBtn, editBtn, removeBtn, saveBtn, refreshBtn, syncFromLoadsBtn, copyUnbilledBtn, invoiceConfigBtn);
+        HBox buttonBox = new HBox(8, importBtn, addBtn, editBtn, removeBtn, saveBtn, refreshBtn, syncFromLoadsBtn, copyUnbilledBtn, invoiceConfigBtn, documentConfigBtn);
         buttonBox.setPadding(new Insets(8));
 
         // Table setup
@@ -182,31 +187,53 @@ public class MyTriumphTab extends Tab {
         colDriver.setCellValueFactory(param -> new ReadOnlyStringWrapper(param.getValue().getDriverName() == null ? "" : param.getValue().getDriverName()));
         colDriver.setPrefWidth(120);
 
-        // Action column for Generate Invoice
-        TableColumn<MyTriumphRecord, Void> colAction = new TableColumn<>("Action");
-        colAction.setPrefWidth(120);
+        // Enhanced Action column for Generate Invoice
+        TableColumn<MyTriumphRecord, Void> colAction = new TableColumn<>("Actions");
+        colAction.setPrefWidth(140);
         colAction.setCellFactory(col -> new TableCell<MyTriumphRecord, Void>() {
-            private final Button generateInvoiceBtn = ModernButtonStyles.createPrimaryButton("📄 Invoice");
+            private final Button generateInvoiceBtn = ModernButtonStyles.createPrimaryButton("PDF Invoice");
+            private final Button previewBtn = ModernButtonStyles.createSecondaryButton("Preview");
+            private final HBox buttonBox = new HBox(3, generateInvoiceBtn, previewBtn);
             
             {
+                // Style the buttons for compact display
                 generateInvoiceBtn.getStyleClass().add("triumph-invoice-button");
-                generateInvoiceBtn.setStyle("-fx-font-size: 11px; -fx-padding: 3 8 3 8;");
+                generateInvoiceBtn.setStyle("-fx-font-size: 10px; -fx-padding: 2 6 2 6;");
+                generateInvoiceBtn.setTooltip(new Tooltip("Generate PDF Invoice"));
+                
+                previewBtn.getStyleClass().add("triumph-preview-button");
+                previewBtn.setStyle("-fx-font-size: 10px; -fx-padding: 2 6 2 6;");
+                previewBtn.setTooltip(new Tooltip("Preview Invoice Details"));
+                
+                buttonBox.setAlignment(javafx.geometry.Pos.CENTER);
+                
                 generateInvoiceBtn.setOnAction(e -> {
-                    MyTriumphRecord record = getTableView().getItems().get(getIndex());
-                    generateInvoice(record);
+                    int index = getIndex();
+                    if (index >= 0 && index < getTableView().getItems().size()) {
+                        MyTriumphRecord record = getTableView().getItems().get(index);
+                        generateEnhancedInvoice(record);
+                    }
+                });
+                
+                previewBtn.setOnAction(e -> {
+                    int index = getIndex();
+                    if (index >= 0 && index < getTableView().getItems().size()) {
+                        MyTriumphRecord record = getTableView().getItems().get(index);
+                        previewInvoiceDetails(record);
+                    }
                 });
             }
             
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty) {
+                if (empty || getIndex() >= getTableView().getItems().size()) {
                     setGraphic(null);
                 } else {
                     MyTriumphRecord record = getTableView().getItems().get(getIndex());
-                    // Only show button for synced records
-                    if ("SYNCED".equals(record.getSource())) {
-                        setGraphic(generateInvoiceBtn);
+                    // Show buttons for records that have matching loads or are billed
+                    if (isInvoiceEligible(record)) {
+                        setGraphic(buttonBox);
                     } else {
                         setGraphic(null);
                     }
@@ -285,6 +312,10 @@ public class MyTriumphTab extends Tab {
         invoiceConfigBtn.setOnAction(e -> {
             logger.info("Invoice Config button clicked");
             showInvoiceConfigDialog();
+        });
+        documentConfigBtn.setOnAction(e -> {
+            logger.info("Document Config button clicked");
+            showDocumentConfigDialog();
         });
 
         searchField.textProperty().addListener((obs, oldV, newV) -> {
@@ -911,14 +942,14 @@ public class MyTriumphTab extends Tab {
         logger.error("Showing error dialog: {}", msg);
         Alert alert = new Alert(Alert.AlertType.ERROR, msg, ButtonType.OK);
         alert.setHeaderText("Error");
-        alert.showAndWait();
+        alert.show(); // Non-blocking
     }
 
     private void showInfo(String msg) {
         logger.info("Showing info dialog: {}", msg);
         Alert alert = new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK);
         alert.setHeaderText("Info");
-        alert.showAndWait();
+        alert.show(); // Non-blocking
     }
     
     /**
@@ -929,61 +960,411 @@ public class MyTriumphTab extends Tab {
         dialog.showAndWait();
     }
     
+    private void showDocumentConfigDialog() {
+        DocumentConfigDialog dialog = new DocumentConfigDialog();
+        dialog.showAndWait();
+    }
+    
     /**
-     * Generate invoice for a synced triumph record
+     * Check if a record is eligible for invoice generation
      */
-    private void generateInvoice(MyTriumphRecord record) {
-        if (record == null || !"SYNCED".equals(record.getSource())) {
-            showError("Can only generate invoices for synced records");
+    private boolean isInvoiceEligible(MyTriumphRecord record) {
+        if (record == null) return false;
+        
+        // Records are eligible if they have invoice data and a matching load can be found
+        return (record.getInvoiceNumber() != null && !record.getInvoiceNumber().isEmpty() && 
+                !record.getInvoiceNumber().equals("PENDING") &&
+                findLoadForRecord(record) != null) ||
+               ("IMPORT".equals(record.getSource()) && record.isMatched());
+    }
+    
+    /**
+     * Preview invoice details in a dialog
+     */
+    private void previewInvoiceDetails(MyTriumphRecord record) {
+        logger.info("Previewing invoice details for record: {}", record.getPo());
+        
+        try {
+            Load load = findLoadForRecord(record);
+            if (load == null) {
+                showError("Could not find corresponding load data for this record.\n" +
+                         "Please ensure the load exists and has matching PO number.");
+                return;
+            }
+            
+            // Create preview dialog
+            Dialog<Void> previewDialog = new Dialog<>();
+            previewDialog.setTitle("Invoice Preview - " + record.getPo());
+            previewDialog.setHeaderText("Invoice Details Preview");
+            previewDialog.getDialogPane().getButtonTypes().addAll(ButtonType.CLOSE);
+            
+            // Create preview content
+            VBox content = createInvoicePreviewContent(record, load);
+            ScrollPane scrollPane = new ScrollPane(content);
+            scrollPane.setFitToWidth(true);
+            scrollPane.setPrefSize(600, 500);
+            
+            previewDialog.getDialogPane().setContent(scrollPane);
+            previewDialog.setResizable(true);
+            
+            // Add generate button to preview
+            ButtonType generateButtonType = new ButtonType("Generate PDF", ButtonBar.ButtonData.OTHER);
+            previewDialog.getDialogPane().getButtonTypes().add(0, generateButtonType);
+            
+            previewDialog.setResultConverter(dialogButton -> {
+                if (dialogButton == generateButtonType) {
+                    generateEnhancedInvoice(record);
+                }
+                return null;
+            });
+            
+            previewDialog.showAndWait();
+            
+        } catch (Exception e) {
+            logger.error("Failed to preview invoice details", e);
+            showError("Failed to preview invoice: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Generate enhanced invoice PDF with improved error handling and user feedback
+     */
+    private void generateEnhancedInvoice(MyTriumphRecord record) {
+        logger.info("Generating enhanced invoice for record: {} (PO: {})", 
+            record.getId(), record.getPo());
+        
+        if (record == null) {
+            showError("Invalid record selected");
             return;
         }
         
         try {
-            // Find the corresponding load
-            Load load = findLoadForRecord(record);
-            if (load == null) {
-                showError("Could not find load data for this record");
+            // Validate record eligibility
+            if (!isInvoiceEligible(record)) {
+                showError("This record is not eligible for invoice generation.\n" +
+                         "Ensure the record has valid invoice data and a corresponding load.");
                 return;
             }
             
-            // Choose output location
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Save Invoice PDF");
-            fileChooser.setInitialFileName("Invoice_" + record.getInvoiceNumber() + ".pdf");
-            fileChooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("PDF Files", "*.pdf")
-            );
+            // Find the corresponding load
+            Load load = findLoadForRecord(record);
+            if (load == null) {
+                showError("Could not find load data for this record.\n" +
+                         "PO Number: " + record.getPo() + "\n" +
+                         "Please verify the load exists in the system.");
+                return;
+            }
             
-            File outputFile = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
+            // Validate load data
+            if (load.getCustomer() == null || load.getCustomer().isEmpty()) {
+                showError("Load data is incomplete. Customer information is missing.\n" +
+                         "Please update the load with complete customer details.");
+                return;
+            }
+            
+            // Get driver name from load
+            String driverName = load.getDriver() != null ? load.getDriver().getName() : "Unknown";
+            
+            // Check if auto-save is enabled
+            DocumentConfig docConfig = DocumentConfig.getInstance();
+            File autoSaveFile = null;
+            boolean useAutoSave = docConfig.isAutoSaveEnabled();
+            
+            if (useAutoSave) {
+                // Use automatic path generation
+                autoSaveFile = docConfig.generateInvoicePath(
+                    record.getPo() != null ? record.getPo() : "UNKNOWN",
+                    driverName,
+                    record.getInvoiceDate() != null ? record.getInvoiceDate() : LocalDate.now()
+                );
+                
+                // Show confirmation with path
+                Alert confirmAlert = new Alert(Alert.AlertType.CONFIRMATION);
+                confirmAlert.setTitle("Save Invoice");
+                confirmAlert.setHeaderText("Invoice will be saved to:");
+                confirmAlert.setContentText(autoSaveFile.getAbsolutePath());
+                ButtonType chooseLocationButton = new ButtonType("Choose Different Location", ButtonBar.ButtonData.OTHER);
+                confirmAlert.getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL, chooseLocationButton);
+                
+                Optional<ButtonType> result = confirmAlert.showAndWait();
+                if (result.isPresent()) {
+                    if (result.get() == chooseLocationButton) {
+                        useAutoSave = false;
+                    } else if (result.get() == ButtonType.CANCEL) {
+                        return; // Cancel the entire operation
+                    }
+                }
+            }
+            
+            final File outputFile;
+            
+            // If auto-save is disabled or user chose different location
+            if (!useAutoSave) {
+                FileChooser fileChooser = new FileChooser();
+                fileChooser.setTitle("Save Enhanced Invoice PDF");
+                
+                // Create intelligent filename
+                String defaultFileName = String.format("%s_INVOICE_%s.pdf",
+                    record.getPo() != null ? record.getPo().replaceAll("[^a-zA-Z0-9]", "_") : "UNKNOWN",
+                    driverName.replaceAll("[^a-zA-Z0-9]", "_"));
+                
+                fileChooser.setInitialFileName(defaultFileName);
+                fileChooser.getExtensionFilters().add(
+                    new FileChooser.ExtensionFilter("PDF Files", "*.pdf")
+                );
+                
+                // Set default directory
+                File defaultDir = new File(docConfig.getInvoiceBasePath());
+                if (defaultDir.exists() && defaultDir.isDirectory()) {
+                    fileChooser.setInitialDirectory(defaultDir);
+                }
+                
+                outputFile = fileChooser.showSaveDialog(getTabPane().getScene().getWindow());
+            } else {
+                outputFile = autoSaveFile;
+            }
+            
             if (outputFile != null) {
-                // Generate the invoice
-                InvoicePDFGenerator generator = new InvoicePDFGenerator();
-                File invoiceFile = generator.generateInvoice(load, outputFile);
+                logger.info("Starting PDF generation for file: {}", outputFile.getAbsolutePath());
                 
-                showInfo("Invoice generated successfully: " + invoiceFile.getAbsolutePath());
+                // Create a status bar at the bottom of the tab
+                Label statusLabel = new Label("Generating invoice... Please wait");
+                statusLabel.setStyle("-fx-text-fill: #0066cc; -fx-font-weight: bold;");
+                ProgressIndicator progressIndicator = new ProgressIndicator();
+                progressIndicator.setPrefSize(20, 20);
+                progressIndicator.setProgress(-1.0); // Indeterminate
                 
-                // Optionally open the PDF
-                Alert openAlert = new Alert(Alert.AlertType.CONFIRMATION,
-                    "Would you like to open the invoice PDF?",
-                    ButtonType.YES, ButtonType.NO);
-                openAlert.setHeaderText("Invoice Generated");
-                openAlert.showAndWait().ifPresent(response -> {
-                    if (response == ButtonType.YES) {
+                HBox statusBox = new HBox(10, progressIndicator, statusLabel);
+                statusBox.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+                statusBox.setPadding(new Insets(5, 10, 5, 10));
+                statusBox.setStyle("-fx-background-color: #f8f9fa; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;");
+                
+                // Get the main VBox that contains all the tab content
+                VBox mainVBox = (VBox) getContent();
+                
+                // Add the status box at the bottom (above sum label)
+                if (mainVBox.getChildren().size() > 0) {
+                    // Store the sum label if it exists
+                    Node sumLabelNode = null;
+                    if (mainVBox.getChildren().get(mainVBox.getChildren().size() - 1) == sumLabel) {
+                        sumLabelNode = mainVBox.getChildren().remove(mainVBox.getChildren().size() - 1);
+                    }
+                    
+                    // Add status box
+                    mainVBox.getChildren().add(statusBox);
+                    
+                    // Re-add sum label if it was removed
+                    if (sumLabelNode != null) {
+                        mainVBox.getChildren().add(sumLabelNode);
+                    }
+                }
+                
+                // Generate PDF in background thread
+                javafx.concurrent.Task<File> generateTask = new javafx.concurrent.Task<File>() {
+                    @Override
+                    protected File call() throws Exception {
+                        logger.info("PDF generation task started");
                         try {
-                            if (java.awt.Desktop.isDesktopSupported()) {
-                                java.awt.Desktop.getDesktop().open(invoiceFile);
+                            InvoicePDFGenerator generator = new InvoicePDFGenerator();
+                            File result = generator.generateInvoice(load, outputFile);
+                            logger.info("PDF generation completed successfully");
+                            return result;
+                        } catch (Exception e) {
+                            logger.error("PDF generation failed in background task", e);
+                            throw e;
+                        }
+                    }
+                    
+                    @Override
+                    protected void succeeded() {
+                        // Remove the status box from the UI
+                        javafx.application.Platform.runLater(() -> {
+                            if (mainVBox.getChildren().contains(statusBox)) {
+                                mainVBox.getChildren().remove(statusBox);
                             }
-                        } catch (Exception ex) {
-                            logger.error("Failed to open PDF", ex);
-                            showError("Failed to open PDF: " + ex.getMessage());
+                        });
+
+                        File invoiceFile = getValue();
+                        logger.info("Enhanced invoice generated successfully: {}", invoiceFile.getAbsolutePath());
+
+                        // Show success dialog
+                        Alert successAlert = new Alert(Alert.AlertType.INFORMATION);
+                        successAlert.setTitle("Invoice Generated Successfully");
+                        successAlert.setHeaderText("Enhanced PDF Invoice Created");
+                        successAlert.setContentText(String.format(
+                            "Invoice generated successfully!\n\n" +
+                            "File: %s\n" +
+                            "Size: %.2f KB\n" +
+                            "Load: %s\n" +
+                            "Customer: %s\n" +
+                            "Amount: $%.2f",
+                            invoiceFile.getName(),
+                            invoiceFile.length() / 1024.0,
+                            load.getLoadNumber(),
+                            load.getCustomer(),
+                            record.getInvAmt()
+                        ));
+
+                        ButtonType openButton = new ButtonType("Open PDF", ButtonBar.ButtonData.OTHER);
+                        ButtonType openFolderButton = new ButtonType("Open Folder", ButtonBar.ButtonData.OTHER);
+                        successAlert.getButtonTypes().setAll(openButton, openFolderButton, ButtonType.OK);
+
+                        successAlert.showAndWait().ifPresent(response -> {
+                            try {
+                                if (response == openButton) {
+                                    if (java.awt.Desktop.isDesktopSupported()) {
+                                        java.awt.Desktop.getDesktop().open(invoiceFile);
+                                    }
+                                } else if (response == openFolderButton) {
+                                    if (java.awt.Desktop.isDesktopSupported()) {
+                                        java.awt.Desktop.getDesktop().open(invoiceFile.getParentFile());
+                                    }
+                                }
+                            } catch (Exception ex) {
+                                logger.error("Failed to open file/folder", ex);
+                                showError("Generated successfully but failed to open: " + ex.getMessage());
+                            }
+                        });
+                    }
+                    
+                    @Override
+                    protected void failed() {
+                        // Remove the status box from the UI
+                        javafx.application.Platform.runLater(() -> {
+                            if (mainVBox.getChildren().contains(statusBox)) {
+                                mainVBox.getChildren().remove(statusBox);
+                            }
+                            
+                            Throwable exception = getException();
+                            logger.error("Failed to generate enhanced invoice", exception);
+                            showError("Failed to generate invoice:\n" + 
+                                     (exception != null && exception.getMessage() != null ? 
+                                      exception.getMessage() : "Unknown error occurred"));
+                        });
+                    }
+                    
+                    @Override
+                    protected void cancelled() {
+                        // Remove the status box from the UI
+                        javafx.application.Platform.runLater(() -> {
+                            if (mainVBox.getChildren().contains(statusBox)) {
+                                mainVBox.getChildren().remove(statusBox);
+                            }
+                            
+                            showInfo("Invoice generation was cancelled.");
+                        });
+                    }
+                };
+                
+                // Set a timeout to automatically remove the status indicator after 2 minutes
+                javafx.animation.PauseTransition timeout = new javafx.animation.PauseTransition(javafx.util.Duration.seconds(120));
+                timeout.setOnFinished(e -> {
+                    if (mainVBox.getChildren().contains(statusBox)) {
+                        mainVBox.getChildren().remove(statusBox);
+                        if (!generateTask.isDone()) {
+                            generateTask.cancel(true);
+                            showError("Invoice generation timed out. Please try again.");
                         }
                     }
                 });
+                timeout.play();
+                
+                // Stop timeout when task completes
+                generateTask.setOnSucceeded(e -> timeout.stop());
+                generateTask.setOnFailed(e -> timeout.stop());
+                generateTask.setOnCancelled(e -> timeout.stop());
+                
+                // Run the task
+                Thread generateThread = new Thread(generateTask);
+                generateThread.setDaemon(true);
+                generateThread.setName("PDF-Generation-Thread");
+                generateThread.start();
+                
+                logger.info("PDF generation thread started");
             }
+            
         } catch (Exception e) {
-            logger.error("Failed to generate invoice", e);
+            logger.error("Failed to generate enhanced invoice for record: {}", record.getPo(), e);
             showError("Failed to generate invoice: " + e.getMessage());
         }
+    }
+    
+    /**
+     * Create invoice preview content
+     */
+    private VBox createInvoicePreviewContent(MyTriumphRecord record, Load load) {
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(20));
+        content.setStyle("-fx-background-color: white;");
+        
+        // Header section
+        Label headerLabel = new Label("INVOICE PREVIEW");
+        headerLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;");
+        
+        // Invoice information
+        GridPane invoiceGrid = createInfoGrid("Invoice Information");
+        invoiceGrid.add(new Label("Invoice Number:"), 0, 1);
+        invoiceGrid.add(new Label(record.getInvoiceNumber() != null ? record.getInvoiceNumber() : "Auto-Generated"), 1, 1);
+        invoiceGrid.add(new Label("PO Number:"), 0, 2);
+        invoiceGrid.add(new Label(record.getPo() != null ? record.getPo() : "N/A"), 1, 2);
+        invoiceGrid.add(new Label("Invoice Date:"), 0, 3);
+        invoiceGrid.add(new Label(record.getInvoiceDate() != null ? record.getInvoiceDate().format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) : LocalDate.now().format(DateTimeFormatter.ofPattern("MM/dd/yyyy"))), 1, 3);
+        
+        // Customer information
+        GridPane customerGrid = createInfoGrid("Customer Information");
+        customerGrid.add(new Label("Bill To:"), 0, 1);
+        customerGrid.add(new Label(load.getBillTo() != null ? load.getBillTo() : load.getCustomer()), 1, 1);
+        customerGrid.add(new Label("Customer:"), 0, 2);
+        customerGrid.add(new Label(load.getCustomer() != null ? load.getCustomer() : "N/A"), 1, 2);
+        
+        // Load information
+        GridPane loadGrid = createInfoGrid("Load Information");
+        loadGrid.add(new Label("Load Number:"), 0, 1);
+        loadGrid.add(new Label(load.getLoadNumber() != null ? load.getLoadNumber() : "N/A"), 1, 1);
+        loadGrid.add(new Label("Driver:"), 0, 2);
+        loadGrid.add(new Label(load.getDriver() != null ? load.getDriver().getName() : "N/A"), 1, 2);
+        loadGrid.add(new Label("Pickup:"), 0, 3);
+        loadGrid.add(new Label(load.getPickUpLocation() != null ? load.getPickUpLocation() : "N/A"), 1, 3);
+        loadGrid.add(new Label("Delivery:"), 0, 4);
+        loadGrid.add(new Label(load.getDropLocation() != null ? load.getDropLocation() : "N/A"), 1, 4);
+        
+        // Financial information
+        GridPane financialGrid = createInfoGrid("Financial Summary");
+        financialGrid.add(new Label("Freight Amount:"), 0, 1);
+        Label amountLabel = new Label(String.format("$%.2f", record.getInvAmt()));
+        amountLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #27ae60; -fx-font-size: 14px;");
+        financialGrid.add(amountLabel, 1, 1);
+        financialGrid.add(new Label("Payment Terms:"), 0, 2);
+        financialGrid.add(new Label(InvoiceConfig.getInvoiceTerms()), 1, 2);
+        
+        content.getChildren().addAll(headerLabel, new Separator(), invoiceGrid, customerGrid, loadGrid, financialGrid);
+        
+        return content;
+    }
+    
+    /**
+     * Create a styled grid pane for information display
+     */
+    private GridPane createInfoGrid(String title) {
+        GridPane grid = new GridPane();
+        grid.setHgap(15);
+        grid.setVgap(8);
+        grid.setPadding(new Insets(15));
+        grid.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 5; -fx-border-color: #dee2e6; -fx-border-radius: 5;");
+        
+        Label titleLabel = new Label(title);
+        titleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #495057;");
+        grid.add(titleLabel, 0, 0, 2, 1);
+        
+        // Configure column constraints
+        ColumnConstraints col1 = new ColumnConstraints();
+        col1.setMinWidth(120);
+        col1.setPrefWidth(120);
+        ColumnConstraints col2 = new ColumnConstraints();
+        col2.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(col1, col2);
+        
+        return grid;
     }
     
     /**

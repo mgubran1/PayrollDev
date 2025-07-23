@@ -12,17 +12,21 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Importer for trailer data from CSV and Excel files.
- * Supports the following columns: Trailer Number, Year, License Plate, Make, VIN, Inspection
+ * Supports the following columns: Trailer Number, Year, License Plate, Make, Model, VIN,
+ * Type, Status, Registration Expiry, Insurance Expiry, Inspection Date, Inspection Expiry, Current Location
  */
 public class TrailerCSVImporter {
     private static final Logger logger = LoggerFactory.getLogger(TrailerCSVImporter.class);
     
     // Expected column headers
     private static final String[] EXPECTED_HEADERS = {
-        "Trailer Number", "Year", "License Plate", "Make", "VIN", "Inspection", "Lease Agreement Expiry"
+        "Trailer Number", "Year", "License Plate", "Make", "Model", "VIN", "Type", "Status",
+        "Registration Expiry", "Insurance Expiry", "Inspection Date", "Inspection Expiry"
     };
     
     // Date formatters for parsing inspection dates
@@ -31,7 +35,9 @@ public class TrailerCSVImporter {
         DateTimeFormatter.ofPattern("MM/dd/yyyy"), // 03/10/2024
         DateTimeFormatter.ofPattern("yyyy-MM-dd"), // 2024-03-10
         DateTimeFormatter.ofPattern("dd/MM/yyyy"), // 10/03/2024
-        DateTimeFormatter.ofPattern("yyyy/MM/dd")  // 2024/03/10
+        DateTimeFormatter.ofPattern("yyyy/MM/dd"),  // 2024/03/10
+        DateTimeFormatter.ofPattern("M-d-yyyy"),  // 3-10-2024
+        DateTimeFormatter.ofPattern("MM-dd-yyyy") // 03-10-2024
     };
     
     /**
@@ -64,14 +70,17 @@ public class TrailerCSVImporter {
             
             // Parse headers
             String[] headers = parseCSVLine(line);
-            validateHeaders(headers);
+            Map<String, Integer> columnIndices = getColumnIndices(headers);
             
             // Read data rows
             int rowNumber = 1;
             while ((line = reader.readLine()) != null) {
                 rowNumber++;
                 try {
-                    Trailer trailer = parseTrailerFromCSV(line, headers);
+                    if (line.trim().isEmpty()) {
+                        continue; // Skip empty lines
+                    }
+                    Trailer trailer = parseTrailerFromCSV(line, columnIndices);
                     if (trailer != null) {
                         trailers.add(trailer);
                     }
@@ -107,7 +116,7 @@ public class TrailerCSVImporter {
                 Cell cell = headerRow.getCell(i);
                 headers[i] = cell != null ? cell.toString().trim() : "";
             }
-            validateHeaders(headers);
+            Map<String, Integer> columnIndices = getColumnIndices(headers);
             
             // Read data rows
             for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
@@ -115,7 +124,7 @@ public class TrailerCSVImporter {
                 if (row == null) continue;
                 
                 try {
-                    Trailer trailer = parseTrailerFromExcel(row, headers);
+                    Trailer trailer = parseTrailerFromExcel(row, columnIndices);
                     if (trailer != null) {
                         trailers.add(trailer);
                     }
@@ -155,128 +164,277 @@ public class TrailerCSVImporter {
     }
     
     /**
+     * Get column indices from headers array
+     */
+    private static Map<String, Integer> getColumnIndices(String[] headers) {
+        Map<String, Integer> indices = new HashMap<>();
+        
+        for (int i = 0; i < headers.length; i++) {
+            String header = headers[i].trim().toLowerCase();
+            
+            // Trailer Number
+            if (header.contains("trailer") && header.contains("number")) {
+                indices.put("Trailer Number", i);
+            } else if (header.equals("trailer") || header.equals("trailer #")) {
+                indices.put("Trailer Number", i);
+            }
+            // Year
+            else if (header.contains("year")) {
+                indices.put("Year", i);
+            }
+            // License Plate
+            else if (header.contains("license") && header.contains("plate")) {
+                indices.put("License Plate", i);
+            } else if (header.equals("license") || header.equals("plate")) {
+                indices.put("License Plate", i);
+            }
+            // Make
+            else if (header.equals("make")) {
+                indices.put("Make", i);
+            }
+            // Model
+            else if (header.equals("model")) {
+                indices.put("Model", i);
+            }
+            // VIN
+            else if (header.contains("vin")) {
+                indices.put("VIN", i);
+            }
+            // Type
+            else if (header.equals("type")) {
+                indices.put("Type", i);
+            }
+            // Status
+            else if (header.equals("status")) {
+                indices.put("Status", i);
+            }
+            // Registration Expiry
+            else if (header.contains("registration") && header.contains("expiry")) {
+                indices.put("Registration Expiry", i);
+            } else if (header.equals("registration expiry") || header.equals("reg expiry")) {
+                indices.put("Registration Expiry", i);
+            }
+            // Insurance Expiry
+            else if (header.contains("insurance") && header.contains("expiry")) {
+                indices.put("Insurance Expiry", i);
+            } else if (header.equals("insurance expiry") || header.equals("ins expiry")) {
+                indices.put("Insurance Expiry", i);
+            }
+            // Inspection Date
+            else if (header.contains("inspection") && !header.contains("expiry")) {
+                indices.put("Inspection Date", i);
+            }
+            // Inspection Expiry
+            else if (header.contains("inspection") && header.contains("expiry")) {
+                indices.put("Inspection Expiry", i);
+            } else if (header.equals("inspection expiry") || header.equals("insp expiry")) {
+                indices.put("Inspection Expiry", i);
+            }
+            // Current Location
+            else if (header.contains("current") && header.contains("location")) {
+                indices.put("Current Location", i);
+            } else if (header.equals("location")) {
+                indices.put("Current Location", i);
+            }
+        }
+        
+        return indices;
+    }
+    
+    /**
      * Parse trailer from CSV line
      */
-    private static Trailer parseTrailerFromCSV(String line, String[] headers) {
+    private static Trailer parseTrailerFromCSV(String line, Map<String, Integer> columnIndices) {
         String[] values = parseCSVLine(line);
-        return parseTrailerFromValues(values, headers);
+        return parseTrailerFromValues(columnIndices, i -> {
+            if (i >= 0 && i < values.length) {
+                return values[i].trim();
+            }
+            return "";
+        });
     }
     
     /**
      * Parse trailer from Excel row
      */
-    private static Trailer parseTrailerFromExcel(Row row, String[] headers) {
-        String[] values = new String[headers.length];
-        for (int i = 0; i < headers.length; i++) {
-            Cell cell = row.getCell(i);
-            values[i] = getCellValueAsString(cell);
-        }
-        return parseTrailerFromValues(values, headers);
+    private static Trailer parseTrailerFromExcel(Row row, Map<String, Integer> columnIndices) {
+        return parseTrailerFromValues(columnIndices, i -> {
+            if (i >= 0) {
+                Cell cell = row.getCell(i);
+                return getCellValueAsString(cell);
+            }
+            return "";
+        });
     }
     
     /**
-     * Parse trailer from values array
+     * Parse trailer using a value provider function
      */
-    private static Trailer parseTrailerFromValues(String[] values, String[] headers) {
-        Trailer trailer = new Trailer();
+    private static Trailer parseTrailerFromValues(Map<String, Integer> columnIndices, ValueProvider valueProvider) {
+        // Extract trailer number (required)
+        Integer trailerNumberIndex = columnIndices.get("Trailer Number");
+        if (trailerNumberIndex == null) {
+            logger.warn("Trailer Number column not found");
+            return null;
+        }
         
-        // Find column indices
-        int trailerNumberIndex = findColumnIndex(headers, "Trailer Number");
-        int yearIndex = findColumnIndex(headers, "Year");
-        int licensePlateIndex = findColumnIndex(headers, "License Plate");
-        int makeIndex = findColumnIndex(headers, "Make");
-        int vinIndex = findColumnIndex(headers, "VIN");
-        int inspectionIndex = findColumnIndex(headers, "Inspection");
-        int leaseExpiryIndex = findColumnIndex(headers, "Lease Agreement Expiry");
-        
-        // Parse trailer number (required)
-        String trailerNumber = getValue(values, trailerNumberIndex);
+        String trailerNumber = valueProvider.getValue(trailerNumberIndex);
         if (trailerNumber == null || trailerNumber.trim().isEmpty()) {
             logger.warn("Skipping row with empty trailer number");
             return null;
         }
-        trailer.setTrailerNumber(trailerNumber.trim());
+        
+        Trailer trailer = new Trailer(trailerNumber.trim());
         
         // Parse year
-        String yearStr = getValue(values, yearIndex);
-        if (yearStr != null && !yearStr.trim().isEmpty()) {
-            try {
-                int year = Integer.parseInt(yearStr.trim());
-                if (year > 1900 && year <= LocalDate.now().getYear() + 1) {
-                    trailer.setYear(year);
-                } else {
-                    logger.warn("Invalid year value: {}", yearStr);
+        Integer yearIndex = columnIndices.get("Year");
+        if (yearIndex != null) {
+            String yearStr = valueProvider.getValue(yearIndex);
+            if (yearStr != null && !yearStr.trim().isEmpty()) {
+                try {
+                    int year = Integer.parseInt(yearStr.trim());
+                    if (year > 1900 && year <= LocalDate.now().getYear() + 1) {
+                        trailer.setYear(year);
+                    } else {
+                        logger.warn("Invalid year value: {}", yearStr);
+                    }
+                } catch (NumberFormatException e) {
+                    logger.warn("Invalid year format: {}", yearStr);
                 }
-            } catch (NumberFormatException e) {
-                logger.warn("Invalid year format: {}", yearStr);
             }
         }
         
         // Parse license plate
-        String licensePlate = getValue(values, licensePlateIndex);
-        if (licensePlate != null && !licensePlate.trim().isEmpty()) {
-            trailer.setLicensePlate(licensePlate.trim());
+        Integer licensePlateIndex = columnIndices.get("License Plate");
+        if (licensePlateIndex != null) {
+            String licensePlate = valueProvider.getValue(licensePlateIndex);
+            if (licensePlate != null && !licensePlate.trim().isEmpty()) {
+                trailer.setLicensePlate(licensePlate.trim());
+            }
         }
         
         // Parse make
-        String make = getValue(values, makeIndex);
-        if (make != null && !make.trim().isEmpty()) {
-            trailer.setMake(make.trim());
+        Integer makeIndex = columnIndices.get("Make");
+        if (makeIndex != null) {
+            String make = valueProvider.getValue(makeIndex);
+            if (make != null && !make.trim().isEmpty()) {
+                trailer.setMake(make.trim());
+            }
+        }
+        
+        // Parse model
+        Integer modelIndex = columnIndices.get("Model");
+        if (modelIndex != null) {
+            String model = valueProvider.getValue(modelIndex);
+            if (model != null && !model.trim().isEmpty()) {
+                trailer.setModel(model.trim());
+            }
         }
         
         // Parse VIN
-        String vin = getValue(values, vinIndex);
-        if (vin != null && !vin.trim().isEmpty()) {
-            trailer.setVin(vin.trim());
+        Integer vinIndex = columnIndices.get("VIN");
+        if (vinIndex != null) {
+            String vin = valueProvider.getValue(vinIndex);
+            if (vin != null && !vin.trim().isEmpty()) {
+                trailer.setVin(vin.trim());
+            }
+        }
+        
+        // Parse type
+        Integer typeIndex = columnIndices.get("Type");
+        if (typeIndex != null) {
+            String type = valueProvider.getValue(typeIndex);
+            if (type != null && !type.trim().isEmpty()) {
+                trailer.setType(type.trim());
+            }
+        }
+        
+        // Parse status
+        Integer statusIndex = columnIndices.get("Status");
+        if (statusIndex != null) {
+            String status = valueProvider.getValue(statusIndex);
+            if (status != null && !status.trim().isEmpty()) {
+                try {
+                    TrailerStatus trailerStatus = TrailerStatus.valueOf(status.trim().toUpperCase());
+                    trailer.setStatus(trailerStatus);
+                } catch (IllegalArgumentException e) {
+                    // Default to ACTIVE if status is not recognized
+                    trailer.setStatus(TrailerStatus.ACTIVE);
+                }
+            }
+        }
+        
+        // Parse registration expiry date
+        Integer regExpiryIndex = columnIndices.get("Registration Expiry");
+        if (regExpiryIndex != null) {
+            String regExpiryStr = valueProvider.getValue(regExpiryIndex);
+            if (regExpiryStr != null && !regExpiryStr.trim().isEmpty()) {
+                LocalDate regExpiryDate = parseDate(regExpiryStr.trim());
+                if (regExpiryDate != null) {
+                    trailer.setRegistrationExpiryDate(regExpiryDate);
+                }
+            }
+        }
+        
+        // Parse insurance expiry date
+        Integer insExpiryIndex = columnIndices.get("Insurance Expiry");
+        if (insExpiryIndex != null) {
+            String insExpiryStr = valueProvider.getValue(insExpiryIndex);
+            if (insExpiryStr != null && !insExpiryStr.trim().isEmpty()) {
+                LocalDate insExpiryDate = parseDate(insExpiryStr.trim());
+                if (insExpiryDate != null) {
+                    trailer.setInsuranceExpiryDate(insExpiryDate);
+                }
+            }
         }
         
         // Parse inspection date
-        String inspectionDateStr = getValue(values, inspectionIndex);
-        if (inspectionDateStr != null && !inspectionDateStr.trim().isEmpty()) {
-            LocalDate inspectionDate = parseDate(inspectionDateStr.trim());
-            if (inspectionDate != null) {
-                trailer.setLastInspectionDate(inspectionDate);
-                // Calculate inspection expiry (365 days after inspection)
-                trailer.setNextInspectionDueDate(inspectionDate.plusDays(365));
+        Integer inspectionIndex = columnIndices.get("Inspection Date");
+        if (inspectionIndex != null) {
+            String inspectionDateStr = valueProvider.getValue(inspectionIndex);
+            if (inspectionDateStr != null && !inspectionDateStr.trim().isEmpty()) {
+                LocalDate inspectionDate = parseDate(inspectionDateStr.trim());
+                if (inspectionDate != null) {
+                    trailer.setLastInspectionDate(inspectionDate);
+                }
             }
         }
         
-        // Parse lease agreement expiry date
-        String leaseExpiryStr = getValue(values, leaseExpiryIndex);
-        if (leaseExpiryStr != null && !leaseExpiryStr.trim().isEmpty()) {
-            LocalDate leaseExpiryDate = parseDate(leaseExpiryStr.trim());
-            if (leaseExpiryDate != null) {
-                trailer.setLeaseAgreementExpiryDate(leaseExpiryDate);
+        // Parse inspection expiry date
+        Integer inspExpiryIndex = columnIndices.get("Inspection Expiry");
+        if (inspExpiryIndex != null) {
+            String inspExpiryStr = valueProvider.getValue(inspExpiryIndex);
+            if (inspExpiryStr != null && !inspExpiryStr.trim().isEmpty()) {
+                LocalDate inspExpiryDate = parseDate(inspExpiryStr.trim());
+                if (inspExpiryDate != null) {
+                    trailer.setNextInspectionDueDate(inspExpiryDate);
+                } else if (trailer.getLastInspectionDate() != null) {
+                    // Auto-calculate if not provided
+                    trailer.setNextInspectionDueDate(trailer.getLastInspectionDate().plusDays(365));
+                }
+            } else if (trailer.getLastInspectionDate() != null) {
+                // Auto-calculate if not provided
+                trailer.setNextInspectionDueDate(trailer.getLastInspectionDate().plusDays(365));
             }
         }
         
-        // Set default values
-        trailer.setStatus(TrailerStatus.ACTIVE);
-        trailer.setType("Unknown");
+        // Parse current location
+        Integer locationIndex = columnIndices.get("Current Location");
+        if (locationIndex != null) {
+            String location = valueProvider.getValue(locationIndex);
+            if (location != null && !location.trim().isEmpty()) {
+                trailer.setCurrentLocation(location.trim());
+            }
+        }
         
         return trailer;
     }
     
     /**
-     * Find column index by header name (case-insensitive)
+     * Value provider interface for flexible data extraction
      */
-    private static int findColumnIndex(String[] headers, String headerName) {
-        for (int i = 0; i < headers.length; i++) {
-            if (headers[i] != null && headers[i].trim().equalsIgnoreCase(headerName)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-    
-    /**
-     * Get value from array with bounds checking
-     */
-    private static String getValue(String[] values, int index) {
-        if (index >= 0 && index < values.length) {
-            return values[index];
-        }
-        return null;
+    private interface ValueProvider {
+        String getValue(int index);
     }
     
     /**
@@ -317,14 +475,30 @@ public class TrailerCSVImporter {
                 return cell.getStringCellValue();
             case NUMERIC:
                 if (DateUtil.isCellDateFormatted(cell)) {
-                    return cell.getLocalDateTimeCellValue().toLocalDate().toString();
+                    try {
+                        return cell.getLocalDateTimeCellValue().toLocalDate().toString();
+                    } catch (Exception e) {
+                        return "";
+                    }
                 } else {
-                    return String.valueOf((int) cell.getNumericCellValue());
+                    double value = cell.getNumericCellValue();
+                    if (Math.floor(value) == value) {
+                        return String.valueOf((int) value);
+                    }
+                    return String.valueOf(value);
                 }
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:
-                return cell.getCellFormula();
+                try {
+                    return cell.getStringCellValue();
+                } catch (Exception e) {
+                    try {
+                        return String.valueOf(cell.getNumericCellValue());
+                    } catch (Exception e2) {
+                        return "";
+                    }
+                }
             default:
                 return "";
         }

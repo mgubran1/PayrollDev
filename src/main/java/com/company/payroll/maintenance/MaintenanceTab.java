@@ -2122,7 +2122,8 @@ public class MaintenanceTab extends Tab {
             
             // Validate header
             String[] headers = parseCSVLine(line);
-            validateHeaders(headers);
+            List<String> extraColumns = new ArrayList<>();
+            Map<String, Integer> colMap = mapAndValidateHeaders(headers, extraColumns);
             
             int lineNumber = 1;
             Set<String> existingInvoiceNumbers = getExistingInvoiceNumbers();
@@ -2206,51 +2207,53 @@ public class MaintenanceTab extends Tab {
     private void importFromExcel(File file, ImportResult result) throws Exception {
         try (FileInputStream fis = new FileInputStream(file);
              Workbook workbook = WorkbookFactory.create(fis)) {
-            
             Sheet sheet = workbook.getSheetAt(0);
             if (sheet == null) {
                 throw new IllegalArgumentException("No data found in Excel file");
             }
-            
             // Validate header
             Row headerRow = sheet.getRow(0);
             if (headerRow == null) {
                 throw new IllegalArgumentException("No header row found");
             }
-            
             String[] headers = new String[headerRow.getLastCellNum()];
             for (int i = 0; i < headerRow.getLastCellNum(); i++) {
                 Cell cell = headerRow.getCell(i);
                 headers[i] = cell != null ? cell.toString().trim() : "";
             }
-            validateHeaders(headers);
-            
+            List<String> extraColumns = new ArrayList<>();
+            Map<String, Integer> colMap = mapAndValidateHeaders(headers, extraColumns);
             Set<String> existingInvoiceNumbers = getExistingInvoiceNumbers();
-            
             for (int rowNum = 1; rowNum <= sheet.getLastRowNum(); rowNum++) {
                 Row row = sheet.getRow(rowNum);
                 if (row == null) continue;
-                
                 try {
-                    String[] values = new String[9];
-                    for (int i = 0; i < 9 && i < row.getLastCellNum(); i++) {
+                    String[] values = new String[headers.length];
+                    for (int i = 0; i < headers.length; i++) {
                         Cell cell = row.getCell(i);
                         values[i] = cell != null ? cell.toString().trim() : "";
                     }
-                    
-                    MaintenanceRecord record = createMaintenanceFromValues(values);
-                    
+                    // Extract by header name using colMap
+                    String[] mappedValues = new String[9];
+                    mappedValues[0] = values[colMap.get("date")];
+                    mappedValues[1] = values[colMap.get("unit type")];
+                    mappedValues[2] = values[colMap.get("unit number")];
+                    mappedValues[3] = values[colMap.get("service type")];
+                    mappedValues[4] = values[colMap.get("mileage")];
+                    mappedValues[5] = values[colMap.get("cost")];
+                    mappedValues[6] = values[colMap.get("vendor")];
+                    mappedValues[7] = values[colMap.get("invoice #")];
+                    mappedValues[8] = values[colMap.get("notes")];
+                    MaintenanceRecord record = createMaintenanceFromValues(mappedValues);
                     // Check for duplicate invoice number
                     if (record.getReceiptNumber() != null && !record.getReceiptNumber().trim().isEmpty()) {
                         if (existingInvoiceNumbers.contains(record.getReceiptNumber().trim())) {
                             result.skipped++;
-                            result.errors.add("Row " + (rowNum + 1) + ": Duplicate invoice number '" + 
-                                           record.getReceiptNumber() + "' - skipped");
+                            result.errors.add("Row " + (rowNum + 1) + ": Duplicate invoice number '" + record.getReceiptNumber() + "' - skipped");
                             continue;
                         }
                         existingInvoiceNumbers.add(record.getReceiptNumber().trim());
                     }
-                    
                     maintenanceDAO.save(record);
                     result.imported++;
                     result.totalFound++;
@@ -2262,17 +2265,15 @@ public class MaintenanceTab extends Tab {
     }
     
     /**
-     * Validate CSV/Excel headers
+     * Validate CSV/Excel headers (case-insensitive)
      */
     private void validateHeaders(String[] headers) throws Exception {
         String[] expectedHeaders = {"Date", "Unit Type", "Unit Number", "Service Type", 
                                   "Mileage", "Cost", "Vendor", "Invoice #", "Notes"};
-        
         if (headers.length < expectedHeaders.length) {
             throw new IllegalArgumentException("Invalid header format. Expected columns: " + 
                                            String.join(", ", expectedHeaders));
         }
-        
         for (int i = 0; i < expectedHeaders.length; i++) {
             if (!headers[i].trim().equalsIgnoreCase(expectedHeaders[i])) {
                 throw new IllegalArgumentException("Invalid header at column " + (i + 1) + 
@@ -2403,29 +2404,65 @@ public class MaintenanceTab extends Tab {
     }
     
     /**
-     * Parse date with multiple format support
+     * Parse date with highly flexible format support, including MM/dd/YYYY and M/dd/YYYY
      */
     private LocalDate parseDateFlexible(String dateStr) throws Exception {
+        if (dateStr == null || dateStr.trim().isEmpty()) {
+            throw new Exception("Date string is empty");
+        }
+        dateStr = dateStr.trim();
+        // Try a wide range of patterns, including MM/dd/YYYY and M/dd/YYYY
         String[] patterns = {
-            "MM/dd/yyyy",
-            "MM-dd-yyyy", 
-            "MM/dd/yy",
-            "MM-dd-yy",
-            "M/d/yyyy",
-            "M-d-yyyy",
-            "M/d/yy",
-            "M-d-yy"
+            "MM/dd/yyyy", "M/dd/yyyy", "MM/d/yyyy", "M/d/yyyy", // 4-digit year
+            "MM-dd-yyyy", "M-dd-yyyy", "MM-d-yyyy", "M-d-yyyy",
+            "yyyy-MM-dd", "yyyy/MM/dd", "dd-MM-yyyy", "dd/MM/yyyy",
+            "d-MMM-yyyy", "d MMM yyyy", "dd MMM yyyy", "MMM d, yyyy",
+            "yyyy.MM.dd", "dd.MM.yyyy", "yyyyMMdd", "ddMMyyyy",
+            "d-MMM-yy", "d MMM yy", "dd MMM yy", "MMM d, yy",
+            "yyyy/MM/dd HH:mm:ss", "yyyy-MM-dd HH:mm:ss",
+            "dd MMMM yyyy", "d MMMM yyyy", "MMMM d, yyyy",
+            "dd-MMM-yyyy", "dd/MMM/yyyy", "dd.MM.yyyy",
+            "dd MMMM, yyyy", "d MMMM, yyyy", "MMMM dd, yyyy",
+            "dd.MM.yy", "dd-MM-yy", "dd/MM/yy"
         };
-        
         for (String pattern : patterns) {
             try {
-                return LocalDate.parse(dateStr, DateTimeFormatter.ofPattern(pattern));
+                DateTimeFormatter fmt = DateTimeFormatter.ofPattern(pattern).withLocale(Locale.ENGLISH);
+                return LocalDate.parse(dateStr, fmt);
             } catch (Exception e) {
-                // Continue to next pattern
+                // Try next
             }
         }
-        
-        throw new Exception("Unable to parse date: " + dateStr);
+        // Try parsing as ISO
+        try {
+            return LocalDate.parse(dateStr);
+        } catch (Exception e) {
+            // Try next
+        }
+        // Try java.text.SimpleDateFormat as a last resort (for odd formats)
+        try {
+            java.text.SimpleDateFormat[] fmts = new java.text.SimpleDateFormat[] {
+                new java.text.SimpleDateFormat("dd-MMM-yyyy", Locale.ENGLISH),
+                new java.text.SimpleDateFormat("d-MMM-yyyy", Locale.ENGLISH),
+                new java.text.SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH),
+                new java.text.SimpleDateFormat("d MMM yyyy", Locale.ENGLISH),
+                new java.text.SimpleDateFormat("dd MMMM yyyy", Locale.ENGLISH),
+                new java.text.SimpleDateFormat("d MMMM yyyy", Locale.ENGLISH),
+                new java.text.SimpleDateFormat("MMMM d, yyyy", Locale.ENGLISH),
+                new java.text.SimpleDateFormat("MMM d, yyyy", Locale.ENGLISH)
+            };
+            for (java.text.SimpleDateFormat fmt : fmts) {
+                try {
+                    java.util.Date d = fmt.parse(dateStr);
+                    return d.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+                } catch (Exception e) {
+                    // Try next
+                }
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        throw new Exception("Unable to parse date: '" + dateStr + "'. Please use a recognizable date format.");
     }
     
     /**
@@ -2491,5 +2528,35 @@ public class MaintenanceTab extends Tab {
         int imported = 0;
         int skipped = 0;
         List<String> errors = new ArrayList<>();
+    }
+    
+    /**
+     * Validate and map CSV/Excel headers (case-insensitive, allow extra columns, warn for extras)
+     * Returns a map of required column name (canonical) to index in the file.
+     */
+    private Map<String, Integer> mapAndValidateHeaders(String[] headers, List<String> extraColumns) throws Exception {
+        String[] required = {"Date", "Unit Type", "Unit Number", "Service Type", "Mileage", "Cost", "Vendor", "Invoice #", "Notes"};
+        Map<String, Integer> colMap = new HashMap<>();
+        Set<String> requiredSet = new HashSet<>();
+        for (String r : required) requiredSet.add(r.toLowerCase());
+        Set<String> found = new HashSet<>();
+        for (int i = 0; i < headers.length; i++) {
+            String h = headers[i].trim();
+            String hLower = h.toLowerCase();
+            if (requiredSet.contains(hLower)) {
+                colMap.put(hLower, i);
+                found.add(hLower);
+            } else {
+                extraColumns.add(h);
+            }
+        }
+        List<String> missing = new ArrayList<>();
+        for (String r : required) {
+            if (!found.contains(r.toLowerCase())) missing.add(r);
+        }
+        if (!missing.isEmpty()) {
+            throw new Exception("Missing required columns: " + String.join(", ", missing));
+        }
+        return colMap;
     }
 }
