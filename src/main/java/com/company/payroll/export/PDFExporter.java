@@ -532,7 +532,8 @@ public class PDFExporter {
                 // Revenue table headers
                 String[] revenueHeaders = {"Driver", "Gross", "Service Fee", "Company Pay", "Company Net"};
                 // Dynamically size columns to fit within the printable area to avoid
-                // overlapping text. Percentages must sum to 1.0f
+                // overlapping text. Column widths are specified as fractions of contentWidth
+                // and must sum to 1.0f.
                 float[] revenueColWidths = {
                     contentWidth * 0.30f,  // Driver
                     contentWidth * 0.175f, // Gross
