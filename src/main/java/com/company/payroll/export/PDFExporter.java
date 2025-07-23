@@ -521,7 +521,8 @@ public class PDFExporter {
             PDPage page2 = new PDPage(PDRectangle.A4);
             document.addPage(page2);
             
-            try (PDPageContentStream contentStream = new PDPageContentStream(document, page2)) {
+            PDPageContentStream contentStream = new PDPageContentStream(document, page2);
+            try {
                 yPosition = pageHeight - margin;
                 
                 // Page header
@@ -529,16 +530,15 @@ public class PDFExporter {
                 yPosition -= 60;
                 
                 // Revenue table headers
-                String[] revenueHeaders = {"Week", "Driver", "Gross", "Service Fee", "Company Pay", "Company Net"};
+                String[] revenueHeaders = {"Driver", "Gross", "Service Fee", "Company Pay", "Company Net"};
                 // Dynamically size columns to fit within the printable area to avoid
-                // overlapping text.  Percentages must sum to 1.0f
+                // overlapping text. Percentages must sum to 1.0f
                 float[] revenueColWidths = {
-                    contentWidth * 0.22f, // Week
-                    contentWidth * 0.24f, // Driver
-                    contentWidth * 0.13f, // Gross
-                    contentWidth * 0.13f, // Service Fee
-                    contentWidth * 0.14f, // Company Pay
-                    contentWidth * 0.14f  // Company Net
+                    contentWidth * 0.30f,  // Driver
+                    contentWidth * 0.175f, // Gross
+                    contentWidth * 0.175f, // Service Fee
+                    contentWidth * 0.175f, // Company Pay
+                    contentWidth * 0.175f  // Company Net
                 };
                 
                 drawTableHeader(contentStream, margin, yPosition, revenueHeaders, revenueColWidths);
@@ -558,18 +558,16 @@ public class PDFExporter {
                         document.addPage(newPage);
                         contentStream.close();
                         
-                        PDPageContentStream newContentStream = new PDPageContentStream(document, newPage);
+                        contentStream = new PDPageContentStream(document, newPage);
                         yPosition = pageHeight - margin;
-                        drawPageHeader(newContentStream, margin, yPosition, contentWidth, "Revenue Details (Continued)");
+                        drawPageHeader(contentStream, margin, yPosition, contentWidth, "Revenue Details (Continued)");
                         yPosition -= 60;
-                        drawTableHeader(newContentStream, margin, yPosition, revenueHeaders, revenueColWidths);
+                        drawTableHeader(contentStream, margin, yPosition, revenueHeaders, revenueColWidths);
                         yPosition -= 25;
-                        
-                        return; // For simplicity, using recursion protection
+                        continue;
                     }
                     
                     String[] values = {
-                        row.weekProperty().get(),
                         row.driverProperty().get(),
                         row.grossProperty().get(),
                         row.serviceFeeProperty().get(),
@@ -592,6 +590,8 @@ public class PDFExporter {
                 contentStream.endText();
                 
                 drawPageFooter(contentStream, margin, 2, document.getNumberOfPages());
+            } finally {
+                contentStream.close();
             }
             
             // Page 3: Expense Details
