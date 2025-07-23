@@ -534,11 +534,11 @@ public class PDFExporter {
                 // Dynamically size columns to fit within the printable area to avoid
                 // overlapping text. Percentages must sum to 1.0f
                 float[] revenueColWidths = {
-                    contentWidth * 0.30f,  // Driver
-                    contentWidth * 0.175f, // Gross
-                    contentWidth * 0.175f, // Service Fee
-                    contentWidth * 0.175f, // Company Pay
-                    contentWidth * 0.175f  // Company Net
+                    contentWidth * DRIVER_COLUMN_WIDTH_PERCENTAGE,  // Driver
+                    contentWidth * OTHER_COLUMN_WIDTH_PERCENTAGE, // Gross
+                    contentWidth * OTHER_COLUMN_WIDTH_PERCENTAGE, // Service Fee
+                    contentWidth * OTHER_COLUMN_WIDTH_PERCENTAGE, // Company Pay
+                    contentWidth * OTHER_COLUMN_WIDTH_PERCENTAGE  // Company Net
                 };
                 
                 drawTableHeader(contentStream, margin, yPosition, revenueHeaders, revenueColWidths);
