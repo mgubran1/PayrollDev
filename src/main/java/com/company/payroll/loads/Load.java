@@ -41,6 +41,7 @@ public class Load {
     private LocalTime deliveryTime;  // NEW FIELD
     private String reminder;
     private boolean hasLumper;
+    private double lumperAmount;
     private boolean hasRevisedRateConfirmation;
     private List<LoadDocument> documents;
     private List<LoadLocation> locations; // NEW: Multiple locations support
@@ -55,7 +56,7 @@ public class Load {
     public Load(int id, String loadNumber, String poNumber, String customer, String customer2, String billTo, String pickUpLocation, String dropLocation,
                 Employee driver, String truckUnitSnapshot, Status status, double grossAmount, String notes, 
                 LocalDate pickUpDate, LocalTime pickUpTime, LocalDate deliveryDate, LocalTime deliveryTime, 
-                String reminder, boolean hasLumper, boolean hasRevisedRateConfirmation) {
+                String reminder, boolean hasLumper, double lumperAmount, boolean hasRevisedRateConfirmation) {
         this.id = id;
         this.loadNumber = loadNumber;
         this.poNumber = poNumber;
@@ -75,6 +76,7 @@ public class Load {
         this.deliveryTime = deliveryTime;
         this.reminder = reminder;
         this.hasLumper = hasLumper;
+        this.lumperAmount = lumperAmount;
         this.hasRevisedRateConfirmation = hasRevisedRateConfirmation;
         this.documents = new ArrayList<>();
         
@@ -94,7 +96,7 @@ public class Load {
                 String reminder, boolean hasLumper, boolean hasRevisedRateConfirmation) {
         this(id, loadNumber, poNumber, customer, null, null, pickUpLocation, dropLocation, driver, truckUnitSnapshot, 
              status, grossAmount, notes, pickUpDate, pickUpTime, deliveryDate, deliveryTime, 
-             reminder, hasLumper, hasRevisedRateConfirmation);
+             reminder, hasLumper, 0.0, hasRevisedRateConfirmation);
     }
 
     // Constructor with trailer parameters
@@ -226,6 +228,8 @@ public class Load {
     public void setReminder(String reminder) { this.reminder = reminder; }
     public boolean isHasLumper() { return hasLumper; }
     public void setHasLumper(boolean hasLumper) { this.hasLumper = hasLumper; }
+    public double getLumperAmount() { return lumperAmount; }
+    public void setLumperAmount(double lumperAmount) { this.lumperAmount = lumperAmount; }
     public boolean isHasRevisedRateConfirmation() { return hasRevisedRateConfirmation; }
     public void setHasRevisedRateConfirmation(boolean hasRevisedRateConfirmation) { this.hasRevisedRateConfirmation = hasRevisedRateConfirmation; }
     public List<LoadDocument> getDocuments() { return documents; }

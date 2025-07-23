@@ -130,23 +130,23 @@ public class DriverGridTabEnhanced extends DriverGridTab {
     private static final DateTimeFormatter FULL_DATE_FORMAT = DateTimeFormatter.ofPattern("EEEE, MMM d, yyyy");
     
     public DriverGridTabEnhanced() {
-        super(); // Call parent constructor
+        super(); // Call parent constructor but don't let it set up UI
         setText("Driver Grid"); // Set tab text
         setClosable(false);
         
         filteredEntries = new FilteredList<>(allEntries);
         
+        // Load CSS styling - use the main styles.css file that contains the layout styles
+        try {
+            String css = getClass().getResource("/styles.css").toExternalForm();
+            mainLayout.getStylesheets().add(css);
+        } catch (Exception e) {
+            logger.warn("Could not load driver grid CSS", e);
+        }
+        
         setupUI();
         setupEventHandlers();
         setupAutoRefresh();
-        
-        // Load CSS styling
-        try {
-            String css = getClass().getResource("/driver-grid-enhanced.css").toExternalForm();
-            mainLayout.getStylesheets().add(css);
-        } catch (Exception e) {
-            logger.warn("Could not load enhanced driver grid CSS", e);
-        }
         
         setContent(mainLayout);
         
@@ -162,166 +162,126 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         topPanel.setPadding(new Insets(15));
         topPanel.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
         
-        // Header with title and status
-        HBox headerBox = new HBox(20);
-        headerBox.setAlignment(Pos.CENTER_LEFT);
+        // Main header with title, week navigation, filters, and action buttons
+        HBox mainHeader = new HBox(20);
+        mainHeader.setAlignment(Pos.CENTER_LEFT);
+        mainHeader.getStyleClass().add("driver-grid-main-header");
+        mainHeader.setFillHeight(false);
+        mainHeader.setSpacing(20);
         
+        // Title
         Label titleLabel = new Label("Driver Scheduling Grid");
         titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
         titleLabel.setTextFill(Color.web("#1e293b"));
-        
-        Region spacer1 = new Region();
-        HBox.setHgrow(spacer1, Priority.ALWAYS);
-        
-        loadingIndicator.setVisible(false);
-        loadingIndicator.setPrefSize(20, 20);
-        
-        statusLabel.setFont(Font.font("Segoe UI", 12));
-        statusLabel.setTextFill(Color.web("#64748b"));
-        
-        headerBox.getChildren().addAll(titleLabel, spacer1, loadingIndicator, statusLabel);
+        titleLabel.getStyleClass().add("driver-grid-title");
         
         // Week navigation controls
-        HBox weekControls = new HBox(15);
+        HBox weekControls = new HBox(10);
         weekControls.setAlignment(Pos.CENTER_LEFT);
-        
+        weekControls.getStyleClass().add("driver-grid-week-nav");
         Button prevWeekBtn = new Button("◀ Previous");
-        prevWeekBtn.setStyle("-fx-background-color: #f3f4f6; -fx-text-fill: #374151; -fx-font-weight: bold; " +
-                            "-fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;");
-        prevWeekBtn.setOnMouseEntered(e -> prevWeekBtn.setStyle("-fx-background-color: #e5e7eb; -fx-text-fill: #374151; " +
-                            "-fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;"));
-        prevWeekBtn.setOnMouseExited(e -> prevWeekBtn.setStyle("-fx-background-color: #f3f4f6; -fx-text-fill: #374151; " +
-                            "-fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;"));
-        
+        prevWeekBtn.setStyle("-fx-background-color: #f3f4f6; -fx-text-fill: #374151; -fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;");
         Button todayBtn = new Button("Today");
-        todayBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; " +
-                          "-fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;");
-        todayBtn.setOnMouseEntered(e -> todayBtn.setStyle("-fx-background-color: #1e40af; -fx-text-fill: white; " +
-                          "-fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;"));
-        todayBtn.setOnMouseExited(e -> todayBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; " +
-                          "-fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;"));
-        
+        todayBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;");
         Button nextWeekBtn = new Button("Next ▶");
-        nextWeekBtn.setStyle("-fx-background-color: #f3f4f6; -fx-text-fill: #374151; -fx-font-weight: bold; " +
-                            "-fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;");
-        nextWeekBtn.setOnMouseEntered(e -> nextWeekBtn.setStyle("-fx-background-color: #e5e7eb; -fx-text-fill: #374151; " +
-                            "-fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;"));
-        nextWeekBtn.setOnMouseExited(e -> nextWeekBtn.setStyle("-fx-background-color: #f3f4f6; -fx-text-fill: #374151; " +
-                            "-fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;"));
-        
+        nextWeekBtn.setStyle("-fx-background-color: #f3f4f6; -fx-text-fill: #374151; -fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;");
         weekPicker.setValue(weekStart);
         weekPicker.setPrefWidth(150);
         weekPicker.setEditable(false);
-        
         weekRangeLabel = new Label();
         weekRangeLabel.setFont(Font.font("Segoe UI", FontWeight.MEDIUM, 14));
         updateWeekRangeLabel(weekRangeLabel);
+        weekControls.getChildren().addAll(prevWeekBtn, todayBtn, weekPicker, nextWeekBtn, new Separator(javafx.geometry.Orientation.VERTICAL), weekRangeLabel);
         
-        weekControls.getChildren().addAll(
-            prevWeekBtn, todayBtn, weekPicker, nextWeekBtn,
-            new Separator(javafx.geometry.Orientation.VERTICAL),
-            weekRangeLabel
-        );
-        
-        // Search and filter controls
-        HBox filterBox1 = new HBox(10);
-        filterBox1.setAlignment(Pos.CENTER_LEFT);
-        
+        // Filters inline with week controls
+        HBox filtersBox = new HBox(10);
+        filtersBox.setAlignment(Pos.CENTER_LEFT);
+        filtersBox.getStyleClass().add("driver-grid-search-section");
         searchField.setPromptText("Search by load #, driver, truck, customer...");
-        searchField.setPrefWidth(300);
-        
+        searchField.setPrefWidth(200);
+        searchField.getStyleClass().add("driver-grid-search-field");
         driverFilterBox.setPromptText("All Drivers");
-        driverFilterBox.setPrefWidth(180);
+        driverFilterBox.setPrefWidth(140);
         driverFilterBox.setItems(allDrivers);
+        driverFilterBox.getStyleClass().add("driver-grid-filter-combo");
         setupDriverComboBox(driverFilterBox);
-        
         customerFilterBox.setPromptText("All Customers");
-        customerFilterBox.setPrefWidth(180);
+        customerFilterBox.setPrefWidth(140);
         customerFilterBox.setItems(allCustomers);
-        
+        customerFilterBox.getStyleClass().add("driver-grid-filter-combo");
         statusFilterBox.setPromptText("All Statuses");
-        statusFilterBox.setPrefWidth(150);
+        statusFilterBox.setPrefWidth(120);
+        statusFilterBox.getItems().clear();
         statusFilterBox.getItems().add(null); // All option
         statusFilterBox.getItems().addAll(Load.Status.values());
         statusFilterBox.setCellFactory(cb -> new StatusListCell());
         statusFilterBox.setButtonCell(new StatusListCell());
-        
+        statusFilterBox.getStyleClass().add("driver-grid-filter-combo");
         Button clearFiltersBtn = new Button("Clear Filters");
-        clearFiltersBtn.getStyleClass().add("secondary-button");
-        
-        filterBox1.getChildren().addAll(
+        clearFiltersBtn.getStyleClass().add("driver-grid-action-button");
+        showConflictsOnly.getStyleClass().add("driver-grid-checkbox");
+        showUnassignedLoads.getStyleClass().add("driver-grid-checkbox");
+        filtersBox.getChildren().addAll(
             new Label("Search:"), searchField,
             new Label("Driver:"), driverFilterBox,
-            new Label("Customer:"), customerFilterBox
-        );
-        
-        HBox filterBox2 = new HBox(10);
-        filterBox2.setAlignment(Pos.CENTER_LEFT);
-        
-        filterBox2.getChildren().addAll(
+            new Label("Customer:"), customerFilterBox,
             new Label("Status:"), statusFilterBox,
-            showConflictsOnly,
-            showUnassignedLoads,
-            clearFiltersBtn
+            showConflictsOnly, showUnassignedLoads, clearFiltersBtn
         );
         
-        // Action buttons
+        // Combine week controls and filters into a single row
+        HBox weekAndFiltersBox = new HBox(30);
+        weekAndFiltersBox.setAlignment(Pos.CENTER_LEFT);
+        weekAndFiltersBox.getChildren().addAll(weekControls, filtersBox);
+        HBox.setHgrow(filtersBox, Priority.ALWAYS);
+        
+        // Right side: Action buttons and summary statistics
+        VBox rightSide = new VBox(15);
+        rightSide.setAlignment(Pos.TOP_RIGHT);
+        rightSide.getStyleClass().add("driver-grid-right-side");
+        rightSide.setSpacing(15);
         HBox actionBox = new HBox(10);
-        actionBox.setAlignment(Pos.CENTER_LEFT);
-        actionBox.setPadding(new Insets(10, 0, 0, 0));
-        
+        actionBox.setAlignment(Pos.CENTER_RIGHT);
+        actionBox.getStyleClass().add("driver-grid-action-buttons");
+        actionBox.setSpacing(10);
         Button scheduleLoadBtn = new Button("📅 Schedule Load");
-        scheduleLoadBtn.getStyleClass().add("primary-button");
-        
+        scheduleLoadBtn.getStyleClass().add("driver-grid-action-button");
         Button assignDriverBtn = new Button("👤 Assign Driver");
-        assignDriverBtn.getStyleClass().add("secondary-button");
-        
+        assignDriverBtn.getStyleClass().add("driver-grid-action-button");
         Button exportBtn = new Button("📊 Export Schedule");
-        exportBtn.getStyleClass().add("secondary-button");
-        
+        exportBtn.getStyleClass().add("driver-grid-action-button");
         Button printBtn = new Button("🖨 Print View");
-        printBtn.getStyleClass().add("secondary-button");
-        
+        printBtn.getStyleClass().add("driver-grid-action-button");
         Button refreshBtn = new Button("🔄 Refresh");
-        refreshBtn.getStyleClass().add("secondary-button");
-        
+        refreshBtn.getStyleClass().add("driver-grid-action-button");
         CheckBox autoRefreshCheck = new CheckBox("Auto-refresh");
         autoRefreshCheck.setSelected(true);
+        autoRefreshCheck.getStyleClass().add("driver-grid-auto-refresh");
         autoRefreshCheck.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal) {
-                startAutoRefresh();
-            } else {
-                stopAutoRefresh();
-            }
+            if (newVal) { startAutoRefresh(); } else { stopAutoRefresh(); }
         });
-        
-        actionBox.getChildren().addAll(
-            scheduleLoadBtn, assignDriverBtn, 
-            new Separator(javafx.geometry.Orientation.VERTICAL),
-            exportBtn, printBtn, refreshBtn, autoRefreshCheck
-        );
-        
-        // Summary cards
+        actionBox.getChildren().addAll(scheduleLoadBtn, assignDriverBtn, exportBtn, printBtn, refreshBtn, autoRefreshCheck);
         HBox summaryBox = createSummaryCards();
-        
-        // Add a help tip for multi-stop loads
-        Label multiStopTip = new Label("📍 = Multi-stop load indicator");
+        summaryBox.getStyleClass().add("driver-grid-summary-container");
+        summaryBox.setSpacing(15);
+        Label multiStopTip = new Label("- Multi-stop load indicator");
         multiStopTip.setFont(Font.font("Segoe UI", 11));
         multiStopTip.setTextFill(Color.web("#64748b"));
         multiStopTip.setPadding(new Insets(5, 0, 0, 0));
+        multiStopTip.getStyleClass().add("driver-grid-multi-stop-indicator");
+        rightSide.getChildren().addAll(actionBox, summaryBox, multiStopTip);
         
-        topPanel.getChildren().addAll(
-            headerBox, weekControls, 
-            new Separator(),
-            filterBox1, filterBox2,
-            new Separator(),
-            actionBox, summaryBox, multiStopTip
-        );
+        // Add title, week/filters, and right side to main header
+        mainHeader.getChildren().addAll(titleLabel, weekAndFiltersBox, rightSide);
+        HBox.setHgrow(weekAndFiltersBox, Priority.ALWAYS);
+        HBox.setHgrow(rightSide, Priority.NEVER);
+        
+        // Add main header to top panel
+        topPanel.getChildren().clear();
+        topPanel.getChildren().add(mainHeader);
         
         // Week grid setup
         setupWeekGrid();
-        
-        // Main layout
         mainLayout.setTop(topPanel);
         mainLayout.setCenter(weekGridScrollPane);
         
@@ -329,31 +289,12 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         prevWeekBtn.setOnAction(e -> navigateWeek(-1));
         nextWeekBtn.setOnAction(e -> navigateWeek(1));
         todayBtn.setOnAction(e -> navigateToToday());
-        
-        // Create the week picker listener
-        weekPickerListener = (obs, oldVal, newVal) -> {
-            if (newVal != null) {
-                weekStart = newVal.with(DayOfWeek.SUNDAY);
-                updateWeekRangeLabel(weekRangeLabel);
-                applyFilters();
-            }
-        };
-        weekPicker.valueProperty().addListener(weekPickerListener);
-        
-        // Prevent date picker from closing unexpectedly
-        weekPicker.setOnShowing(e -> {
-            // Ensure the picker remains visible
-            Platform.runLater(() -> weekPicker.requestFocus());
-        });
-        
-        // Filter listeners
         searchField.textProperty().addListener((obs, oldVal, newVal) -> applyFilters());
         driverFilterBox.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
         customerFilterBox.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
         statusFilterBox.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
         showConflictsOnly.selectedProperty().addListener((obs, oldVal, newVal) -> applyFilters());
         showUnassignedLoads.selectedProperty().addListener((obs, oldVal, newVal) -> applyFilters());
-        
         clearFiltersBtn.setOnAction(e -> clearFilters());
         refreshBtn.setOnAction(e -> refreshData());
         scheduleLoadBtn.setOnAction(e -> showScheduleLoadDialog(null, null));
@@ -423,13 +364,7 @@ public class DriverGridTabEnhanced extends DriverGridTab {
     private VBox createSummaryCard(String icon, String title, String value, String color) {
         VBox card = new VBox(5);
         card.setPadding(new Insets(15));
-        card.setStyle(
-            "-fx-background-color: white; " +
-            "-fx-border-color: #e2e8f0; " +
-            "-fx-border-width: 1; " +
-            "-fx-border-radius: 8; " +
-            "-fx-background-radius: 8;"
-        );
+        card.getStyleClass().add("driver-grid-summary-box");
         card.setPrefWidth(150);
         
         Label iconLabel = new Label(icon);
@@ -438,11 +373,13 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         Label titleLabel = new Label(title);
         titleLabel.setFont(Font.font("Segoe UI", 12));
         titleLabel.setTextFill(Color.web("#64748b"));
+        titleLabel.getStyleClass().add("driver-grid-summary-title");
         
         Label valueLabel = new Label(value);
         valueLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
         valueLabel.setTextFill(Color.web(color));
         valueLabel.setId(title.toLowerCase().replace(" ", "-") + "-value");
+        valueLabel.getStyleClass().add("driver-grid-summary-value");
         
         card.getChildren().addAll(iconLabel, titleLabel, valueLabel);
         

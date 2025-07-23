@@ -10,6 +10,7 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,12 +20,14 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Professional Invoice PDF Generator for Trucking Management System
+ * Enhanced Professional Invoice PDF Generator for Trucking Management System
+ * Features modern design, comprehensive load details, and professional styling
  */
 public class InvoicePDFGenerator {
     private static final Logger logger = LoggerFactory.getLogger(InvoicePDFGenerator.class);
@@ -32,29 +35,49 @@ public class InvoicePDFGenerator {
     // Page dimensions and margins
     private static final float PAGE_WIDTH = PDRectangle.LETTER.getWidth();
     private static final float PAGE_HEIGHT = PDRectangle.LETTER.getHeight();
-    private static final float MARGIN = 50;
-    private static final float TOP_MARGIN = 50;
-    private static final float BOTTOM_MARGIN = 50;
+    private static final float MARGIN = 40;
+    private static final float TOP_MARGIN = 40;
+    private static final float BOTTOM_MARGIN = 40;
+    private static final float CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN;
     
-    // Colors
-    private static final Color HEADER_COLOR = new Color(41, 128, 185); // Professional blue
-    private static final Color ACCENT_COLOR = new Color(52, 152, 219); // Lighter blue
-    private static final Color TEXT_COLOR = new Color(44, 62, 80); // Dark gray
-    private static final Color LIGHT_GRAY = new Color(236, 240, 241);
+    // Enhanced color scheme - Modern professional palette
+    private static final Color PRIMARY_COLOR = new Color(41, 98, 255);     // Modern blue
+    private static final Color SECONDARY_COLOR = new Color(99, 102, 241);   // Purple accent
+    private static final Color SUCCESS_COLOR = new Color(16, 185, 129);     // Green
+    private static final Color WARNING_COLOR = new Color(245, 158, 11);     // Amber
+    private static final Color DANGER_COLOR = new Color(239, 68, 68);       // Red
+    private static final Color GRAY_900 = new Color(17, 24, 39);            // Dark text
+    private static final Color GRAY_700 = new Color(55, 65, 81);            // Medium text
+    private static final Color GRAY_500 = new Color(107, 114, 128);         // Light text
+    private static final Color GRAY_200 = new Color(229, 231, 235);         // Light border
+    private static final Color GRAY_50 = new Color(249, 250, 251);          // Light background
+    private static final Color WHITE = new Color(255, 255, 255);
     
-    // Fonts
+    // Enhanced typography
+    private PDType1Font displayFont = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
     private PDType1Font titleFont = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
     private PDType1Font headerFont = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
     private PDType1Font normalFont = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
     private PDType1Font boldFont = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+    private PDType1Font italicFont = new PDType1Font(Standard14Fonts.FontName.HELVETICA_OBLIQUE);
     
+    // Date formatters
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy");
-    private static final DateTimeFormatter DATETIME_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm");
+    private static final DateTimeFormatter DATETIME_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy 'at' hh:mm a");
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("hh:mm a");
+    
+    // Layout constants
+    private static final float LINE_HEIGHT = 12f;
+    private static final float SECTION_SPACING = 18f;
+    private static final float TABLE_ROW_HEIGHT = 16f;
     
     /**
-     * Generate invoice PDF for a load
+     * Generate enhanced professional invoice PDF for a load
      */
     public File generateInvoice(Load load, File outputFile) throws IOException {
+        logger.info("Generating enhanced invoice for Load: {} to file: {}", 
+            load.getLoadNumber(), outputFile.getAbsolutePath());
+        
         try (PDDocument document = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
             document.addPage(page);
@@ -62,447 +85,513 @@ public class InvoicePDFGenerator {
             try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
                 float yPosition = PAGE_HEIGHT - TOP_MARGIN;
                 
-                // Draw header
-                yPosition = drawHeader(contentStream, yPosition);
+                // Draw modern header with gradient effect simulation
+                yPosition = drawEnhancedHeader(contentStream, yPosition);
                 
-                // Draw invoice info section
-                yPosition = drawInvoiceInfo(contentStream, load, yPosition - 30);
+                // Draw invoice metadata section
+                yPosition = drawInvoiceMetadata(contentStream, load, yPosition - 20);
                 
-                // Draw bill to section
-                yPosition = drawBillToSection(contentStream, load, yPosition - 30);
+                // Draw customer information section
+                yPosition = drawCustomerSection(contentStream, load, yPosition - 20);
                 
-                // Draw load details table
-                yPosition = drawLoadDetailsTable(contentStream, load, yPosition - 30);
+                // Draw comprehensive load details
+                yPosition = drawEnhancedLoadDetails(contentStream, load, yPosition - 20);
                 
-                // Draw rate and charges
-                yPosition = drawRateSection(contentStream, load, yPosition - 30);
+                // Draw pickup and delivery timeline
+                yPosition = drawTimelineSection(contentStream, load, yPosition - 20);
                 
-                // Draw footer
-                drawFooter(contentStream, load);
+                // Draw financial summary with modern styling
+                yPosition = drawEnhancedFinancialSection(contentStream, load, yPosition - 20);
+                
+                // Draw professional footer
+                drawEnhancedFooter(contentStream, load);
             }
             
             document.save(outputFile);
-            logger.info("Invoice generated successfully: {}", outputFile.getAbsolutePath());
+            logger.info("Enhanced invoice generated successfully: {}", outputFile.getAbsolutePath());
             return outputFile;
             
         } catch (Exception e) {
-            logger.error("Failed to generate invoice PDF", e);
+            logger.error("Failed to generate enhanced invoice PDF for load: {}", load.getLoadNumber(), e);
             throw new IOException("Failed to generate invoice: " + e.getMessage(), e);
         }
     }
     
     /**
-     * Draw professional header with company info
+     * Draw enhanced modern header with company branding
      */
-    private float drawHeader(PDPageContentStream contentStream, float yPosition) throws IOException {
-        // Draw header background
-        contentStream.setNonStrokingColor(HEADER_COLOR);
-        contentStream.addRect(0, yPosition - 100, PAGE_WIDTH, 100);
+    private float drawEnhancedHeader(PDPageContentStream contentStream, float yPosition) throws IOException {
+        float headerHeight = 80f;
+        
+        // Main header background
+        contentStream.setNonStrokingColor(PRIMARY_COLOR);
+        contentStream.addRect(0, yPosition - headerHeight, PAGE_WIDTH, headerHeight);
         contentStream.fill();
         
-        // Company name in white
-        contentStream.setNonStrokingColor(Color.WHITE);
+        // Company name - large and prominent
+        contentStream.setNonStrokingColor(WHITE);
         contentStream.beginText();
-        contentStream.setFont(titleFont, 24);
-        contentStream.newLineAtOffset(MARGIN, yPosition - 40);
+        contentStream.setFont(titleFont, 20);
+        contentStream.newLineAtOffset(MARGIN, yPosition - 28);
         contentStream.showText(InvoiceConfig.getCompanyName().toUpperCase());
         contentStream.endText();
         
-        // Company details
-        contentStream.setFont(normalFont, 10);
-        float detailsY = yPosition - 60;
-        
+        // Company address - left side
+        contentStream.setFont(normalFont, 9);
         contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, detailsY);
+        contentStream.newLineAtOffset(MARGIN, yPosition - 45);
         contentStream.showText(InvoiceConfig.getCompanyStreet());
         contentStream.endText();
         
         contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, detailsY - 12);
-        contentStream.showText(InvoiceConfig.getCompanyCity() + ", " + 
-                            InvoiceConfig.getCompanyState() + " " + InvoiceConfig.getCompanyZip());
+        contentStream.newLineAtOffset(MARGIN, yPosition - 56);
+        contentStream.showText(String.format("%s, %s %s", 
+            InvoiceConfig.getCompanyCity(), 
+            InvoiceConfig.getCompanyState(), 
+            InvoiceConfig.getCompanyZip()));
         contentStream.endText();
         
-        // Contact info on the right
-        float rightX = PAGE_WIDTH - MARGIN - 200;
-        
+        // Contact information - right side
+        float rightX = PAGE_WIDTH - MARGIN - 180;
         contentStream.beginText();
-        contentStream.newLineAtOffset(rightX, detailsY);
+        contentStream.newLineAtOffset(rightX, yPosition - 45);
         contentStream.showText("Phone: " + InvoiceConfig.getCompanyPhone());
         contentStream.endText();
         
         contentStream.beginText();
-        contentStream.newLineAtOffset(rightX, detailsY - 12);
+        contentStream.newLineAtOffset(rightX, yPosition - 56);
         contentStream.showText("Email: " + InvoiceConfig.getCompanyEmail());
         contentStream.endText();
         
         contentStream.beginText();
-        contentStream.newLineAtOffset(rightX, detailsY - 24);
+        contentStream.newLineAtOffset(rightX, yPosition - 67);
         contentStream.showText("MC: " + InvoiceConfig.getCompanyMC());
         contentStream.endText();
         
-        // Draw "INVOICE" text
-        contentStream.setNonStrokingColor(ACCENT_COLOR);
+
+        
+        return yPosition - headerHeight;
+    }
+    
+    /**
+     * Draw invoice metadata section with modern card design
+     */
+    private float drawInvoiceMetadata(PDPageContentStream contentStream, Load load, float yPosition) throws IOException {
+        // INVOICE title in the correct position
+        contentStream.setNonStrokingColor(PRIMARY_COLOR);
+        contentStream.setFont(titleFont, 28);
         contentStream.beginText();
-        contentStream.setFont(titleFont, 36);
-        contentStream.newLineAtOffset(PAGE_WIDTH - MARGIN - 150, yPosition - 95);
+        contentStream.newLineAtOffset(PAGE_WIDTH - MARGIN - 120, yPosition);
         contentStream.showText("INVOICE");
         contentStream.endText();
         
-        return yPosition - 100;
-    }
-    
-    /**
-     * Draw invoice information section
-     */
-    private float drawInvoiceInfo(PDPageContentStream contentStream, Load load, float yPosition) throws IOException {
-        String invoiceNumber = InvoiceConfig.getNextInvoiceNumber();
+        float boxHeight = 65f;
+        float boxX = PAGE_WIDTH - MARGIN - 220;
+        float boxY = yPosition - 35;
         
-        // Invoice details box
-        float boxX = PAGE_WIDTH - MARGIN - 250;
-        float boxY = yPosition - 60;
-        
-        contentStream.setNonStrokingColor(LIGHT_GRAY);
-        contentStream.addRect(boxX, boxY, 250, 60);
+        // Background box
+        contentStream.setNonStrokingColor(GRAY_50);
+        contentStream.addRect(boxX, boxY - boxHeight, 220, boxHeight);
         contentStream.fill();
         
-        contentStream.setNonStrokingColor(TEXT_COLOR);
-        contentStream.setFont(boldFont, 10);
+        // Generate invoice number
+        String invoiceNumber = InvoiceConfig.getNextInvoiceNumber();
         
-        // Invoice number
+        contentStream.setNonStrokingColor(Color.BLACK);
+        contentStream.setFont(boldFont, 9);
+        
+        float labelX = boxX + 8;
+        float valueX = boxX + 85;
+        float currentY = boxY - 12;
+        
+        // Invoice Number
         contentStream.beginText();
-        contentStream.newLineAtOffset(boxX + 10, boxY + 40);
-        contentStream.showText("Invoice #: ");
-        contentStream.setFont(normalFont, 10);
+        contentStream.newLineAtOffset(labelX, currentY);
+        contentStream.showText("Invoice Number:");
+        contentStream.endText();
+        
+        contentStream.setFont(normalFont, 9);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(valueX, currentY);
         contentStream.showText(invoiceNumber);
         contentStream.endText();
         
-        // Date
-        contentStream.setFont(boldFont, 10);
+        // Invoice Date
+        currentY -= 12;
+        contentStream.setFont(boldFont, 9);
         contentStream.beginText();
-        contentStream.newLineAtOffset(boxX + 10, boxY + 25);
-        contentStream.showText("Date: ");
-        contentStream.setFont(normalFont, 10);
+        contentStream.newLineAtOffset(labelX, currentY);
+        contentStream.showText("Invoice Date:");
+        contentStream.endText();
+        
+        contentStream.setFont(normalFont, 9);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(valueX, currentY);
         contentStream.showText(LocalDate.now().format(DATE_FORMAT));
         contentStream.endText();
         
-        // Terms
-        contentStream.setFont(boldFont, 10);
+        // Payment Terms
+        currentY -= 12;
+        contentStream.setFont(boldFont, 9);
         contentStream.beginText();
-        contentStream.newLineAtOffset(boxX + 10, boxY + 10);
-        contentStream.showText("Terms: ");
-        contentStream.setFont(normalFont, 10);
+        contentStream.newLineAtOffset(labelX, currentY);
+        contentStream.showText("Payment Terms:");
+        contentStream.endText();
+        
+        contentStream.setFont(normalFont, 9);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(valueX, currentY);
         contentStream.showText(InvoiceConfig.getInvoiceTerms());
         contentStream.endText();
         
-        return yPosition;
+        // Due Date
+        currentY -= 12;
+        LocalDate dueDate = calculateDueDate(InvoiceConfig.getInvoiceTerms());
+        contentStream.setFont(boldFont, 9);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(labelX, currentY);
+        contentStream.showText("Due Date:");
+        contentStream.endText();
+        
+        contentStream.setFont(normalFont, 9);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(valueX, currentY);
+        contentStream.showText(dueDate.format(DATE_FORMAT));
+        contentStream.endText();
+        
+        return boxY - boxHeight - 10;
     }
     
     /**
-     * Draw bill to section
+     * Draw customer information section
      */
-    private float drawBillToSection(PDPageContentStream contentStream, Load load, float yPosition) throws IOException {
-        // Section title
-        contentStream.setNonStrokingColor(HEADER_COLOR);
+    private float drawCustomerSection(PDPageContentStream contentStream, Load load, float yPosition) throws IOException {
+        // Section header
+        contentStream.setNonStrokingColor(PRIMARY_COLOR);
+        contentStream.setFont(boldFont, 10);
         contentStream.beginText();
-        contentStream.setFont(headerFont, 12);
         contentStream.newLineAtOffset(MARGIN, yPosition);
         contentStream.showText("BILL TO:");
         contentStream.endText();
         
-        // Bill to details
-        contentStream.setNonStrokingColor(TEXT_COLOR);
-        contentStream.setFont(normalFont, 11);
-        
-        float detailY = yPosition - 20;
-        
+        // Customer details
+        contentStream.setNonStrokingColor(Color.BLACK);
+        contentStream.setFont(boldFont, 10);
         contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, detailY);
+        contentStream.newLineAtOffset(MARGIN, yPosition - 15);
         contentStream.showText(load.getBillTo() != null ? load.getBillTo() : load.getCustomer());
         contentStream.endText();
         
-        // Add additional billing address if available
-        if (load.getDropLocation() != null) {
+        float detailY = yPosition - 28;
+        
+        // PO Number if available
+        if (load.getPONumber() != null && !load.getPONumber().isEmpty()) {
+            contentStream.setFont(boldFont, 9);
             contentStream.beginText();
-            contentStream.newLineAtOffset(MARGIN, detailY - 15);
-            contentStream.showText(load.getDropLocation());
+            contentStream.newLineAtOffset(MARGIN, detailY);
+            contentStream.showText("PO#: " + load.getPONumber());
             contentStream.endText();
+            detailY -= 12;
         }
         
-        return yPosition - 80;
+        return detailY - 10;
     }
     
     /**
-     * Draw load details table
+     * Draw simplified load details
      */
-    private float drawLoadDetailsTable(PDPageContentStream contentStream, Load load, float yPosition) throws IOException {
-        // Table header
-        contentStream.setNonStrokingColor(HEADER_COLOR);
-        contentStream.addRect(MARGIN, yPosition - 25, PAGE_WIDTH - 2 * MARGIN, 25);
-        contentStream.fill();
-        
-        // Header text
-        contentStream.setNonStrokingColor(Color.WHITE);
-        contentStream.setFont(boldFont, 10);
-        
-        float[] columnX = {MARGIN + 10, MARGIN + 100, MARGIN + 200, MARGIN + 350, MARGIN + 450};
-        
-        contentStream.beginText();
-        contentStream.newLineAtOffset(columnX[0], yPosition - 17);
-        contentStream.showText("LOAD #");
-        contentStream.endText();
-        
-        contentStream.beginText();
-        contentStream.newLineAtOffset(columnX[1], yPosition - 17);
-        contentStream.showText("PO #");
-        contentStream.endText();
-        
-        contentStream.beginText();
-        contentStream.newLineAtOffset(columnX[2], yPosition - 17);
-        contentStream.showText("PICKUP");
-        contentStream.endText();
-        
-        contentStream.beginText();
-        contentStream.newLineAtOffset(columnX[3], yPosition - 17);
-        contentStream.showText("DELIVERY");
-        contentStream.endText();
-        
-        contentStream.beginText();
-        contentStream.newLineAtOffset(columnX[4], yPosition - 17);
-        contentStream.showText("STATUS");
-        contentStream.endText();
-        
-        // Table content
-        float rowY = yPosition - 45;
-        
-        // Alternate row background
-        contentStream.setNonStrokingColor(new Color(248, 249, 250));
-        contentStream.addRect(MARGIN, rowY - 20, PAGE_WIDTH - 2 * MARGIN, 25);
-        contentStream.fill();
-        
-        contentStream.setNonStrokingColor(TEXT_COLOR);
-        contentStream.setFont(normalFont, 10);
-        
-        // Load number
-        contentStream.beginText();
-        contentStream.newLineAtOffset(columnX[0], rowY - 15);
-        contentStream.showText(load.getLoadNumber());
-        contentStream.endText();
-        
-        // PO number
-        contentStream.beginText();
-        contentStream.newLineAtOffset(columnX[1], rowY - 15);
-        contentStream.showText(load.getPONumber() != null ? load.getPONumber() : "");
-        contentStream.endText();
-        
-        // Pickup info
-        contentStream.beginText();
-        contentStream.newLineAtOffset(columnX[2], rowY - 15);
-        String pickup = load.getPickUpLocation() != null ? 
-            load.getPickUpLocation().substring(0, Math.min(load.getPickUpLocation().length(), 25)) : "";
-        contentStream.showText(pickup);
-        contentStream.endText();
-        
-        // Delivery info
-        contentStream.beginText();
-        contentStream.newLineAtOffset(columnX[3], rowY - 15);
-        String delivery = load.getDropLocation() != null ? 
-            load.getDropLocation().substring(0, Math.min(load.getDropLocation().length(), 25)) : "";
-        contentStream.showText(delivery);
-        contentStream.endText();
-        
-        // Status
-        contentStream.beginText();
-        contentStream.newLineAtOffset(columnX[4], rowY - 15);
-        contentStream.showText("DELIVERED");
-        contentStream.endText();
-        
-        // Additional details section
-        float detailsY = rowY - 60;
-        
-        // Dates
+    private float drawEnhancedLoadDetails(PDPageContentStream contentStream, Load load, float yPosition) throws IOException {
+        // Section header
+        contentStream.setNonStrokingColor(PRIMARY_COLOR);
         contentStream.setFont(boldFont, 10);
         contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, detailsY);
-        contentStream.showText("Pickup Date: ");
-        contentStream.setFont(normalFont, 10);
-        contentStream.showText(load.getPickUpDate() != null ? 
-            load.getPickUpDate().format(DATETIME_FORMAT) : "");
+        contentStream.newLineAtOffset(MARGIN, yPosition);
+        contentStream.showText("LOAD DETAILS");
         contentStream.endText();
         
-        contentStream.setFont(boldFont, 10);
+        contentStream.setNonStrokingColor(Color.BLACK);
+        contentStream.setFont(normalFont, 9);
+        
+        float detailY = yPosition - 15;
+        
+        // Load Number
         contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN + 250, detailsY);
-        contentStream.showText("Delivery Date: ");
-        contentStream.setFont(normalFont, 10);
-        contentStream.showText(load.getDeliveryDate() != null ? 
-            load.getDeliveryDate().format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) : "");
+        contentStream.newLineAtOffset(MARGIN, detailY);
+        contentStream.showText("Load Number: " + (load.getLoadNumber() != null ? load.getLoadNumber() : ""));
         contentStream.endText();
         
-        // Driver info
+        // Equipment (only show if not empty)
+        String equipment = (load.getTruckUnitSnapshot() != null ? load.getTruckUnitSnapshot() : "") +
+                          (load.getTrailer() != null ? " / " + load.getTrailer().getTrailerNumber() : "");
+        equipment = equipment.trim();
+        if (!equipment.isEmpty() && !equipment.equals(" /")) {
+            detailY -= 12;
+            contentStream.beginText();
+            contentStream.newLineAtOffset(MARGIN, detailY);
+            contentStream.showText("Equipment: " + equipment);
+            contentStream.endText();
+        }
+        
+        // Pickup Location
+        detailY -= 12;
+        String pickup = load.getPickUpLocation() != null ? load.getPickUpLocation() : "";
+        contentStream.beginText();
+        contentStream.newLineAtOffset(MARGIN, detailY);
+        contentStream.showText("Pickup: " + (pickup.length() > 60 ? pickup.substring(0, 60) + "..." : pickup));
+        contentStream.endText();
+        
+        // Delivery Location
+        detailY -= 12;
+        String delivery = load.getDropLocation() != null ? load.getDropLocation() : "";
+        contentStream.beginText();
+        contentStream.newLineAtOffset(MARGIN, detailY);
+        contentStream.showText("Delivery: " + (delivery.length() > 60 ? delivery.substring(0, 60) + "..." : delivery));
+        contentStream.endText();
+        
+        // Driver
         if (load.getDriver() != null) {
-            contentStream.setFont(boldFont, 10);
+            detailY -= 12;
             contentStream.beginText();
-            contentStream.newLineAtOffset(MARGIN, detailsY - 20);
-            contentStream.showText("Driver: ");
-            contentStream.setFont(normalFont, 10);
-            contentStream.showText(load.getDriver().getName());
+            contentStream.newLineAtOffset(MARGIN, detailY);
+            contentStream.showText("Driver: " + load.getDriver().getName());
             contentStream.endText();
         }
         
-        // Truck/Trailer info
-        if (load.getTruckUnitSnapshot() != null && !load.getTruckUnitSnapshot().isEmpty()) {
-            contentStream.setFont(boldFont, 10);
-            contentStream.beginText();
-            contentStream.newLineAtOffset(MARGIN + 250, detailsY - 20);
-            contentStream.showText("Equipment: ");
-            contentStream.setFont(normalFont, 10);
-            contentStream.showText(load.getTruckUnitSnapshot() + 
-                (load.getTrailer() != null ? " / " + load.getTrailer().getTrailerNumber() : ""));
-            contentStream.endText();
-        }
-        
-        return detailsY - 40;
+        return detailY - 15;
     }
     
     /**
-     * Draw rate and charges section
+     * Draw pickup and delivery dates
      */
-    private float drawRateSection(PDPageContentStream contentStream, Load load, float yPosition) throws IOException {
-        // Calculate amounts
-        BigDecimal rate = BigDecimal.valueOf(load.getGrossAmount()).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal subtotal = rate;
-        BigDecimal tax = BigDecimal.ZERO; // Can be calculated if needed
-        BigDecimal total = subtotal.add(tax);
+    private float drawTimelineSection(PDPageContentStream contentStream, Load load, float yPosition) throws IOException {
+        // Section header
+        contentStream.setNonStrokingColor(PRIMARY_COLOR);
+        contentStream.setFont(boldFont, 10);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(MARGIN, yPosition);
+        contentStream.showText("SHIPMENT DATES");
+        contentStream.endText();
         
-        // Rate box
-        float boxX = PAGE_WIDTH - MARGIN - 250;
-        float boxY = yPosition - 120;
+        contentStream.setNonStrokingColor(Color.BLACK);
+        contentStream.setFont(normalFont, 9);
         
-        // Box background
-        contentStream.setNonStrokingColor(new Color(248, 249, 250));
-        contentStream.addRect(boxX, boxY, 250, 120);
+        float dateY = yPosition - 15;
+        
+        // Pickup date
+        if (load.getPickUpDate() != null) {
+            contentStream.beginText();
+            contentStream.newLineAtOffset(MARGIN, dateY);
+            contentStream.showText("Pickup Date: " + load.getPickUpDate().format(DATE_FORMAT));
+            if (load.getPickUpTime() != null) {
+                contentStream.showText(" at " + load.getPickUpTime().format(TIME_FORMAT));
+            }
+            contentStream.endText();
+            dateY -= 12;
+        }
+        
+        // Delivery date
+        if (load.getDeliveryDate() != null) {
+            contentStream.beginText();
+            contentStream.newLineAtOffset(MARGIN, dateY);
+            contentStream.showText("Delivery Date: " + load.getDeliveryDate().format(DATE_FORMAT));
+            if (load.getDeliveryTime() != null) {
+                contentStream.showText(" at " + load.getDeliveryTime().format(TIME_FORMAT));
+            }
+            contentStream.endText();
+            dateY -= 12;
+        }
+        
+        return dateY - 10;
+    }
+    
+    /**
+     * Draw simplified financial section
+     */
+    private float drawEnhancedFinancialSection(PDPageContentStream contentStream, Load load, float yPosition) throws IOException {
+        // Section header
+        contentStream.setNonStrokingColor(PRIMARY_COLOR);
+        contentStream.setFont(boldFont, 10);
+        contentStream.beginText();
+        contentStream.newLineAtOffset(MARGIN, yPosition);
+        contentStream.showText("BILLING SUMMARY");
+        contentStream.endText();
+        
+        // Financial details background
+        float boxX = PAGE_WIDTH - MARGIN - 180;
+        float boxY = yPosition - 15;
+        float boxHeight = load.isHasLumper() && load.getLumperAmount() > 0 ? 75 : 60;
+        
+        contentStream.setNonStrokingColor(GRAY_50);
+        contentStream.addRect(boxX, boxY - boxHeight, 180, boxHeight);
         contentStream.fill();
         
-        // Box border
-        contentStream.setStrokingColor(new Color(220, 220, 220));
-        contentStream.setLineWidth(1);
-        contentStream.addRect(boxX, boxY, 250, 120);
-        contentStream.stroke();
+        // Calculate amounts
+        BigDecimal grossAmount = BigDecimal.valueOf(load.getGrossAmount()).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal lumperAmount = BigDecimal.valueOf(load.getLumperAmount()).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal tax = BigDecimal.ZERO;
+        BigDecimal total = grossAmount.add(lumperAmount).add(tax);
         
-        contentStream.setNonStrokingColor(TEXT_COLOR);
+        contentStream.setNonStrokingColor(Color.BLACK);
+        contentStream.setFont(normalFont, 9);
         
-        // Line items
-        float lineY = boxY + 90;
+        float lineY = boxY - 12;
         
         // Freight charges
-        contentStream.setFont(normalFont, 10);
         contentStream.beginText();
         contentStream.newLineAtOffset(boxX + 10, lineY);
         contentStream.showText("Freight Charges:");
         contentStream.endText();
         
         contentStream.beginText();
-        contentStream.newLineAtOffset(boxX + 180, lineY);
-        contentStream.showText("$" + rate.toString());
+        contentStream.newLineAtOffset(boxX + 120, lineY);
+        contentStream.showText("$" + grossAmount.toString());
         contentStream.endText();
         
-        // Subtotal
-        lineY -= 20;
-        contentStream.beginText();
-        contentStream.newLineAtOffset(boxX + 10, lineY);
-        contentStream.showText("Subtotal:");
-        contentStream.endText();
-        
-        contentStream.beginText();
-        contentStream.newLineAtOffset(boxX + 180, lineY);
-        contentStream.showText("$" + subtotal.toString());
-        contentStream.endText();
+        // Lumper charges (if applicable)
+        if (load.isHasLumper() && load.getLumperAmount() > 0) {
+            lineY -= 10;
+            contentStream.beginText();
+            contentStream.newLineAtOffset(boxX + 10, lineY);
+            contentStream.showText("Lumper Fees:");
+            contentStream.endText();
+            
+            contentStream.beginText();
+            contentStream.newLineAtOffset(boxX + 120, lineY);
+            contentStream.showText("$" + lumperAmount.toString());
+            contentStream.endText();
+        }
         
         // Tax
-        lineY -= 20;
+        lineY -= 10;
         contentStream.beginText();
         contentStream.newLineAtOffset(boxX + 10, lineY);
         contentStream.showText("Tax:");
         contentStream.endText();
         
         contentStream.beginText();
-        contentStream.newLineAtOffset(boxX + 180, lineY);
+        contentStream.newLineAtOffset(boxX + 120, lineY);
         contentStream.showText("$" + tax.toString());
         contentStream.endText();
         
-        // Separator line
-        lineY -= 10;
-        contentStream.setLineWidth(1);
-        contentStream.moveTo(boxX + 10, lineY);
-        contentStream.lineTo(boxX + 240, lineY);
-        contentStream.stroke();
-        
         // Total
-        lineY -= 20;
-        contentStream.setFont(boldFont, 12);
+        lineY -= 15;
+        contentStream.setFont(boldFont, 10);
         contentStream.beginText();
         contentStream.newLineAtOffset(boxX + 10, lineY);
         contentStream.showText("TOTAL DUE:");
         contentStream.endText();
         
-        contentStream.setNonStrokingColor(HEADER_COLOR);
+        contentStream.setNonStrokingColor(PRIMARY_COLOR);
         contentStream.beginText();
-        contentStream.newLineAtOffset(boxX + 170, lineY);
+        contentStream.newLineAtOffset(boxX + 120, lineY);
         contentStream.showText("$" + total.toString());
         contentStream.endText();
         
-        // Payment terms reminder
-        contentStream.setNonStrokingColor(TEXT_COLOR);
+        // Payment terms
+        contentStream.setNonStrokingColor(Color.BLACK);
         contentStream.setFont(normalFont, 9);
         contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, boxY + 30);
+        contentStream.newLineAtOffset(MARGIN, boxY - boxHeight - 15);
         contentStream.showText("Payment Terms: " + InvoiceConfig.getInvoiceTerms());
         contentStream.endText();
         
-        // Notes
-        if (InvoiceConfig.getInvoiceNotes() != null && !InvoiceConfig.getInvoiceNotes().isEmpty()) {
-            contentStream.setFont(normalFont, 10);
-            contentStream.beginText();
-            contentStream.newLineAtOffset(MARGIN, boxY - 20);
-            contentStream.showText("Notes: " + InvoiceConfig.getInvoiceNotes());
-            contentStream.endText();
-        }
-        
-        return boxY - 40;
+        return boxY - boxHeight - 20;
     }
     
     /**
-     * Draw footer
+     * Draw enhanced professional footer
      */
-    private void drawFooter(PDPageContentStream contentStream, Load load) throws IOException {
+    private void drawEnhancedFooter(PDPageContentStream contentStream, Load load) throws IOException {
+        float footerY = BOTTOM_MARGIN + 35;
+        
+        // Payment terms and notes section
+        if (InvoiceConfig.getInvoiceNotes() != null && !InvoiceConfig.getInvoiceNotes().isEmpty()) {
+            contentStream.setNonStrokingColor(GRAY_50);
+            contentStream.addRect(MARGIN, footerY - 30, CONTENT_WIDTH, 25);
+            contentStream.fill();
+            
+            contentStream.setNonStrokingColor(GRAY_700);
+            contentStream.setFont(italicFont, 8);
+            contentStream.beginText();
+            contentStream.newLineAtOffset(MARGIN + 10, footerY - 18);
+            contentStream.showText("Note: " + InvoiceConfig.getInvoiceNotes());
+            contentStream.endText();
+        }
+        
         // Footer separator
-        contentStream.setStrokingColor(new Color(220, 220, 220));
+        contentStream.setStrokingColor(GRAY_200);
         contentStream.setLineWidth(1);
-        contentStream.moveTo(MARGIN, BOTTOM_MARGIN + 40);
-        contentStream.lineTo(PAGE_WIDTH - MARGIN, BOTTOM_MARGIN + 40);
+        contentStream.moveTo(MARGIN, BOTTOM_MARGIN + 20);
+        contentStream.lineTo(PAGE_WIDTH - MARGIN, BOTTOM_MARGIN + 20);
         contentStream.stroke();
         
         // Thank you message
-        contentStream.setNonStrokingColor(ACCENT_COLOR);
-        contentStream.setFont(boldFont, 12);
+        contentStream.setNonStrokingColor(PRIMARY_COLOR);
+        contentStream.setFont(boldFont, 10);
         contentStream.beginText();
-        contentStream.newLineAtOffset(PAGE_WIDTH / 2 - 60, BOTTOM_MARGIN + 20);
+        contentStream.newLineAtOffset(PAGE_WIDTH / 2 - 60, BOTTOM_MARGIN + 5);
         contentStream.showText("Thank you for your business!");
         contentStream.endText();
         
-        // Footer text
-        contentStream.setNonStrokingColor(new Color(150, 150, 150));
-        contentStream.setFont(normalFont, 8);
+        // Footer details
+        contentStream.setNonStrokingColor(GRAY_500);
+        contentStream.setFont(normalFont, 7);
+        
+        // Left side - generated timestamp
         contentStream.beginText();
-        contentStream.newLineAtOffset(MARGIN, BOTTOM_MARGIN);
-        contentStream.showText("This is a computer-generated invoice. No signature required.");
+        contentStream.newLineAtOffset(MARGIN, BOTTOM_MARGIN - 8);
+        contentStream.showText("Generated on " + LocalDateTime.now().format(DATETIME_FORMAT));
         contentStream.endText();
         
-        // Page number
+        // Right side - page number
         contentStream.beginText();
-        contentStream.newLineAtOffset(PAGE_WIDTH - MARGIN - 50, BOTTOM_MARGIN);
+        contentStream.newLineAtOffset(PAGE_WIDTH - MARGIN - 50, BOTTOM_MARGIN - 8);
         contentStream.showText("Page 1 of 1");
         contentStream.endText();
+        
+        // Center - professional disclaimer
+        contentStream.beginText();
+        contentStream.newLineAtOffset(PAGE_WIDTH / 2 - 90, BOTTOM_MARGIN - 8);
+        contentStream.showText("This invoice was electronically generated and is valid without signature.");
+        contentStream.endText();
+    }
+    
+
+    
+    /**
+     * Calculate due date based on payment terms
+     */
+    private LocalDate calculateDueDate(String terms) {
+        LocalDate today = LocalDate.now();
+        if (terms == null || terms.isEmpty()) {
+            return today.plusDays(30); // Default to 30 days
+        }
+        
+        String upperTerms = terms.toUpperCase();
+        if (upperTerms.contains("NET 15")) {
+            return today.plusDays(15);
+        } else if (upperTerms.contains("NET 30")) {
+            return today.plusDays(30);
+        } else if (upperTerms.contains("NET 45")) {
+            return today.plusDays(45);
+        } else if (upperTerms.contains("NET 60")) {
+            return today.plusDays(60);
+        } else if (upperTerms.contains("DUE ON RECEIPT") || upperTerms.contains("IMMEDIATE")) {
+            return today;
+        } else {
+            // Try to extract number from terms
+            try {
+                String[] parts = terms.split("\\s+");
+                for (String part : parts) {
+                    if (part.matches("\\d+")) {
+                        int days = Integer.parseInt(part);
+                        return today.plusDays(days);
+                    }
+                }
+            } catch (Exception e) {
+                logger.debug("Could not parse payment terms: {}", terms);
+            }
+            return today.plusDays(30); // Default fallback
+        }
     }
 }

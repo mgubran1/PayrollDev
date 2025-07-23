@@ -14,12 +14,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.company.payroll.database.DatabaseConfig;
 import com.company.payroll.employees.Employee;
 import com.company.payroll.employees.EmployeeDAO;
 import com.company.payroll.exception.DataAccessException;
@@ -34,7 +36,29 @@ public class LoadDAO {
 
     public LoadDAO() {
         logger.debug("Initializing LoadDAO");
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            initializeTables(conn);
+            
+            // Create search indexes for optimized performance
+            createSearchIndexes(conn);
+            
+            // Schedule migration to run asynchronously to avoid blocking startup
+            CompletableFuture.runAsync(() -> {
+                try {
+                    Thread.sleep(5000); // Wait 5 seconds for app to start
+                    migrateToUnifiedAddressBook();
+                } catch (Exception e) {
+                    logger.error("Error during async migration", e);
+                }
+            });
+            
+        } catch (SQLException e) {
+            logger.error("Failed to initialize LoadDAO: {}", e.getMessage(), e);
+            throw new DataAccessException("Failed to initialize LoadDAO", e);
+        }
+    }
+    
+    private void initializeTables(Connection conn) throws SQLException {
             // Add new columns if they don't exist (backwards compatible)
             try {
                 conn.createStatement().execute("ALTER TABLE loads ADD COLUMN po_number TEXT");
@@ -161,9 +185,7 @@ public class LoadDAO {
             } catch (SQLException ignore) {
                 logger.debug("customer column already exists in load_locations");
             }
-        } catch (SQLException ignore) {}
-        
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            
             String sql = """
                 CREATE TABLE IF NOT EXISTS loads (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -248,9 +270,6 @@ public class LoadDAO {
             conn.createStatement().execute(sqlAddressBook);
             logger.info("Customer address book table initialized successfully");
             
-            // Migrate existing data from customer_locations to unified address book
-            migrateToUnifiedAddressBook();
-            
             String sqlDocuments = """
                 CREATE TABLE IF NOT EXISTS load_documents (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -283,20 +302,12 @@ public class LoadDAO {
             """;
             conn.createStatement().execute(sqlLoadLocations);
             logger.info("Load locations table initialized successfully");
-            
-            // Create search indexes for optimized performance
-            createSearchIndexes();
-            
-        } catch (SQLException e) {
-            logger.error("Failed to initialize LoadDAO: {}", e.getMessage(), e);
-            throw new DataAccessException("Failed to initialize LoadDAO", e);
-        }
     }
 
     public List<Load> getAll() {
         logger.debug("Fetching all loads");
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads";
             ResultSet rs = conn.createStatement().executeQuery(sql);
             while (rs.next()) {
@@ -324,79 +335,88 @@ public class LoadDAO {
             throw new DataAccessException("Load number is required");
         }
         
-        String sql = """
-            INSERT INTO loads (load_number, po_number, customer, customer2, bill_to, pick_up_location, drop_location, 
-            driver_id, truck_unit_snapshot, trailer_id, trailer_number, status, gross_amount, notes, 
-            pickup_date, pickup_time, delivery_date, delivery_time, reminder, has_lumper, has_revised_rate_confirmation) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """;
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
-            PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-            ps.setString(1, load.getLoadNumber());
-            ps.setString(2, load.getPONumber());
-            ps.setString(3, load.getCustomer());
-            ps.setString(4, load.getCustomer2());
-            ps.setString(5, load.getBillTo());
-            ps.setString(6, load.getPickUpLocation());
-            ps.setString(7, load.getDropLocation());
-            ps.setObject(8, load.getDriver() != null ? load.getDriver().getId() : null);
-            ps.setString(9, load.getTruckUnitSnapshot());
-            ps.setInt(10, load.getTrailerId());
-            ps.setString(11, load.getTrailerNumber());
-            ps.setString(12, load.getStatus().name());
-            ps.setDouble(13, load.getGrossAmount());
-            ps.setString(14, load.getNotes());
-            if (load.getPickUpDate() != null)
-                ps.setDate(15, java.sql.Date.valueOf(load.getPickUpDate()));
-            else
-                ps.setNull(15, java.sql.Types.DATE);
-            if (load.getPickUpTime() != null)
-                ps.setTime(16, java.sql.Time.valueOf(load.getPickUpTime()));
-            else
-                ps.setNull(16, java.sql.Types.TIME);
-            if (load.getDeliveryDate() != null)
-                ps.setDate(17, java.sql.Date.valueOf(load.getDeliveryDate()));
-            else
-                ps.setNull(17, java.sql.Types.DATE);
-            if (load.getDeliveryTime() != null)
-                ps.setTime(18, java.sql.Time.valueOf(load.getDeliveryTime()));
-            else
-                ps.setNull(18, java.sql.Types.TIME);
-            ps.setString(19, load.getReminder());
-            ps.setInt(20, load.isHasLumper() ? 1 : 0);
-            ps.setInt(21, load.isHasRevisedRateConfirmation() ? 1 : 0);
-            ps.executeUpdate();
-            ResultSet keys = ps.getGeneratedKeys();
-            if (keys.next()) {
-                int id = keys.getInt(1);
-                logger.info("Load added successfully with ID: {}", id);
+        try {
+            return DatabaseConfig.executeWithRetry(() -> {
+                String sql = """
+                    INSERT INTO loads (load_number, po_number, customer, customer2, bill_to, pick_up_location, drop_location, 
+                    driver_id, truck_unit_snapshot, trailer_id, trailer_number, status, gross_amount, notes, 
+                    pickup_date, pickup_time, delivery_date, delivery_time, reminder, has_lumper, lumper_amount, has_revised_rate_confirmation) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
                 
-                // Save customers if not exists with error handling
-                try {
-                    if (load.getCustomer() != null && !load.getCustomer().trim().isEmpty()) {
-                        addCustomerIfNotExists(load.getCustomer().trim());
-                        // Auto-add pickup address to unified address book
-                        autoSaveAddressToCustomerBook(load.getCustomer().trim(), load.getPickUpLocation(), true);
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                    
+                    ps.setString(1, load.getLoadNumber());
+                    ps.setString(2, load.getPONumber());
+                    ps.setString(3, load.getCustomer());
+                    ps.setString(4, load.getCustomer2());
+                    ps.setString(5, load.getBillTo());
+                    ps.setString(6, load.getPickUpLocation());
+                    ps.setString(7, load.getDropLocation());
+                    ps.setObject(8, load.getDriver() != null ? load.getDriver().getId() : null);
+                    ps.setString(9, load.getTruckUnitSnapshot());
+                    ps.setInt(10, load.getTrailerId());
+                    ps.setString(11, load.getTrailerNumber());
+                    ps.setString(12, load.getStatus().name());
+                    ps.setDouble(13, load.getGrossAmount());
+                    ps.setString(14, load.getNotes());
+                    if (load.getPickUpDate() != null)
+                        ps.setDate(15, java.sql.Date.valueOf(load.getPickUpDate()));
+                    else
+                        ps.setNull(15, java.sql.Types.DATE);
+                    if (load.getPickUpTime() != null)
+                        ps.setTime(16, java.sql.Time.valueOf(load.getPickUpTime()));
+                    else
+                        ps.setNull(16, java.sql.Types.TIME);
+                    if (load.getDeliveryDate() != null)
+                        ps.setDate(17, java.sql.Date.valueOf(load.getDeliveryDate()));
+                    else
+                        ps.setNull(17, java.sql.Types.DATE);
+                    if (load.getDeliveryTime() != null)
+                        ps.setTime(18, java.sql.Time.valueOf(load.getDeliveryTime()));
+                    else
+                        ps.setNull(18, java.sql.Types.TIME);
+                    ps.setString(19, load.getReminder());
+                    ps.setInt(20, load.isHasLumper() ? 1 : 0);
+                    ps.setDouble(21, load.getLumperAmount());
+                    ps.setInt(22, load.isHasRevisedRateConfirmation() ? 1 : 0);
+                    ps.executeUpdate();
+                    
+                    try (ResultSet keys = ps.getGeneratedKeys()) {
+                        if (keys.next()) {
+                            int id = keys.getInt(1);
+                            logger.info("Load added successfully with ID: {}", id);
+                            
+                            // Save customers if not exists with error handling
+                            try {
+                                if (load.getCustomer() != null && !load.getCustomer().trim().isEmpty()) {
+                                    addCustomerIfNotExists(load.getCustomer().trim());
+                                    // Auto-add pickup address to unified address book
+                                    autoSaveAddressToCustomerBook(load.getCustomer().trim(), load.getPickUpLocation(), true);
+                                }
+                                if (load.getCustomer2() != null && !load.getCustomer2().trim().isEmpty()) {
+                                    addCustomerIfNotExists(load.getCustomer2().trim());
+                                    // Auto-add drop address to unified address book
+                                    autoSaveAddressToCustomerBook(load.getCustomer2().trim(), load.getDropLocation(), false);
+                                }
+                            } catch (Exception e) {
+                                logger.warn("Error saving customer data for load {}: {}", load.getLoadNumber(), e.getMessage());
+                                // Don't fail the load creation if customer saving fails
+                            }
+                            
+                            // Set the load ID and save additional locations
+                            load.setId(id);
+                            saveAdditionalLocations(load);
+                            
+                            return id;
+                        } else {
+                            logger.error("No generated key returned for load: {}", load.getLoadNumber());
+                            throw new SQLException("Failed to get generated key for new load");
+                        }
                     }
-                    if (load.getCustomer2() != null && !load.getCustomer2().trim().isEmpty()) {
-                        addCustomerIfNotExists(load.getCustomer2().trim());
-                        // Auto-add drop address to unified address book
-                        autoSaveAddressToCustomerBook(load.getCustomer2().trim(), load.getDropLocation(), false);
-                    }
-                } catch (Exception e) {
-                    logger.warn("Error saving customer data for load {}: {}", load.getLoadNumber(), e.getMessage());
-                    // Don't fail the load creation if customer saving fails
                 }
-                
-                // Set the load ID and save additional locations
-                load.setId(id);
-                saveAdditionalLocations(load);
-                
-                return id;
-            } else {
-                logger.error("No generated key returned for load: {}", load.getLoadNumber());
-                throw new DataAccessException("Failed to get generated key for new load");
-            }
+            });
         } catch (SQLException e) {
             if (e.getMessage() != null && e.getMessage().contains("UNIQUE constraint failed: loads.load_number")) {
                 logger.error("Duplicate Load # not allowed: {}", load.getLoadNumber());
@@ -419,76 +439,85 @@ public class LoadDAO {
             throw new DataAccessException("Load number is required");
         }
         
-        String sql = """
-            UPDATE loads SET load_number=?, po_number=?, customer=?, customer2=?, bill_to=?, pick_up_location=?, 
-            drop_location=?, driver_id=?, truck_unit_snapshot=?, trailer_id=?, trailer_number=?, status=?, gross_amount=?, 
-            notes=?, pickup_date=?, pickup_time=?, delivery_date=?, delivery_time=?, reminder=?, has_lumper=?, has_revised_rate_confirmation=? 
-            WHERE id=?
-        """;
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
-            PreparedStatement ps = conn.prepareStatement(sql);
-            ps.setString(1, load.getLoadNumber());
-            ps.setString(2, load.getPONumber());
-            ps.setString(3, load.getCustomer());
-            ps.setString(4, load.getCustomer2());
-            ps.setString(5, load.getBillTo());
-            ps.setString(6, load.getPickUpLocation());
-            ps.setString(7, load.getDropLocation());
-            ps.setObject(8, load.getDriver() != null ? load.getDriver().getId() : null);
-            ps.setString(9, load.getTruckUnitSnapshot());
-            ps.setInt(10, load.getTrailerId());
-            ps.setString(11, load.getTrailerNumber());
-            ps.setString(12, load.getStatus().name());
-            ps.setDouble(13, load.getGrossAmount());
-            ps.setString(14, load.getNotes());
-            if (load.getPickUpDate() != null)
-                ps.setDate(15, java.sql.Date.valueOf(load.getPickUpDate()));
-            else
-                ps.setNull(15, java.sql.Types.DATE);
-            if (load.getPickUpTime() != null)
-                ps.setTime(16, java.sql.Time.valueOf(load.getPickUpTime()));
-            else
-                ps.setNull(16, java.sql.Types.TIME);
-            if (load.getDeliveryDate() != null)
-                ps.setDate(17, java.sql.Date.valueOf(load.getDeliveryDate()));
-            else
-                ps.setNull(17, java.sql.Types.DATE);
-            if (load.getDeliveryTime() != null)
-                ps.setTime(18, java.sql.Time.valueOf(load.getDeliveryTime()));
-            else
-                ps.setNull(18, java.sql.Types.TIME);
-            ps.setString(19, load.getReminder());
-            ps.setInt(20, load.isHasLumper() ? 1 : 0);
-            ps.setInt(21, load.isHasRevisedRateConfirmation() ? 1 : 0);
-            ps.setInt(22, load.getId());
-            int rowsAffected = ps.executeUpdate();
-            if (rowsAffected > 0) {
-                logger.info("Load updated successfully");
+        try {
+            DatabaseConfig.executeWithRetry(() -> {
+                String sql = """
+                    UPDATE loads SET load_number=?, po_number=?, customer=?, customer2=?, bill_to=?, pick_up_location=?, 
+                    drop_location=?, driver_id=?, truck_unit_snapshot=?, trailer_id=?, trailer_number=?, status=?, gross_amount=?, 
+                    notes=?, pickup_date=?, pickup_time=?, delivery_date=?, delivery_time=?, reminder=?, has_lumper=?, lumper_amount=?, has_revised_rate_confirmation=? 
+                    WHERE id=?
+                """;
                 
-                // Save customer if not exists with error handling
-                try {
-                    if (load.getCustomer() != null && !load.getCustomer().trim().isEmpty()) {
-                        addCustomerIfNotExists(load.getCustomer().trim());
-                        // Auto-add pickup address to customer's address book
-                        autoSaveAddressToCustomerBook(load.getCustomer().trim(), load.getPickUpLocation(), true);
+                try (Connection conn = DatabaseConfig.getConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+                    
+                    ps.setString(1, load.getLoadNumber());
+                    ps.setString(2, load.getPONumber());
+                    ps.setString(3, load.getCustomer());
+                    ps.setString(4, load.getCustomer2());
+                    ps.setString(5, load.getBillTo());
+                    ps.setString(6, load.getPickUpLocation());
+                    ps.setString(7, load.getDropLocation());
+                    ps.setObject(8, load.getDriver() != null ? load.getDriver().getId() : null);
+                    ps.setString(9, load.getTruckUnitSnapshot());
+                    ps.setInt(10, load.getTrailerId());
+                    ps.setString(11, load.getTrailerNumber());
+                    ps.setString(12, load.getStatus().name());
+                    ps.setDouble(13, load.getGrossAmount());
+                    ps.setString(14, load.getNotes());
+                    if (load.getPickUpDate() != null)
+                        ps.setDate(15, java.sql.Date.valueOf(load.getPickUpDate()));
+                    else
+                        ps.setNull(15, java.sql.Types.DATE);
+                    if (load.getPickUpTime() != null)
+                        ps.setTime(16, java.sql.Time.valueOf(load.getPickUpTime()));
+                    else
+                        ps.setNull(16, java.sql.Types.TIME);
+                    if (load.getDeliveryDate() != null)
+                        ps.setDate(17, java.sql.Date.valueOf(load.getDeliveryDate()));
+                    else
+                        ps.setNull(17, java.sql.Types.DATE);
+                    if (load.getDeliveryTime() != null)
+                        ps.setTime(18, java.sql.Time.valueOf(load.getDeliveryTime()));
+                    else
+                        ps.setNull(18, java.sql.Types.TIME);
+                    ps.setString(19, load.getReminder());
+                    ps.setInt(20, load.isHasLumper() ? 1 : 0);
+                    ps.setDouble(21, load.getLumperAmount());
+                    ps.setInt(22, load.isHasRevisedRateConfirmation() ? 1 : 0);
+                    ps.setInt(23, load.getId());
+                    
+                    int rowsAffected = ps.executeUpdate();
+                    if (rowsAffected > 0) {
+                        logger.info("Load updated successfully");
+                        
+                        // Save customer if not exists with error handling
+                        try {
+                            if (load.getCustomer() != null && !load.getCustomer().trim().isEmpty()) {
+                                addCustomerIfNotExists(load.getCustomer().trim());
+                                // Auto-add pickup address to customer's address book
+                                autoSaveAddressToCustomerBook(load.getCustomer().trim(), load.getPickUpLocation(), true);
+                            }
+                            // Save customer2 if not exists
+                            if (load.getCustomer2() != null && !load.getCustomer2().trim().isEmpty()) {
+                                addCustomerIfNotExists(load.getCustomer2().trim());
+                                // Auto-add drop address to customer2's address book
+                                autoSaveAddressToCustomerBook(load.getCustomer2().trim(), load.getDropLocation(), false);
+                            }
+                        } catch (Exception e) {
+                            logger.warn("Error saving customer data for load {}: {}", load.getLoadNumber(), e.getMessage());
+                            // Don't fail the load update if customer saving fails
+                        }
+                        
+                        // Update additional locations
+                        saveAdditionalLocations(load);
+                    } else {
+                        logger.warn("No load found with ID: {}", load.getId());
+                        throw new SQLException("No load found with ID: " + load.getId());
                     }
-                    // Save customer2 if not exists
-                    if (load.getCustomer2() != null && !load.getCustomer2().trim().isEmpty()) {
-                        addCustomerIfNotExists(load.getCustomer2().trim());
-                        // Auto-add drop address to customer2's address book
-                        autoSaveAddressToCustomerBook(load.getCustomer2().trim(), load.getDropLocation(), false);
-                    }
-                } catch (Exception e) {
-                    logger.warn("Error saving customer data for load {}: {}", load.getLoadNumber(), e.getMessage());
-                    // Don't fail the load update if customer saving fails
+                    return null; // Void return
                 }
-                
-                // Update additional locations
-                saveAdditionalLocations(load);
-            } else {
-                logger.warn("No load found with ID: {}", load.getId());
-                throw new DataAccessException("No load found with ID: " + load.getId());
-            }
+            });
         } catch (SQLException e) {
             if (e.getMessage() != null && e.getMessage().contains("UNIQUE constraint failed: loads.load_number")) {
                 logger.error("Duplicate Load # not allowed: {}", load.getLoadNumber());
@@ -502,7 +531,7 @@ public class LoadDAO {
     public void delete(int id) {
         logger.info("Deleting load with ID: {}", id);
         String sql = "DELETE FROM loads WHERE id = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, id);
             int rowsAffected = ps.executeUpdate();
@@ -519,7 +548,7 @@ public class LoadDAO {
 
     public Load getById(int id) {
         logger.debug("Getting load by ID: {}", id);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads WHERE id = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, id);
@@ -542,7 +571,7 @@ public class LoadDAO {
     public List<Load> getByDateRange(LocalDate start, LocalDate end) {
         logger.debug("Getting loads by date range - Start: {}, End: {}", start, end);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads WHERE delivery_date IS NOT NULL AND delivery_date >= ? AND delivery_date <= ? AND (status = ? OR status = ?)";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setDate(1, java.sql.Date.valueOf(start));
@@ -578,7 +607,7 @@ public class LoadDAO {
     public List<Load> getByDateRangeForFinancials(LocalDate start, LocalDate end) {
         logger.debug("Getting loads for financials - Start: {}, End: {}", start, end);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // More inclusive query that considers multiple date fields and statuses
             String sql = """
                 SELECT * FROM loads 
@@ -637,7 +666,7 @@ public class LoadDAO {
     public List<Load> getByStatus(Load.Status status) {
         logger.debug("Getting loads by status: {}", status);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads WHERE status = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, status.name());
@@ -658,7 +687,7 @@ public class LoadDAO {
     public List<Load> getByDriver(int driverId) {
         logger.debug("Getting loads by driver ID: {}", driverId);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads WHERE driver_id = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, driverId);
@@ -680,7 +709,7 @@ public class LoadDAO {
     public List<Load> getByTrailer(int trailerId) {
         logger.debug("Getting loads by trailer ID: {}", trailerId);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads WHERE trailer_id = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, trailerId);
@@ -701,7 +730,7 @@ public class LoadDAO {
     public List<Load> getByTrailerNumber(String trailerNumber) {
         logger.debug("Getting loads by trailer number: {}", trailerNumber);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads WHERE trailer_number = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, trailerNumber);
@@ -722,7 +751,7 @@ public class LoadDAO {
     public List<Load> getByGrossAmountRange(double min, double max) {
         logger.debug("Getting loads by gross amount range - Min: ${}, Max: ${}", min, max);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads WHERE gross_amount >= ? AND gross_amount <= ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setDouble(1, min);
@@ -744,7 +773,7 @@ public class LoadDAO {
     public List<Load> getByTruckUnit(String truckUnit) {
         logger.debug("Getting loads by truck unit: {}", truckUnit);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads WHERE truck_unit_snapshot = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, truckUnit);
@@ -802,7 +831,7 @@ public class LoadDAO {
             params.add(java.sql.Date.valueOf(endDate));
         }
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql.toString());
             for (int i = 0; i < params.size(); ++i)
                 ps.setObject(i + 1, params.get(i));
@@ -827,7 +856,7 @@ public class LoadDAO {
     public List<Load> getActiveLoadsByDriver(int driverId) {
         logger.debug("Getting active loads for driver {}", driverId);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads WHERE driver_id = ? AND status IN (?, ?, ?)";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, driverId);
@@ -851,7 +880,7 @@ public class LoadDAO {
     public List<Load> getByDriverAndDateRange(int driverId, LocalDate start, LocalDate end) {
         logger.debug("Getting loads - DriverId: {}, Start: {}, End: {}", driverId, start, end);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM loads WHERE driver_id = ? AND delivery_date IS NOT NULL AND delivery_date >= ? AND delivery_date <= ? AND (status = ? OR status = ?)";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, driverId);
@@ -890,7 +919,7 @@ public class LoadDAO {
     public List<Load> getByDriverAndDateRangeForFinancials(int driverId, LocalDate start, LocalDate end) {
         logger.debug("Getting loads for financials - DriverId: {}, Start: {}, End: {}", driverId, start, end);
         List<Load> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // Simplified query that avoids complex nested subqueries
             String sql = """
                 SELECT * FROM loads 
@@ -949,7 +978,7 @@ public class LoadDAO {
     public int addDocument(Load.LoadDocument doc) {
         logger.info("Adding document: {} for load ID: {}", doc.getFileName(), doc.getLoadId());
         String sql = "INSERT INTO load_documents (load_id, file_name, file_path, document_type, upload_date) VALUES (?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             ps.setInt(1, doc.getLoadId());
             ps.setString(2, doc.getFileName());
@@ -973,7 +1002,7 @@ public class LoadDAO {
     public void deleteDocument(int docId) {
         logger.info("Deleting document with ID: {}", docId);
         String sql = "DELETE FROM load_documents WHERE id = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, docId);
             int rowsAffected = ps.executeUpdate();
@@ -991,7 +1020,7 @@ public class LoadDAO {
     public List<Load.LoadDocument> getDocumentsByLoadId(int loadId) {
         logger.debug("Getting documents for load ID: {}", loadId);
         List<Load.LoadDocument> docs = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM load_documents WHERE load_id = ? ORDER BY upload_date DESC";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, loadId);
@@ -1027,7 +1056,7 @@ public class LoadDAO {
             return documentsMap;
         }
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // Build IN clause
             String placeholders = loadIds.stream()
                 .map(id -> "?")
@@ -1072,7 +1101,7 @@ public class LoadDAO {
         logger.debug("Getting PDF documents for driver {} between {} and {}", driverId, start, end);
         List<Load.LoadDocument> documents = new ArrayList<>();
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 SELECT ld.* FROM load_documents ld
                 INNER JOIN loads l ON ld.load_id = l.id
@@ -1182,12 +1211,15 @@ public class LoadDAO {
         boolean hasLumper = false;
         try { hasLumper = rs.getInt("has_lumper") == 1; } catch (SQLException ex) { hasLumper = false; }
         
+        double lumperAmount = 0.0;
+        try { lumperAmount = rs.getDouble("lumper_amount"); } catch (SQLException ex) { lumperAmount = 0.0; }
+        
         boolean hasRevisedRateConfirmation = false;
         try { hasRevisedRateConfirmation = rs.getInt("has_revised_rate_confirmation") == 1; } catch (SQLException ex) { hasRevisedRateConfirmation = false; }
         
         Load load = new Load(id, loadNumber, poNumber, customer, customer2, billTo, pickUp, drop, driver, truckUnitSnapshot, 
                           status, gross, notes, pickUpDate, pickUpTime, deliveryDate, deliveryTime, 
-                          reminder, hasLumper, hasRevisedRateConfirmation);
+                          reminder, hasLumper, lumperAmount, hasRevisedRateConfirmation);
         
         // Set trailer info
         load.setTrailerId(trailerId);
@@ -1200,7 +1232,7 @@ public class LoadDAO {
     public void addCustomerIfNotExists(String customer) {
         if (customer == null || customer.trim().isEmpty()) return;
         logger.debug("Adding customer if not exists: {}", customer);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "INSERT OR IGNORE INTO customers (name) VALUES (?)";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, customer.trim());
@@ -1216,7 +1248,7 @@ public class LoadDAO {
     public List<String> getAllCustomers() {
         logger.debug("Fetching all customers");
         List<String> customers = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT name FROM customers ORDER BY name COLLATE NOCASE";
             ResultSet rs = conn.createStatement().executeQuery(sql);
             while (rs.next()) {
@@ -1232,7 +1264,7 @@ public class LoadDAO {
     public void deleteCustomer(String customerName) {
         if (customerName == null || customerName.trim().isEmpty()) return;
         logger.info("Deleting customer: {}", customerName);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "DELETE FROM customers WHERE name = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, customerName.trim());
@@ -1251,7 +1283,7 @@ public class LoadDAO {
     public void addBillingEntityIfNotExists(String billingEntity) {
         if (billingEntity == null || billingEntity.trim().isEmpty()) return;
         logger.debug("Adding billing entity if not exists: {}", billingEntity);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "INSERT OR IGNORE INTO billing_entities (name) VALUES (?)";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, billingEntity.trim());
@@ -1267,7 +1299,7 @@ public class LoadDAO {
     public List<String> getAllBillingEntities() {
         logger.debug("Fetching all billing entities");
         List<String> billingEntities = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT name FROM billing_entities ORDER BY name COLLATE NOCASE";
             ResultSet rs = conn.createStatement().executeQuery(sql);
             while (rs.next()) {
@@ -1283,7 +1315,7 @@ public class LoadDAO {
     public void deleteBillingEntity(String billingEntityName) {
         if (billingEntityName == null || billingEntityName.trim().isEmpty()) return;
         logger.info("Deleting billing entity: {}", billingEntityName);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "DELETE FROM billing_entities WHERE name = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, billingEntityName.trim());
@@ -1303,7 +1335,7 @@ public class LoadDAO {
     public int addCustomerLocation(CustomerLocation location, String customerName) {
         logger.debug("Adding enhanced customer location: {} - {}", customerName, location.getLocationType());
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // Get customer ID
             String getCustomerSql = "SELECT id FROM customers WHERE name = ?";
             PreparedStatement ps = conn.prepareStatement(getCustomerSql);
@@ -1356,7 +1388,7 @@ public class LoadDAO {
             WHERE id = ?
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             
             ps.setString(1, location.getLocationName());
@@ -1380,7 +1412,7 @@ public class LoadDAO {
         List<CustomerLocation> locations = new ArrayList<>();
         if (customerName == null || customerName.trim().isEmpty()) return locations;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 SELECT cl.* FROM customer_locations cl
                 INNER JOIN customers c ON cl.customer_id = c.id
@@ -1417,7 +1449,7 @@ public class LoadDAO {
         Map<String, List<CustomerLocation>> locationMap = new HashMap<>();
         if (customerName == null || customerName.trim().isEmpty()) return locationMap;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 SELECT cl.* FROM customer_locations cl
                 INNER JOIN customers c ON cl.customer_id = c.id
@@ -1455,7 +1487,7 @@ public class LoadDAO {
     
     public void deleteCustomerLocationById(int locationId) {
         logger.info("Deleting customer location by ID: {}", locationId);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "DELETE FROM customer_locations WHERE id = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, locationId);
@@ -1474,7 +1506,7 @@ public class LoadDAO {
     public void addCustomerLocationIfNotExists(String customerName, String locationType, String address) {
         if (customerName == null || customerName.trim().isEmpty() || address == null || address.trim().isEmpty()) return;
         logger.debug("Adding customer location if not exists: {} - {} - {}", customerName, locationType, address);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // Get customer ID
             String getCustomerSql = "SELECT id FROM customers WHERE name = ?";
             PreparedStatement ps = conn.prepareStatement(getCustomerSql);
@@ -1528,7 +1560,7 @@ public class LoadDAO {
         List<String> locations = new ArrayList<>();
         if (customerName == null || customerName.trim().isEmpty()) return locations;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 SELECT cl.address, cl.city, cl.state FROM customer_locations cl
                 INNER JOIN customers c ON cl.customer_id = c.id
@@ -1574,7 +1606,7 @@ public class LoadDAO {
         logger.debug("Fetching all locations from all customers");
         List<String> locations = new ArrayList<>();
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 SELECT DISTINCT cl.address, cl.city, cl.state 
                 FROM customer_locations cl
@@ -1618,7 +1650,7 @@ public class LoadDAO {
     public void deleteCustomerLocation(String customerName, String locationType, String address) {
         if (customerName == null || customerName.trim().isEmpty() || address == null || address.trim().isEmpty()) return;
         logger.info("Deleting customer location: {} - {} - {}", customerName, locationType, address);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 DELETE FROM customer_locations 
                 WHERE customer_id = (SELECT id FROM customers WHERE name = ?)
@@ -1645,7 +1677,7 @@ public class LoadDAO {
         Map<String, List<String>> locationMap = new HashMap<>();
         if (customerName == null || customerName.trim().isEmpty()) return locationMap;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 SELECT cl.location_type, cl.address, cl.city, cl.state FROM customer_locations cl
                 INNER JOIN customers c ON cl.customer_id = c.id
@@ -1700,7 +1732,7 @@ public class LoadDAO {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             
             stmt.setInt(1, location.getLoadId());
@@ -1766,7 +1798,7 @@ public class LoadDAO {
             WHERE id = ?
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             
             stmt.setString(1, location.getType().name());
@@ -1795,7 +1827,7 @@ public class LoadDAO {
         
         String sql = "DELETE FROM load_locations WHERE id = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             
             stmt.setInt(1, locationId);
@@ -1822,7 +1854,7 @@ public class LoadDAO {
             ORDER BY location_type, sequence
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             
             stmt.setInt(1, loadId);
@@ -1845,7 +1877,7 @@ public class LoadDAO {
         
         String sql = "DELETE FROM load_locations WHERE load_id = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             
             stmt.setInt(1, loadId);
@@ -1920,7 +1952,7 @@ public class LoadDAO {
      */
     private void migrateToUnifiedAddressBook() {
         logger.info("Starting migration to unified address book");
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // Check if migration is needed
             String checkSql = "SELECT COUNT(*) FROM customer_address_book";
             PreparedStatement checkPs = conn.prepareStatement(checkSql);
@@ -1982,7 +2014,7 @@ public class LoadDAO {
     public void syncAllAddressesToCustomerLocations(Consumer<SyncProgress> progressCallback) {
         logger.info("Starting optimized address synchronization");
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // Count addresses in both tables
             String countBookSql = "SELECT COUNT(*) FROM customer_address_book";
             PreparedStatement countBookPs = conn.prepareStatement(countBookSql);
@@ -2152,7 +2184,7 @@ public class LoadDAO {
         SQLException lastException = null;
         
         while (retries > 0) {
-            try (Connection conn = DriverManager.getConnection(DB_URL)) {
+            try (Connection conn = DatabaseConfig.getConnection()) {
                 // Use a single connection for all operations to avoid locking
                 conn.setAutoCommit(false);
                 
@@ -2339,7 +2371,7 @@ public class LoadDAO {
         }
         
         logger.debug("Adding address to customer address book: {}", customerName);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // Get customer ID
             String getCustomerSql = "SELECT id FROM customers WHERE name = ?";
             PreparedStatement ps = conn.prepareStatement(getCustomerSql);
@@ -2408,7 +2440,7 @@ public class LoadDAO {
         }
         
         logger.debug("Fetching address book for customer: {}", customerName);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 SELECT cab.id, cab.customer_id, cab.location_name, cab.address, cab.city, cab.state,
                        cab.is_default_pickup, cab.is_default_drop, cab.created_date
@@ -2450,7 +2482,7 @@ public class LoadDAO {
         if (address == null || address.getId() <= 0) return;
         
         logger.debug("Updating customer address: {}", address.getId());
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 UPDATE customer_address_book 
                 SET location_name = ?, address = ?, city = ?, state = ?,
@@ -2479,7 +2511,7 @@ public class LoadDAO {
      */
     public void deleteCustomerAddress(int addressId) {
         logger.debug("Deleting customer address: {}", addressId);
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // First, get the address details before deleting
             String getAddressSql = "SELECT customer_id, address, city, state FROM customer_address_book WHERE id = ?";
             PreparedStatement ps = conn.prepareStatement(getAddressSql);
@@ -2525,32 +2557,38 @@ public class LoadDAO {
                                                String city, String state) {
         logger.debug("Syncing address to customer_locations for customer ID: {}", customerId);
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
-            // Add for both PICKUP and DROP location types
-            String[] locationTypes = {"PICKUP", "DROP"};
-            
-            for (String locationType : locationTypes) {
-                String insertSql = """
-                    INSERT OR IGNORE INTO customer_locations 
-                    (customer_id, location_type, location_name, address, city, state, is_default)
-                    VALUES (?, ?, ?, ?, ?, ?, 0)
-                """;
-                
-                PreparedStatement ps = conn.prepareStatement(insertSql);
-                ps.setInt(1, customerId);
-                ps.setString(2, locationType);
-                ps.setString(3, locationName != null ? locationName : "");
-                ps.setString(4, address != null ? address : "");
-                ps.setString(5, city != null ? city : "");
-                ps.setString(6, state != null ? state : "");
-                
-                int rows = ps.executeUpdate();
-                if (rows > 0) {
-                    logger.debug("Added {} location to customer_locations", locationType);
+        try {
+            DatabaseConfig.executeWithRetry(() -> {
+                try (Connection conn = DatabaseConfig.getConnection()) {
+                    // Add for both PICKUP and DROP location types
+                    String[] locationTypes = {"PICKUP", "DROP"};
+                    
+                    for (String locationType : locationTypes) {
+                        String insertSql = """
+                            INSERT OR IGNORE INTO customer_locations 
+                            (customer_id, location_type, location_name, address, city, state, is_default)
+                            VALUES (?, ?, ?, ?, ?, ?, 0)
+                        """;
+                        
+                        try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+                            ps.setInt(1, customerId);
+                            ps.setString(2, locationType);
+                            ps.setString(3, locationName != null ? locationName : "");
+                            ps.setString(4, address != null ? address : "");
+                            ps.setString(5, city != null ? city : "");
+                            ps.setString(6, state != null ? state : "");
+                            
+                            int rows = ps.executeUpdate();
+                            if (rows > 0) {
+                                logger.debug("Added {} location to customer_locations", locationType);
+                            }
+                        }
+                    }
                 }
-            }
+                return null; // Void operation
+            });
         } catch (SQLException e) {
-            logger.error("Error syncing to customer_locations", e);
+            logger.error("Error syncing to customer_locations after retry attempts", e);
         }
     }
     
@@ -2615,7 +2653,7 @@ public class LoadDAO {
     public Map<String, Object> getAddressBookStatistics() {
         Map<String, Object> stats = new HashMap<>();
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // Total customers
             String customerSql = "SELECT COUNT(*) FROM customers";
             PreparedStatement ps = conn.prepareStatement(customerSql);
@@ -2666,7 +2704,7 @@ public class LoadDAO {
         
         String normalizedQuery = normalizeString(query);
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 SELECT DISTINCT 
                     c.name as customer_name,
@@ -2744,7 +2782,7 @@ public class LoadDAO {
     public List<String> getAllUniqueAddresses() {
         List<String> addresses = new ArrayList<>();
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 SELECT DISTINCT 
                     cab.address,
@@ -2834,7 +2872,7 @@ public class LoadDAO {
         
         logger.info("Starting batch insert of {} addresses", addresses.size());
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // Disable auto-commit for batch processing
             conn.setAutoCommit(false);
             
@@ -2914,7 +2952,7 @@ public class LoadDAO {
         String sql = "SELECT DISTINCT load_number FROM loads ORDER BY id DESC LIMIT ?";
         List<String> loadNumbers = new ArrayList<>();
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setInt(1, limit);
@@ -2938,7 +2976,7 @@ public class LoadDAO {
         String sql = "SELECT DISTINCT po_number FROM loads WHERE po_number IS NOT NULL AND po_number != '' ORDER BY id DESC LIMIT ?";
         List<String> poNumbers = new ArrayList<>();
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setInt(1, limit);
@@ -2961,7 +2999,7 @@ public class LoadDAO {
     public int getCustomerLoadCount(String customer, int days) throws DataAccessException {
         String sql = "SELECT COUNT(*) FROM loads WHERE (customer = ? OR customer2 = ?) AND pickup_date >= date('now', '-' || ? || ' days')";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setString(1, customer);
@@ -2999,7 +3037,7 @@ public class LoadDAO {
         List<Load> loads = new ArrayList<>();
         String searchPattern = "%" + query + "%";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             for (int i = 1; i <= 6; i++) {
@@ -3058,6 +3096,7 @@ public class LoadDAO {
                 
                 String reminder = rs.getString("reminder");
                 boolean hasLumper = rs.getBoolean("has_lumper");
+                double lumperAmount = rs.getDouble("lumper_amount");
                 boolean hasRevisedRateConfirmation = rs.getBoolean("has_revised_rate_confirmation");
                 
                 // Get trailer info
@@ -3071,7 +3110,7 @@ public class LoadDAO {
                 // Create Load object
                 Load load = new Load(id, loadNumber, poNumber, customer, customer2, billTo, pickUp, drop, driver, 
                                   truckUnitSnapshot, status, gross, notes, pickUpDate, pickUpTime, 
-                                  deliveryDate, deliveryTime, reminder, hasLumper, hasRevisedRateConfirmation);
+                                  deliveryDate, deliveryTime, reminder, hasLumper, lumperAmount, hasRevisedRateConfirmation);
                 
                 // Set trailer info
                 load.setTrailerId(trailerId);
@@ -3094,7 +3133,7 @@ public class LoadDAO {
     public String getLastLoadNumber() throws DataAccessException {
         String sql = "SELECT load_number FROM loads ORDER BY id DESC LIMIT 1";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
             
@@ -3135,7 +3174,7 @@ public class LoadDAO {
             LIMIT ?
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             
             ps.setString(1, "%" + pattern + "%");
@@ -3198,7 +3237,7 @@ public class LoadDAO {
             LIMIT ?
         """);
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql.toString())) {
             
             int paramIndex = 1;
@@ -3249,7 +3288,7 @@ public class LoadDAO {
         
         String sql = "SELECT id FROM customers WHERE name = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             
             ps.setString(1, customerName.trim());
@@ -3270,32 +3309,27 @@ public class LoadDAO {
      * Create database indexes for optimized searching
      * Should be called during initialization
      */
-    public void createSearchIndexes() {
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
-            // Index on customer name for faster searches
-            conn.createStatement().execute(
-                "CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name COLLATE NOCASE)"
-            );
-            
-            // Index on addresses for faster searches
-            conn.createStatement().execute(
-                "CREATE INDEX IF NOT EXISTS idx_customer_address_book_address ON customer_address_book(address COLLATE NOCASE)"
-            );
-            
-            // Index on city for location searches
-            conn.createStatement().execute(
-                "CREATE INDEX IF NOT EXISTS idx_customer_address_book_city ON customer_address_book(city COLLATE NOCASE)"
-            );
-            
-            // Composite index for customer + address lookups
-            conn.createStatement().execute(
-                "CREATE INDEX IF NOT EXISTS idx_customer_address_book_customer_address ON customer_address_book(customer_id, address)"
-            );
-            
-            logger.info("Database search indexes created successfully");
-            
-        } catch (SQLException e) {
-            logger.error("Error creating search indexes", e);
-        }
+    public void createSearchIndexes(Connection conn) throws SQLException {
+        // Index on customer name for faster searches
+        conn.createStatement().execute(
+            "CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name COLLATE NOCASE)"
+        );
+        
+        // Index on addresses for faster searches
+        conn.createStatement().execute(
+            "CREATE INDEX IF NOT EXISTS idx_customer_address_book_address ON customer_address_book(address COLLATE NOCASE)"
+        );
+        
+        // Index on city for location searches
+        conn.createStatement().execute(
+            "CREATE INDEX IF NOT EXISTS idx_customer_address_book_city ON customer_address_book(city COLLATE NOCASE)"
+        );
+        
+        // Composite index for customer + address lookups
+        conn.createStatement().execute(
+            "CREATE INDEX IF NOT EXISTS idx_customer_address_book_customer_address ON customer_address_book(customer_id, address)"
+        );
+        
+        logger.info("Database search indexes created successfully");
     }
 }

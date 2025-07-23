@@ -17,6 +17,10 @@ import org.slf4j.LoggerFactory;
 import javafx.stage.FileChooser;
 import java.io.File;
 import java.io.IOException;
+import java.io.BufferedWriter;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -1319,9 +1323,8 @@ public class EmployeesTab extends BorderPane {
         });
         
         exportBtn.setOnAction(e -> {
-            // TODO: Implement export functionality
-            showAlert(Alert.AlertType.INFORMATION, "Export", 
-                     "Export functionality will be implemented soon.");
+            logger.info("Export button clicked");
+            showExportDialog();
         });
     }
     
@@ -1423,6 +1426,236 @@ public class EmployeesTab extends BorderPane {
             showAlert(Alert.AlertType.ERROR, "Configuration Error", 
                      "Failed to open DOT compliance configuration: " + e.getMessage());
         }
+    }
+
+    /**
+     * Show export dialog for CSV/XLSX files.
+     */
+    private void showExportDialog() {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Export Employees");
+        dialog.setHeaderText("Choose export format");
+        
+        ButtonType csvButtonType = new ButtonType("CSV", ButtonBar.ButtonData.OK_DONE);
+        ButtonType xlsxButtonType = new ButtonType("XLSX", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancelButtonType = ButtonType.CANCEL;
+        
+        dialog.getDialogPane().getButtonTypes().addAll(csvButtonType, xlsxButtonType, cancelButtonType);
+        
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == csvButtonType) {
+                return "CSV";
+            } else if (dialogButton == xlsxButtonType) {
+                return "XLSX";
+            }
+            return null;
+        });
+        
+        dialog.showAndWait().ifPresent(format -> {
+            if (format.equals("CSV")) {
+                exportToCSV();
+            } else if (format.equals("XLSX")) {
+                exportToXLSX();
+            }
+        });
+    }
+    
+    /**
+     * Export employees data to CSV file
+     */
+    private void exportToCSV() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Employees to CSV");
+        fileChooser.setInitialFileName("employees_" + 
+                java.time.LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ".csv");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("CSV Files", "*.csv"));
+        
+        File file = fileChooser.showSaveDialog(getScene().getWindow());
+        if (file != null) {
+            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
+                    new FileOutputStream(file), StandardCharsets.UTF_8))) {
+                
+                // Write BOM for Excel UTF-8 recognition
+                writer.write('\ufeff');
+                
+                // Write headers
+                writer.write("Driver Name,Truck/Unit,Trailer #,Email,Driver %,Company %,Service Fee %," +
+                           "DOB,License #,Driver Type,Employee LLC,CDL Expiry,Medical Expiry,Phone");
+                writer.newLine();
+                
+                // Filter the employees if search filter is applied
+                List<Employee> exportList = new ArrayList<>();
+                if (table.getItems() instanceof SortedList) {
+                    exportList.addAll(table.getItems());
+                } else {
+                    exportList.addAll(employees);
+                }
+                
+                // Write data
+                DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+                for (Employee emp : exportList) {
+                    StringBuilder line = new StringBuilder();
+                    line.append(escapeCSV(emp.getName())).append(",");
+                    line.append(escapeCSV(emp.getTruckUnit())).append(",");
+                    line.append(escapeCSV(emp.getTrailerNumber())).append(",");
+                    line.append(escapeCSV(emp.getEmail())).append(",");
+                    line.append(String.format("%.2f", emp.getDriverPercent())).append(",");
+                    line.append(String.format("%.2f", emp.getCompanyPercent())).append(",");
+                    line.append(String.format("%.2f", emp.getServiceFeePercent())).append(",");
+                    line.append(emp.getDob() != null ? emp.getDob().format(dateFormatter) : "").append(",");
+                    line.append(escapeCSV(emp.getLicenseNumber())).append(",");
+                    line.append(escapeCSV(emp.getDriverType() != null ? emp.getDriverType().name() : "")).append(",");
+                    line.append(escapeCSV(emp.getEmployeeLLC())).append(",");
+                    line.append(emp.getCdlExpiry() != null ? emp.getCdlExpiry().format(dateFormatter) : "").append(",");
+                    line.append(emp.getMedicalExpiry() != null ? emp.getMedicalExpiry().format(dateFormatter) : "").append(",");
+                    line.append(escapeCSV(emp.getPhone()));
+                    
+                    writer.write(line.toString());
+                    writer.newLine();
+                }
+                
+                showAlert(Alert.AlertType.INFORMATION, "Export Successful", 
+                         "Exported " + exportList.size() + " employees to CSV successfully.");
+                statusLabel.setText("Exported " + exportList.size() + " employees to CSV");
+            } catch (IOException e) {
+                logger.error("Failed to export to CSV", e);
+                showAlert(Alert.AlertType.ERROR, "Export Failed", 
+                         "Failed to export data: " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Export employees data to XLSX file
+     */
+    private void exportToXLSX() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Export Employees to Excel");
+        fileChooser.setInitialFileName("employees_" + 
+                java.time.LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ".xlsx");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Excel Files", "*.xlsx"));
+        
+        File file = fileChooser.showSaveDialog(getScene().getWindow());
+        if (file != null) {
+            try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+                org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("Employees");
+                
+                // Create header row
+                String[] headers = {"Driver Name", "Truck/Unit", "Trailer #", "Email", "Driver %", 
+                                   "Company %", "Service Fee %", "DOB", "License #", "Driver Type", 
+                                   "Employee LLC", "CDL Expiry", "Medical Expiry", "Phone"};
+                
+                org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
+                for (int i = 0; i < headers.length; i++) {
+                    org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
+                    cell.setCellValue(headers[i]);
+                    // Make the header bold
+                    org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
+                    org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+                    headerFont.setBold(true);
+                    headerStyle.setFont(headerFont);
+                    cell.setCellStyle(headerStyle);
+                }
+                
+                // Filter the employees if search filter is applied
+                List<Employee> exportList = new ArrayList<>();
+                if (table.getItems() instanceof SortedList) {
+                    exportList.addAll(table.getItems());
+                } else {
+                    exportList.addAll(employees);
+                }
+                
+                // Create data rows
+                int rowNum = 1;
+                for (Employee emp : exportList) {
+                    org.apache.poi.ss.usermodel.Row row = sheet.createRow(rowNum++);
+                    
+                    row.createCell(0).setCellValue(emp.getName());
+                    row.createCell(1).setCellValue(emp.getTruckUnit());
+                    row.createCell(2).setCellValue(emp.getTrailerNumber());
+                    row.createCell(3).setCellValue(emp.getEmail());
+                    
+                    // Set percentage cells
+                    org.apache.poi.ss.usermodel.Cell driverPctCell = row.createCell(4);
+                    driverPctCell.setCellValue(emp.getDriverPercent() / 100); // Convert to decimal for Excel percentage
+                    
+                    org.apache.poi.ss.usermodel.Cell companyPctCell = row.createCell(5);
+                    companyPctCell.setCellValue(emp.getCompanyPercent() / 100);
+                    
+                    org.apache.poi.ss.usermodel.Cell servicePctCell = row.createCell(6);
+                    servicePctCell.setCellValue(emp.getServiceFeePercent() / 100);
+                    
+                    // Create percentage style
+                    org.apache.poi.ss.usermodel.CellStyle percentStyle = workbook.createCellStyle();
+                    percentStyle.setDataFormat(workbook.createDataFormat().getFormat("0.00%"));
+                    driverPctCell.setCellStyle(percentStyle);
+                    companyPctCell.setCellStyle(percentStyle);
+                    servicePctCell.setCellStyle(percentStyle);
+                    
+                    // Set date cells
+                    org.apache.poi.ss.usermodel.CellStyle dateStyle = workbook.createCellStyle();
+                    dateStyle.setDataFormat(workbook.createDataFormat().getFormat("mm/dd/yyyy"));
+                    
+                    org.apache.poi.ss.usermodel.Cell dobCell = row.createCell(7);
+                    if (emp.getDob() != null) {
+                        dobCell.setCellValue(java.util.Date.from(emp.getDob().atStartOfDay().atZone(
+                            java.time.ZoneId.systemDefault()).toInstant()));
+                        dobCell.setCellStyle(dateStyle);
+                    }
+                    
+                    row.createCell(8).setCellValue(emp.getLicenseNumber());
+                    row.createCell(9).setCellValue(emp.getDriverType() != null ? emp.getDriverType().name() : "");
+                    row.createCell(10).setCellValue(emp.getEmployeeLLC());
+                    
+                    org.apache.poi.ss.usermodel.Cell cdlCell = row.createCell(11);
+                    if (emp.getCdlExpiry() != null) {
+                        cdlCell.setCellValue(java.util.Date.from(emp.getCdlExpiry().atStartOfDay().atZone(
+                            java.time.ZoneId.systemDefault()).toInstant()));
+                        cdlCell.setCellStyle(dateStyle);
+                    }
+                    
+                    org.apache.poi.ss.usermodel.Cell medCell = row.createCell(12);
+                    if (emp.getMedicalExpiry() != null) {
+                        medCell.setCellValue(java.util.Date.from(emp.getMedicalExpiry().atStartOfDay().atZone(
+                            java.time.ZoneId.systemDefault()).toInstant()));
+                        medCell.setCellStyle(dateStyle);
+                    }
+                    
+                    row.createCell(13).setCellValue(emp.getPhone());
+                }
+                
+                // Auto-size columns for better readability
+                for (int i = 0; i < headers.length; i++) {
+                    sheet.autoSizeColumn(i);
+                }
+                
+                // Write to file
+                try (FileOutputStream outputStream = new FileOutputStream(file)) {
+                    workbook.write(outputStream);
+                }
+                
+                showAlert(Alert.AlertType.INFORMATION, "Export Successful", 
+                         "Exported " + exportList.size() + " employees to Excel successfully.");
+                statusLabel.setText("Exported " + exportList.size() + " employees to Excel");
+            } catch (Exception e) {
+                logger.error("Failed to export to Excel", e);
+                showAlert(Alert.AlertType.ERROR, "Export Failed", 
+                         "Failed to export data: " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Escape special characters for CSV format
+     */
+    private String escapeCSV(String value) {
+        if (value == null) return "";
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
     }
 
     /**

@@ -9,19 +9,33 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 
 /**
  * Importer for employee data from CSV and XLSX files.
  * Supports importing driver information with the following fields:
  * - Driver Name
+ * - Truck/Unit
+ * - Trailer #
+ * - Email
  * - Driver %
  * - Company %
  * - Service Fee %
+ * - DOB
+ * - License #
+ * - Driver Type
+ * - Employee LLC
+ * - CDL Expiry
+ * - Medical Expiry
  * - Mobile #
  */
 public class EmployeeCSVImporter {
     private static final Logger logger = LoggerFactory.getLogger(EmployeeCSVImporter.class);
+    private static final String[] DATE_FORMATS = {
+        "MM/dd/yyyy", "yyyy-MM-dd", "M/d/yyyy", "MM-dd-yyyy", "dd/MM/yyyy", "yyyy/MM/dd"
+    };
     
     /**
      * Import employees from a file (CSV or XLSX)
@@ -53,7 +67,7 @@ public class EmployeeCSVImporter {
             }
             
             // Parse header to find column indices
-            String[] headers = line.split(",");
+            String[] headers = line.split(",", -1); // -1 to include trailing empty strings
             Map<String, Integer> columnIndices = getColumnIndices(headers);
             logger.debug("CSV column indices: {}", columnIndices);
             
@@ -185,31 +199,67 @@ public class EmployeeCSVImporter {
         for (int i = 0; i < headers.length; i++) {
             String header = headers[i].trim().toLowerCase();
             
-            // More flexible matching for driver name
+            // Driver name
             if (header.contains("driver") && header.contains("name")) {
                 indices.put("Driver Name", i);
             } else if (header.equals("name") || header.equals("driver")) {
                 indices.put("Driver Name", i);
             }
-            // More flexible matching for driver percentage
+            // Truck/Unit
+            else if (header.contains("truck") || (header.contains("unit") && !header.contains("trailer"))) {
+                indices.put("Truck/Unit", i);
+            }
+            // Trailer number
+            else if (header.contains("trailer") || header.equals("trailer #")) {
+                indices.put("Trailer #", i);
+            }
+            // Email
+            else if (header.contains("email")) {
+                indices.put("Email", i);
+            }
+            // Driver percentage
             else if (header.contains("driver") && (header.contains("%") || header.contains("percent"))) {
                 indices.put("Driver %", i);
             } else if (header.equals("driver %") || header.equals("driver percent")) {
                 indices.put("Driver %", i);
             }
-            // More flexible matching for company percentage
+            // Company percentage
             else if (header.contains("company") && (header.contains("%") || header.contains("percent"))) {
                 indices.put("Company %", i);
             } else if (header.equals("company %") || header.equals("company percent")) {
                 indices.put("Company %", i);
             }
-            // More flexible matching for service fee percentage
+            // Service fee percentage
             else if (header.contains("service") && header.contains("fee") && (header.contains("%") || header.contains("percent"))) {
                 indices.put("Service Fee %", i);
             } else if (header.equals("service fee %") || header.equals("service fee percent")) {
                 indices.put("Service Fee %", i);
             }
-            // More flexible matching for mobile/phone
+            // DOB
+            else if (header.contains("dob") || header.contains("birth") || header.contains("date of birth")) {
+                indices.put("DOB", i);
+            }
+            // License number
+            else if (header.contains("license") || header.equals("license #")) {
+                indices.put("License #", i);
+            }
+            // Driver type
+            else if (header.contains("driver type") || header.equals("type")) {
+                indices.put("Driver Type", i);
+            }
+            // Employee LLC
+            else if (header.contains("llc") || header.contains("employee llc")) {
+                indices.put("Employee LLC", i);
+            }
+            // CDL expiry
+            else if ((header.contains("cdl") && (header.contains("expiry") || header.contains("expiration"))) || header.equals("cdl expiry")) {
+                indices.put("CDL Expiry", i);
+            }
+            // Medical expiry
+            else if ((header.contains("medical") || header.contains("med")) && (header.contains("expiry") || header.contains("expiration"))) {
+                indices.put("Medical Expiry", i);
+            }
+            // Phone/Mobile
             else if (header.contains("mobile") || header.contains("phone")) {
                 indices.put("Mobile #", i);
             } else if (header.equals("mobile #") || header.equals("phone #")) {
@@ -231,31 +281,67 @@ public class EmployeeCSVImporter {
             if (cell != null && cell.getCellType() == CellType.STRING) {
                 String header = cell.getStringCellValue().trim().toLowerCase();
                 
-                // More flexible matching for driver name
+                // Driver name
                 if (header.contains("driver") && header.contains("name")) {
                     indices.put("Driver Name", i);
                 } else if (header.equals("name") || header.equals("driver")) {
                     indices.put("Driver Name", i);
                 }
-                // More flexible matching for driver percentage
+                // Truck/Unit
+                else if (header.contains("truck") || (header.contains("unit") && !header.contains("trailer"))) {
+                    indices.put("Truck/Unit", i);
+                }
+                // Trailer number
+                else if (header.contains("trailer") || header.equals("trailer #")) {
+                    indices.put("Trailer #", i);
+                }
+                // Email
+                else if (header.contains("email")) {
+                    indices.put("Email", i);
+                }
+                // Driver percentage
                 else if (header.contains("driver") && (header.contains("%") || header.contains("percent"))) {
                     indices.put("Driver %", i);
                 } else if (header.equals("driver %") || header.equals("driver percent")) {
                     indices.put("Driver %", i);
                 }
-                // More flexible matching for company percentage
+                // Company percentage
                 else if (header.contains("company") && (header.contains("%") || header.contains("percent"))) {
                     indices.put("Company %", i);
                 } else if (header.equals("company %") || header.equals("company percent")) {
                     indices.put("Company %", i);
                 }
-                // More flexible matching for service fee percentage
+                // Service fee percentage
                 else if (header.contains("service") && header.contains("fee") && (header.contains("%") || header.contains("percent"))) {
                     indices.put("Service Fee %", i);
                 } else if (header.equals("service fee %") || header.equals("service fee percent")) {
                     indices.put("Service Fee %", i);
                 }
-                // More flexible matching for mobile/phone
+                // DOB
+                else if (header.contains("dob") || header.contains("birth") || header.contains("date of birth")) {
+                    indices.put("DOB", i);
+                }
+                // License number
+                else if (header.contains("license") || header.equals("license #")) {
+                    indices.put("License #", i);
+                }
+                // Driver type
+                else if (header.contains("driver type") || header.equals("type")) {
+                    indices.put("Driver Type", i);
+                }
+                // Employee LLC
+                else if (header.contains("llc") || header.contains("employee llc")) {
+                    indices.put("Employee LLC", i);
+                }
+                // CDL expiry
+                else if ((header.contains("cdl") && (header.contains("expiry") || header.contains("expiration"))) || header.equals("cdl expiry")) {
+                    indices.put("CDL Expiry", i);
+                }
+                // Medical expiry
+                else if ((header.contains("medical") || header.contains("med")) && (header.contains("expiry") || header.contains("expiration"))) {
+                    indices.put("Medical Expiry", i);
+                }
+                // Phone/Mobile
                 else if (header.contains("mobile") || header.contains("phone")) {
                     indices.put("Mobile #", i);
                 } else if (header.equals("mobile #") || header.equals("phone #")) {
@@ -271,13 +357,22 @@ public class EmployeeCSVImporter {
      * Parse a CSV row into an Employee object with improved validation
      */
     private static Employee parseCSVRow(String line, Map<String, Integer> columnIndices, int lineNumber) {
-        String[] values = line.split(",");
+        String[] values = line.split(",", -1); // -1 to include trailing empty strings
         
         // Extract values with better error handling
         String driverName = getValue(values, columnIndices, "Driver Name");
+        String truckUnit = getValue(values, columnIndices, "Truck/Unit");
+        String trailerNumber = getValue(values, columnIndices, "Trailer #");
+        String email = getValue(values, columnIndices, "Email");
         double driverPercent = parseDouble(getValue(values, columnIndices, "Driver %"));
         double companyPercent = parseDouble(getValue(values, columnIndices, "Company %"));
         double serviceFeePercent = parseDouble(getValue(values, columnIndices, "Service Fee %"));
+        LocalDate dob = parseDate(getValue(values, columnIndices, "DOB"));
+        String licenseNumber = getValue(values, columnIndices, "License #");
+        String driverTypeStr = getValue(values, columnIndices, "Driver Type");
+        String employeeLLC = getValue(values, columnIndices, "Employee LLC");
+        LocalDate cdlExpiry = parseDate(getValue(values, columnIndices, "CDL Expiry"));
+        LocalDate medicalExpiry = parseDate(getValue(values, columnIndices, "Medical Expiry"));
         String mobileNumber = getValue(values, columnIndices, "Mobile #");
         
         // Validate required fields
@@ -285,6 +380,9 @@ public class EmployeeCSVImporter {
             logger.debug("Skipping line {}: missing driver name", lineNumber);
             return null;
         }
+        
+        // Parse driver type
+        Employee.DriverType driverType = parseDriverType(driverTypeStr);
         
         // Validate percentage values
         if (driverPercent < 0 || driverPercent > 100) {
@@ -307,26 +405,27 @@ public class EmployeeCSVImporter {
             mobileNumber = cleanPhoneNumber(mobileNumber.trim());
         }
         
-        // Create employee with default values for missing fields
+        // Create employee with all available fields
         Employee employee = new Employee(
             0, // ID will be set by database
             driverName.trim(),
-            "", // truck unit - empty by default
-            "", // trailer number - empty by default
+            truckUnit != null ? truckUnit.trim() : "",
+            trailerNumber != null ? trailerNumber.trim() : "",
             driverPercent,
             companyPercent,
             serviceFeePercent,
-            null, // DOB - not provided in import
-            "", // license number - not provided in import
-            Employee.DriverType.OWNER_OPERATOR, // default driver type
-            "", // employee LLC - not provided in import
-            null, // CDL expiry - not provided in import
-            null, // medical expiry - not provided in import
+            dob,
+            licenseNumber != null ? licenseNumber.trim() : "",
+            driverType,
+            employeeLLC != null ? employeeLLC.trim() : "",
+            cdlExpiry,
+            medicalExpiry,
             Employee.Status.ACTIVE // default to active
         );
         
+        // Set additional fields
         employee.setPhone(mobileNumber != null ? mobileNumber : "");
-        employee.setEmail(""); // not provided in import
+        employee.setEmail(email != null ? email.trim() : "");
         
         logger.debug("Parsed employee from line {}: {}", lineNumber, driverName);
         return employee;
@@ -338,9 +437,18 @@ public class EmployeeCSVImporter {
     private static Employee parseXLSXRow(Row row, Map<String, Integer> columnIndices, int rowNumber) {
         // Extract values with better error handling
         String driverName = getCellValue(row, columnIndices, "Driver Name");
+        String truckUnit = getCellValue(row, columnIndices, "Truck/Unit");
+        String trailerNumber = getCellValue(row, columnIndices, "Trailer #");
+        String email = getCellValue(row, columnIndices, "Email");
         double driverPercent = parseDouble(getCellValue(row, columnIndices, "Driver %"));
         double companyPercent = parseDouble(getCellValue(row, columnIndices, "Company %"));
         double serviceFeePercent = parseDouble(getCellValue(row, columnIndices, "Service Fee %"));
+        LocalDate dob = parseDate(getCellValue(row, columnIndices, "DOB"));
+        String licenseNumber = getCellValue(row, columnIndices, "License #");
+        String driverTypeStr = getCellValue(row, columnIndices, "Driver Type");
+        String employeeLLC = getCellValue(row, columnIndices, "Employee LLC");
+        LocalDate cdlExpiry = parseDate(getCellValue(row, columnIndices, "CDL Expiry"));
+        LocalDate medicalExpiry = parseDate(getCellValue(row, columnIndices, "Medical Expiry"));
         String mobileNumber = getCellValue(row, columnIndices, "Mobile #");
         
         // Validate required fields
@@ -348,6 +456,9 @@ public class EmployeeCSVImporter {
             logger.debug("Skipping row {}: missing driver name", rowNumber);
             return null;
         }
+        
+        // Parse driver type
+        Employee.DriverType driverType = parseDriverType(driverTypeStr);
         
         // Validate percentage values
         if (driverPercent < 0 || driverPercent > 100) {
@@ -370,29 +481,73 @@ public class EmployeeCSVImporter {
             mobileNumber = cleanPhoneNumber(mobileNumber.trim());
         }
         
-        // Create employee with default values for missing fields
+        // Create employee with all available fields
         Employee employee = new Employee(
             0, // ID will be set by database
             driverName.trim(),
-            "", // truck unit - empty by default
-            "", // trailer number - empty by default
+            truckUnit != null ? truckUnit.trim() : "",
+            trailerNumber != null ? trailerNumber.trim() : "",
             driverPercent,
             companyPercent,
             serviceFeePercent,
-            null, // DOB - not provided in import
-            "", // license number - not provided in import
-            Employee.DriverType.OWNER_OPERATOR, // default driver type
-            "", // employee LLC - not provided in import
-            null, // CDL expiry - not provided in import
-            null, // medical expiry - not provided in import
+            dob,
+            licenseNumber != null ? licenseNumber.trim() : "",
+            driverType,
+            employeeLLC != null ? employeeLLC.trim() : "",
+            cdlExpiry,
+            medicalExpiry,
             Employee.Status.ACTIVE // default to active
         );
         
+        // Set additional fields
         employee.setPhone(mobileNumber != null ? mobileNumber : "");
-        employee.setEmail(""); // not provided in import
+        employee.setEmail(email != null ? email.trim() : "");
         
         logger.debug("Parsed employee from row {}: {}", rowNumber, driverName);
         return employee;
+    }
+    
+    /**
+     * Parse driver type from string
+     */
+    private static Employee.DriverType parseDriverType(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return Employee.DriverType.OWNER_OPERATOR; // Default
+        }
+        
+        String cleanValue = value.trim().toUpperCase();
+        
+        if (cleanValue.contains("OWNER") || cleanValue.contains("OPERATOR")) {
+            return Employee.DriverType.OWNER_OPERATOR;
+        } else if (cleanValue.contains("COMPANY")) {
+            return Employee.DriverType.COMPANY_DRIVER;
+        } else {
+            return Employee.DriverType.OTHER;
+        }
+    }
+    
+    /**
+     * Parse date from string with multiple format support
+     */
+    private static LocalDate parseDate(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        
+        String cleanValue = value.trim();
+        
+        // Try parsing with each supported date format
+        for (String format : DATE_FORMATS) {
+            try {
+                return LocalDate.parse(cleanValue, DateTimeFormatter.ofPattern(format));
+            } catch (DateTimeParseException e) {
+                // Continue trying with next format
+            }
+        }
+        
+        // If we get here, no format matched
+        logger.debug("Could not parse date: {}", value);
+        return null;
     }
     
     /**
@@ -458,6 +613,14 @@ public class EmployeeCSVImporter {
                 case STRING:
                     return cell.getStringCellValue().trim();
                 case NUMERIC:
+                    // Check if this is a date cell
+                    if (DateUtil.isCellDateFormatted(cell)) {
+                        Date date = cell.getDateCellValue();
+                        if (date != null) {
+                            return new java.text.SimpleDateFormat("MM/dd/yyyy").format(date);
+                        }
+                    }
+                    
                     double value = cell.getNumericCellValue();
                     if (Math.floor(value) == value) {
                         return String.valueOf((long) value);

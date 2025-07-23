@@ -276,18 +276,20 @@ public class LoadsPanel extends BorderPane {
     private HBox createAdditionalLocationRow(String labelText, String customerValue, boolean isPickup, VBox parentContainer) {
         HBox row = new HBox(10);
         row.setAlignment(Pos.CENTER_LEFT);
-        row.getStyleClass().add("modern-additional-location-row");
+        row.setPadding(new Insets(5, 0, 5, 20));
+        row.getStyleClass().add("additional-location-row");
         
         Label rowLabel = new Label(labelText);
-        rowLabel.getStyleClass().add("modern-form-label");
+        rowLabel.getStyleClass().add("additional-location-label");
         rowLabel.setPrefWidth(120);
+        rowLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: black;");
         
         // Customer combo box for additional stops - INDEPENDENT from main customer
         ComboBox<String> customerCombo = new ComboBox<>();
         customerCombo.setPromptText("Select customer");
         customerCombo.setEditable(true);
-        customerCombo.setPrefWidth(180);
-        customerCombo.getStyleClass().add("modern-combo-box");
+        customerCombo.setPrefWidth(200);
+        customerCombo.getStyleClass().add("additional-customer-combo");
         
         // Load customers asynchronously - NO DEFAULT TO MAIN CUSTOMER
         CompletableFuture.runAsync(() -> {
@@ -302,9 +304,7 @@ public class LoadsPanel extends BorderPane {
         });
         
         // Add button for new customer
-        Button addCustomerBtn = new Button("+");
-        addCustomerBtn.getStyleClass().add("inline-add-button");
-        addCustomerBtn.setStyle("-fx-background-color: #28a745;");
+        Button addCustomerBtn = createInlineButton("+", "#28a745", "white");
         addCustomerBtn.setTooltip(new Tooltip("Add new customer"));
         addCustomerBtn.setOnAction(e -> showAddCustomerDialog(customerCombo));
         
@@ -312,8 +312,8 @@ public class LoadsPanel extends BorderPane {
         ComboBox<String> locationCombo = new ComboBox<>();
         locationCombo.setPromptText("Select/Enter location");
         locationCombo.setEditable(true);
-        locationCombo.setPrefWidth(200);
-        locationCombo.getStyleClass().add("modern-combo-box");
+        locationCombo.setPrefWidth(250);
+        locationCombo.getStyleClass().add("additional-location-combo");
         
         // Initialize dropdown with all locations first
         CompletableFuture.runAsync(() -> {
@@ -329,9 +329,7 @@ public class LoadsPanel extends BorderPane {
         });
         
         // Add button for new location
-        Button addLocationBtn = new Button("+");
-        addLocationBtn.getStyleClass().add("inline-add-button");
-        addLocationBtn.setStyle("-fx-background-color: #28a745;");
+        Button addLocationBtn = createInlineButton("+", "#28a745", "white");
         addLocationBtn.setTooltip(new Tooltip("Add new location"));
         addLocationBtn.setOnAction(e -> {
             String customer = customerCombo.getValue();
@@ -343,8 +341,7 @@ public class LoadsPanel extends BorderPane {
         });
         
         // Remove button
-        Button removeBtn = new Button("×");
-        removeBtn.getStyleClass().add("modern-remove-button");
+        Button removeBtn = createInlineButton("×", "#dc3545", "white");
         removeBtn.setTooltip(new Tooltip("Remove this stop"));
         removeBtn.setOnAction(e -> {
             // Clean up data associations before removing
@@ -3265,45 +3262,6 @@ public class LoadsPanel extends BorderPane {
         }
     }
     
-    // Helper method to auto-select best matching customer for a location
-    private void autoSelectBestMatchingCustomer(ComboBox<String> customerCombo, String selectedLocation) {
-        try {
-            if (selectedLocation == null || selectedLocation.trim().isEmpty()) {
-                return;
-            }
-            
-            // Get all customers that have this location
-            List<String> allCustomers = loadDAO.getAllCustomers();
-            final String[] bestMatch = {null};
-            
-            for (String customer : allCustomers) {
-                Map<String, List<String>> customerLocations = loadDAO.getAllCustomerLocations(customer);
-                
-                // Check all location types for this customer
-                for (List<String> locations : customerLocations.values()) {
-                    for (String location : locations) {
-                        if (location.equalsIgnoreCase(selectedLocation.trim())) {
-                            bestMatch[0] = customer;
-                            break;
-                        }
-                    }
-                    if (bestMatch[0] != null) break;
-                }
-                if (bestMatch[0] != null) break;
-            }
-            
-            // Auto-select the best matching customer if found
-            if (bestMatch[0] != null && customerCombo.getItems().contains(bestMatch[0])) {
-                Platform.runLater(() -> {
-                    customerCombo.setValue(bestMatch[0]);
-                });
-            }
-            
-        } catch (Exception e) {
-            logger.error("Error auto-selecting customer for location: " + selectedLocation, e);
-        }
-    }
-
     // Helper method to update customer suggestions based on selected location
     @SuppressWarnings("unchecked")
     private void updateCustomerSuggestions(ComboBox<String> customerCombo, ComboBox<String> locationCombo, String selectedLocation) {
@@ -4613,7 +4571,6 @@ public class LoadsPanel extends BorderPane {
         TextArea notesField;
         TextField reminderField;
         CheckBox hasLumperCheck;
-        TextField lumperAmountField;
         CheckBox hasRevisedRateCheck;
     }
     
@@ -4630,102 +4587,103 @@ public class LoadsPanel extends BorderPane {
             load.setLocations(locations);
         }
         
-        // Create main dialog with modern styling
+        // Create main dialog
         Dialog<Load> dialog = new Dialog<>();
         dialog.setTitle(isAdd ? "Add New Load" : "Edit Load");
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         
-        // Set dialog properties
+        // Set dialog properties for better UX
         dialog.setResizable(true);
         dialog.initModality(javafx.stage.Modality.APPLICATION_MODAL);
         
-        // Modern dialog sizing
+        // COMPACT PROFESSIONAL DIALOG - VERTICAL FOCUSED
         DialogPane dialogPane = dialog.getDialogPane();
-        dialogPane.setPrefWidth(900);
-        dialogPane.setPrefHeight(700);
-        dialogPane.setMinWidth(800);
+        dialogPane.setPrefWidth(750);
+        dialogPane.setPrefHeight(650);
+        dialogPane.setMinWidth(700);
         dialogPane.setMinHeight(600);
-        dialogPane.setMaxWidth(1000);
-        dialogPane.setMaxHeight(800);
+        dialogPane.setMaxWidth(850);
+        dialogPane.setMaxHeight(750);
         
-        // Apply modern dialog styling
-        dialog.getDialogPane().getStyleClass().add("modern-load-dialog");
+        // Set professional dialog styling with CSS classes
+        dialog.getDialogPane().getStyleClass().add("enhanced-dialog-pane");
         
-        // Enhanced window setup
+        // Compact professional window setup
         dialog.setOnShown(event -> {
             javafx.stage.Window window = dialog.getDialogPane().getScene().getWindow();
             if (window instanceof javafx.stage.Stage) {
                 javafx.stage.Stage stage = (javafx.stage.Stage) window;
-                stage.setMinWidth(800);
+                stage.setMinWidth(700);
                 stage.setMinHeight(600);
-                stage.setWidth(900);
-                stage.setHeight(700);
+                stage.setWidth(750);
+                stage.setHeight(650);
+                stage.setMaxWidth(850);
+                stage.setMaxHeight(750);
                 stage.centerOnScreen();
+                
+                logger.debug("Compact professional dialog - Size: {}x{}", stage.getWidth(), stage.getHeight());
             }
         });
         
-        // Create modern header
-        VBox header = new VBox();
-        header.getStyleClass().add("modern-dialog-header");
-        Label headerLabel = new Label(isAdd ? "Create New Load" : "Edit Load " + (load != null ? load.getLoadNumber() : ""));
-        headerLabel.getStyleClass().add("modern-dialog-title");
-        header.getChildren().add(headerLabel);
-        
+        // Remove header text - keep it clean and compact
         dialog.setHeaderText(null);
         dialog.setGraphic(null);
         
-        // Create main content container
+        // Set professional dialog styling with CSS classes
+        dialog.getDialogPane().getStyleClass().add("enhanced-dialog-pane");
+        dialog.getDialogPane().setStyle("-fx-background-color: #fafbfc; -fx-text-fill: #1a1a1a;");
+        
+        // Create main content container with professional styling
         VBox mainContainer = new VBox();
-        mainContainer.getStyleClass().add("modern-form-container");
+        mainContainer.setStyle("-fx-background-color: #fafbfc; -fx-text-fill: #1a1a1a;");
         mainContainer.setFillWidth(true);
         
-        // Add header to main container
-        mainContainer.getChildren().add(header);
-        
-        // Create scrollable content
+        // CLEAN SCROLLABLE CONTENT
         ScrollPane scrollPane = new ScrollPane();
-        scrollPane.getStyleClass().add("modern-scroll-pane");
         scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(true);
         scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setStyle("-fx-background: #ffffff; -fx-background-color: #ffffff;");
+        scrollPane.setPadding(new Insets(0));
         
-        VBox content = new VBox(20);
-        content.getStyleClass().add("modern-form-container");
+        // Proper vertical sizing
+        scrollPane.setPrefWidth(750);
+        scrollPane.setPrefHeight(600);
+        scrollPane.setMinHeight(550);
+        scrollPane.setMaxHeight(700);
+        
+        VBox content = new VBox(12);
+        content.setPadding(new Insets(15));
         content.setFillWidth(true);
+        content.setPrefWidth(700);
+        content.setMinWidth(650);
+        content.setMaxWidth(800);
+        content.setStyle("-fx-background-color: #ffffff;");
         
         // Load Information Section
-        VBox loadInfoSection = createSection("Load Information", "");
+        VBox loadInfoSection = createSection("Load Information", "Enter the basic load details");
         
-        GridPane loadInfoGrid = new GridPane();
-        loadInfoGrid.getStyleClass().add("modern-form-grid");
-        
-        // Load Number
-        Label loadNumLabel = new Label("Load Number*");
-        loadNumLabel.getStyleClass().add("modern-form-label");
         dialogFields.loadNumField = new TextField();
-        dialogFields.loadNumField.setPromptText("e.g., L-2024-001");
-        dialogFields.loadNumField.getStyleClass().add("modern-text-field");
-        dialogFields.loadNumField.setPrefWidth(250);
+        dialogFields.loadNumField.setPromptText("Enter load number (e.g., L-2024-001) - Required");
+        dialogFields.loadNumField.setPrefWidth(350);
+        dialogFields.loadNumField.getStyleClass().add("load-dialog-field");
         
-        // PO Number
-        Label poLabel = new Label("PO Number");
-        poLabel.getStyleClass().add("modern-form-label");
+        // Manual load number input only - no auto-generation
+        // Users must manually input load numbers for better control
+        
         dialogFields.poField = new TextField();
-        dialogFields.poField.setPromptText("Optional");
-        dialogFields.poField.getStyleClass().add("modern-text-field");
-        dialogFields.poField.setPrefWidth(250);
+        dialogFields.poField.setPromptText("Purchase Order Number (optional)");
+        dialogFields.poField.setPrefWidth(350);
+        dialogFields.poField.getStyleClass().add("load-dialog-field");
         
-        // Bill To
-        Label billToLabel = new Label("Bill To");
-        billToLabel.getStyleClass().add("modern-form-label");
         dialogFields.billToBox = new ComboBox<>();
         dialogFields.billToBox.setPromptText("Select billing entity");
         dialogFields.billToBox.setEditable(true);
-        dialogFields.billToBox.getStyleClass().add("modern-combo-box");
-        dialogFields.billToBox.setPrefWidth(250);
+        dialogFields.billToBox.setPrefWidth(350);
+        dialogFields.billToBox.getStyleClass().add("load-dialog-field");
         
-        // Load billing entities
+        // Load billing entities into dropdown with enhanced cache integration
         loadBillingEntitiesIntoComboBox(dialogFields.billToBox);
         
         // Pre-fill if editing
@@ -4735,67 +4693,57 @@ public class LoadsPanel extends BorderPane {
             dialogFields.billToBox.setValue(load.getBillTo());
         }
         
-        // Add to grid with professional spacing - move PO Number further right
-        loadInfoGrid.add(loadNumLabel, 0, 0);
-        loadInfoGrid.add(dialogFields.loadNumField, 1, 0);
-        loadInfoGrid.add(poLabel, 4, 0);  // Move further right for better organization
-        loadInfoGrid.add(dialogFields.poField, 5, 0);
+        loadInfoSection.getChildren().addAll(
+            createFieldRow("Load Number*:", dialogFields.loadNumField),
+            createFieldRow("PO Number:", dialogFields.poField),
+            createFieldRow("Bill To:", dialogFields.billToBox)
+        );
         
-        loadInfoGrid.add(billToLabel, 0, 1);
-        loadInfoGrid.add(dialogFields.billToBox, 1, 1, 5, 1);
-        
-        loadInfoSection.getChildren().add(loadInfoGrid);
+
         
         // Customer & Location Section
-        VBox customerLocationSection = createSection("Customer & Location Details", "");
+        VBox customerLocationSection = createSection("Customer & Location Details", "Enter pickup and drop information");
         
-        // Refresh button removed as requested
-        
-        GridPane customerLocGrid = new GridPane();
-        customerLocGrid.getStyleClass().add("modern-form-grid");
+        // Create refresh button for Customer & Location section
+        Button refreshAddressesBtn = createInlineButton("🔄", "#007bff", "white");
+        refreshAddressesBtn.setTooltip(new Tooltip("Refresh customer addresses and locations"));
+        refreshAddressesBtn.setPrefWidth(100);
+        refreshAddressesBtn.setText("🔄 Refresh");
         
         // Pickup Customer
-        Label pickupCustomerLabel = new Label("Pickup Customer");
-        pickupCustomerLabel.getStyleClass().add("modern-form-label");
         dialogFields.pickupCustomerBox = new ComboBox<>();
-        dialogFields.pickupCustomerBox.setPromptText("Select/Enter");
+        dialogFields.pickupCustomerBox.setPromptText("Select/Enter pickup customer");
         dialogFields.pickupCustomerBox.setEditable(true);
-        dialogFields.pickupCustomerBox.getStyleClass().add("modern-combo-box");
-        dialogFields.pickupCustomerBox.setPrefWidth(200);
+        dialogFields.pickupCustomerBox.setPrefWidth(280);
         
-        // Load customers asynchronously
+        // Load customers asynchronously for faster dialog opening
         CompletableFuture.runAsync(() -> {
             Platform.runLater(() -> loadCustomersIntoComboBox(dialogFields.pickupCustomerBox));
         });
         
+        // Customer change listener will be added after location combo is created
+        
         // Add button for new pickup customer
-        Button addPickupCustomerBtn = new Button("+");
-        addPickupCustomerBtn.getStyleClass().add("inline-add-button");
-        addPickupCustomerBtn.setStyle("-fx-background-color: #28a745;");
+        Button addPickupCustomerBtn = createInlineButton("+", "#28a745", "white");
         addPickupCustomerBtn.setTooltip(new Tooltip("Add new customer"));
         addPickupCustomerBtn.setOnAction(e -> showAddCustomerDialog(dialogFields.pickupCustomerBox));
         
         HBox pickupCustomerBox = new HBox(5);
         pickupCustomerBox.getChildren().addAll(dialogFields.pickupCustomerBox, addPickupCustomerBtn);
         
-        // Pickup Location
-        Label pickupLocationLabel = new Label("Pickup Location");
-        pickupLocationLabel.getStyleClass().add("modern-form-label");
+        // Pickup Location - using ComboBox with optimized loading
         ComboBox<String> pickupLocationCombo = new ComboBox<>();
-        pickupLocationCombo.setPromptText("Select/Enter");
+        pickupLocationCombo.setPromptText("Select/Enter pickup location");
         pickupLocationCombo.setEditable(true);
-        pickupLocationCombo.getStyleClass().add("modern-combo-box");
-        pickupLocationCombo.setPrefWidth(200);
+        pickupLocationCombo.setPrefWidth(280);
         
-        // Initialize location dropdown asynchronously
+        // Initialize pickup location dropdown asynchronously for better performance
         CompletableFuture.runAsync(() -> {
             Platform.runLater(() -> enableLocationFiltering(pickupLocationCombo));
         });
         
         // Add button for new pickup location
-        Button addPickupLocationBtn = new Button("+");
-        addPickupLocationBtn.getStyleClass().add("inline-add-button");
-        addPickupLocationBtn.setStyle("-fx-background-color: #28a745;");
+        Button addPickupLocationBtn = createInlineButton("+", "#28a745", "white");
         addPickupLocationBtn.setTooltip(new Tooltip("Add new location"));
         addPickupLocationBtn.setOnAction(e -> showAddLocationDialogForCombo(pickupLocationCombo, dialogFields.pickupCustomerBox.getValue()));
         
@@ -4810,57 +4758,47 @@ public class LoadsPanel extends BorderPane {
             updateLocationDropdown(pickupLocationCombo, newVal);
         });
         
-        // Enhanced bidirectional listener - auto-select customer when location is selected
+        // Add bidirectional listener - when location is selected, suggest matching customers
         pickupLocationCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null && !newVal.isEmpty()) {
                 updateCustomerSuggestions(dialogFields.pickupCustomerBox, pickupLocationCombo, newVal);
-                // Auto-select the best matching customer
-                autoSelectBestMatchingCustomer(dialogFields.pickupCustomerBox, newVal);
             }
         });
         
         // Drop Customer
-        Label dropCustomerLabel = new Label("Drop Customer");
-        dropCustomerLabel.getStyleClass().add("modern-form-label");
         dialogFields.dropCustomerBox = new ComboBox<>();
-        dialogFields.dropCustomerBox.setPromptText("Select/Enter");
+        dialogFields.dropCustomerBox.setPromptText("Select/Enter drop customer");
         dialogFields.dropCustomerBox.setEditable(true);
-        dialogFields.dropCustomerBox.getStyleClass().add("modern-combo-box");
-        dialogFields.dropCustomerBox.setPrefWidth(200);
+        dialogFields.dropCustomerBox.setPrefWidth(280);
         
-        // Load customers asynchronously
+        // Load customers asynchronously for faster dialog opening
         CompletableFuture.runAsync(() -> {
             Platform.runLater(() -> loadCustomersIntoComboBox(dialogFields.dropCustomerBox));
         });
         
+        // Customer change listener will be added after location combo is created
+        
         // Add button for new drop customer
-        Button addDropCustomerBtn = new Button("+");
-        addDropCustomerBtn.getStyleClass().add("inline-add-button");
-        addDropCustomerBtn.setStyle("-fx-background-color: #28a745;");
+        Button addDropCustomerBtn = createInlineButton("+", "#28a745", "white");
         addDropCustomerBtn.setTooltip(new Tooltip("Add new customer"));
         addDropCustomerBtn.setOnAction(e -> showAddCustomerDialog(dialogFields.dropCustomerBox));
         
         HBox dropCustomerBox = new HBox(5);
         dropCustomerBox.getChildren().addAll(dialogFields.dropCustomerBox, addDropCustomerBtn);
         
-        // Drop Location
-        Label dropLocationLabel = new Label("Drop Location");
-        dropLocationLabel.getStyleClass().add("modern-form-label");
+        // Drop Location - using ComboBox with optimized loading (same addresses as pickup)
         ComboBox<String> dropLocationCombo = new ComboBox<>();
-        dropLocationCombo.setPromptText("Select/Enter");
+        dropLocationCombo.setPromptText("Select/Enter drop location");
         dropLocationCombo.setEditable(true);
-        dropLocationCombo.getStyleClass().add("modern-combo-box");
-        dropLocationCombo.setPrefWidth(200);
+        dropLocationCombo.setPrefWidth(280);
         
-        // Initialize drop location dropdown asynchronously
+        // Initialize drop location dropdown asynchronously with same data as pickup
         CompletableFuture.runAsync(() -> {
             Platform.runLater(() -> enableLocationFiltering(dropLocationCombo));
         });
         
         // Add button for new drop location
-        Button addDropLocationBtn = new Button("+");
-        addDropLocationBtn.getStyleClass().add("inline-add-button");
-        addDropLocationBtn.setStyle("-fx-background-color: #28a745;");
+        Button addDropLocationBtn = createInlineButton("+", "#28a745", "white");
         addDropLocationBtn.setTooltip(new Tooltip("Add new location"));
         addDropLocationBtn.setOnAction(e -> showAddLocationDialogForCombo(dropLocationCombo, dialogFields.dropCustomerBox.getValue()));
         
@@ -4875,46 +4813,52 @@ public class LoadsPanel extends BorderPane {
             updateLocationDropdown(dropLocationCombo, newVal);
         });
         
-        // Enhanced bidirectional listener - auto-select customer when location is selected
+        // Add bidirectional listener - when location is selected, suggest matching customers
         dropLocationCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null && !newVal.isEmpty()) {
                 updateCustomerSuggestions(dialogFields.dropCustomerBox, dropLocationCombo, newVal);
-                // Auto-select the best matching customer
-                autoSelectBestMatchingCustomer(dialogFields.dropCustomerBox, newVal);
             }
         });
         
-        // Build the grid layout with professional spacing
-        // Row 0: Pickup - move location further right for better organization
-        customerLocGrid.add(pickupCustomerLabel, 0, 0);
-        customerLocGrid.add(pickupCustomerBox, 1, 0);
-        customerLocGrid.add(pickupLocationLabel, 4, 0);  // Move further right for professional look
-        customerLocGrid.add(pickupLocationBox, 5, 0);
+        // Create GridPane for side-by-side layout
+        GridPane customerLocationGrid = new GridPane();
+        customerLocationGrid.setHgap(20);
+        customerLocationGrid.setVgap(10);
+        customerLocationGrid.setPadding(new Insets(10));
         
-        // Row 1: Drop - move location further right for better organization
-        customerLocGrid.add(dropCustomerLabel, 0, 1);
-        customerLocGrid.add(dropCustomerBox, 1, 1);
-        customerLocGrid.add(dropLocationLabel, 4, 1);    // Move further right for professional look
-        customerLocGrid.add(dropLocationBox, 5, 1);
+        // Row 0: Pickup Customer and Location
+        customerLocationGrid.add(new Label("Pickup Customer:"), 0, 0);
+        customerLocationGrid.add(pickupCustomerBox, 1, 0);
+        customerLocationGrid.add(new Label("Pickup Location:"), 2, 0);
+        customerLocationGrid.add(pickupLocationBox, 3, 0);
         
-        // Add buttons for additional locations
+        // Add button for additional pickup locations
         Button addPickupLocationRowBtn = new Button("+ Add Pickup");
-        addPickupLocationRowBtn.getStyleClass().add("modern-add-button");
+        addPickupLocationRowBtn.getStyleClass().add("add-location-button");
         addPickupLocationRowBtn.setTooltip(new Tooltip("Add another pickup location"));
+        customerLocationGrid.add(addPickupLocationRowBtn, 4, 0);
         
+        // Row 1: Drop Customer and Location
+        customerLocationGrid.add(new Label("Drop Customer:"), 0, 1);
+        customerLocationGrid.add(dropCustomerBox, 1, 1);
+        customerLocationGrid.add(new Label("Drop Location:"), 2, 1);
+        customerLocationGrid.add(dropLocationBox, 3, 1);
+        
+        // Add button for additional drop locations
         Button addDropLocationRowBtn = new Button("+ Add Drop");
-        addDropLocationRowBtn.getStyleClass().add("modern-add-button");
+        addDropLocationRowBtn.getStyleClass().add("add-location-button");
         addDropLocationRowBtn.setTooltip(new Tooltip("Add another drop location"));
+        customerLocationGrid.add(addDropLocationRowBtn, 4, 1);
         
         // VBox containers for additional location rows
-        VBox additionalPickupsContainer = new VBox(8);
-        additionalPickupsContainer.setStyle("-fx-padding: 8px 0;");
-        VBox additionalDropsContainer = new VBox(8);
-        additionalDropsContainer.setStyle("-fx-padding: 8px 0;");
+        VBox additionalPickupsContainer = new VBox(5);
+        additionalPickupsContainer.getStyleClass().add("additional-location-container");
+        VBox additionalDropsContainer = new VBox(5);
+        additionalDropsContainer.getStyleClass().add("additional-location-container");
         
         // Row 2-3: Containers for additional pickup/drop locations
-        customerLocGrid.add(additionalPickupsContainer, 0, 2, 6, 1);
-        customerLocGrid.add(additionalDropsContainer, 0, 3, 6, 1);
+        customerLocationGrid.add(additionalPickupsContainer, 0, 2, 5, 1);
+        customerLocationGrid.add(additionalDropsContainer, 0, 3, 5, 1);
         
         // Setup action for adding pickup locations with proper sequence tracking
         final int[] pickupRowCount = {0};
@@ -4946,13 +4890,66 @@ public class LoadsPanel extends BorderPane {
             additionalDropsContainer.getChildren().add(row);
         });
         
-        // Add buttons row with improved spacing
-        HBox buttonsRow = new HBox();
-        buttonsRow.getStyleClass().add("modern-button-row");
-        buttonsRow.getChildren().addAll(addPickupLocationRowBtn, addDropLocationRowBtn);
-        customerLocGrid.add(buttonsRow, 0, 4, 6, 1);
+        // Style labels with black text
+        customerLocationGrid.getChildren().stream()
+            .filter(node -> node instanceof Label)
+            .forEach(node -> ((Label) node).setStyle("-fx-font-weight: bold; -fx-text-fill: black;"));
         
-        customerLocationSection.getChildren().add(customerLocGrid);
+        // Add refresh button to the section header
+        if (customerLocationSection.getChildren().size() >= 3) {
+            // Get the header elements (title, description, separator)
+            Node titleNode = customerLocationSection.getChildren().get(0);
+            if (titleNode instanceof Label) {
+                // Create a new HBox for title and refresh button
+                HBox titleBox = new HBox(10);
+                titleBox.setAlignment(Pos.CENTER_LEFT);
+                
+                Label titleLabel = (Label) titleNode;
+                customerLocationSection.getChildren().remove(0);
+                
+                Region spacer = new Region();
+                HBox.setHgrow(spacer, Priority.ALWAYS);
+                
+                titleBox.getChildren().addAll(titleLabel, spacer, refreshAddressesBtn);
+                customerLocationSection.getChildren().add(0, titleBox);
+            }
+        }
+        
+        customerLocationSection.getChildren().add(customerLocationGrid);
+        
+        // Now that all combo boxes are created, set up the refresh button action
+        refreshAddressesBtn.setOnAction(e -> {
+            refreshAddressesBtn.setDisable(true);
+            refreshAddressesBtn.setText("Loading...");
+            
+            // Use EnterpriseDataCacheManager to refresh all data
+            EnterpriseDataCacheManager.getInstance().invalidateAllCaches()
+                .thenRun(() -> {
+                    Platform.runLater(() -> {
+                        // Re-enable location filtering with fresh data
+                        enableLocationFiltering(pickupLocationCombo, true);
+                        enableLocationFiltering(dropLocationCombo, true);
+                        
+                        // Refresh customer lists with fresh data from cache
+                        loadCustomersIntoComboBox(dialogFields.pickupCustomerBox);
+                        loadCustomersIntoComboBox(dialogFields.dropCustomerBox);
+                        loadBillingEntitiesIntoComboBox(dialogFields.billToBox);
+                        
+                        refreshAddressesBtn.setDisable(false);
+                        refreshAddressesBtn.setText("🔄 Refresh");
+                        showInfo("All data refreshed successfully!");
+                    });
+                })
+                .exceptionally(ex -> {
+                    logger.error("Error refreshing data", ex);
+                    Platform.runLater(() -> {
+                        refreshAddressesBtn.setDisable(false);
+                        refreshAddressesBtn.setText("🔄 Refresh");
+                        showError("Failed to refresh data: " + ex.getMessage());
+                    });
+                    return null;
+                });
+        });
         
         // Pre-fill customer and location data if editing
         if (load != null) {
@@ -5095,18 +5092,16 @@ public class LoadsPanel extends BorderPane {
         }
         
         // Driver & Equipment Section
-        VBox driverEquipmentSection = createSection("Driver & Equipment", "");
+        VBox driverEquipmentSection = createSection("Driver & Equipment", "Select driver and equipment");
         
+        // Create GridPane for vertical stacking
         GridPane driverEquipmentGrid = new GridPane();
-        driverEquipmentGrid.getStyleClass().add("modern-form-grid");
+        driverEquipmentGrid.setVgap(10);
+        driverEquipmentGrid.setPadding(new Insets(10));
         
-        // Driver
-        Label driverLabel = new Label("Driver");
-        driverLabel.getStyleClass().add("modern-form-label");
         dialogFields.driverBox = new ComboBox<>(activeDrivers);
         dialogFields.driverBox.setPromptText("Select driver");
-        dialogFields.driverBox.getStyleClass().add("modern-combo-box");
-        dialogFields.driverBox.setPrefWidth(200);
+        dialogFields.driverBox.setPrefWidth(300);
         dialogFields.driverBox.setCellFactory(cb -> new ListCell<Employee>() {
             @Override
             protected void updateItem(Employee e, boolean empty) {
@@ -5122,48 +5117,24 @@ public class LoadsPanel extends BorderPane {
         dialogFields.driverBox.setButtonCell(dialogFields.driverBox.getCellFactory().call(null));
         
         // Truck field (read-only, auto-populated from driver)
-        Label truckLabel = new Label("Truck #");
-        truckLabel.getStyleClass().add("modern-form-label");
         TextField truckField = new TextField();
-        truckField.setPromptText("Auto-filled");
-        truckField.getStyleClass().add("modern-text-field");
-        truckField.setPrefWidth(150);
+        truckField.setPromptText("Truck # (auto-filled from driver)");
+        truckField.setPrefWidth(300);
         truckField.setEditable(false);
-        truckField.setStyle("-fx-background-color: #f8f9fa;");
+        truckField.setStyle("-fx-background-color: #f8f9fa; -fx-border-color: #ced4da;");
         
-        // Update truck field and trailer when driver is selected
+        // Update truck field when driver is selected
         dialogFields.driverBox.valueProperty().addListener((obs, oldDriver, newDriver) -> {
-            if (newDriver != null) {
-                // Update truck field if driver has a truck
-                if (newDriver.getTruckUnit() != null) {
-                    truckField.setText(newDriver.getTruckUnit());
-                } else {
-                    truckField.clear();
-                }
-                
-                // Auto-populate trailer based on driver's assigned trailer
-                if (newDriver.getTrailerNumber() != null && !newDriver.getTrailerNumber().isEmpty()) {
-                    try {
-                        Trailer driverTrailer = trailerDAO.findByTrailerNumber(newDriver.getTrailerNumber());
-                        if (driverTrailer != null) {
-                            dialogFields.trailerBox.setValue(driverTrailer);
-                            logger.debug("Auto-populated trailer {} for driver {}", 
-                                driverTrailer.getTrailerNumber(), newDriver.getName());
-                        }
-                    } catch (Exception e) {
-                        logger.error("Error finding driver's trailer: {}", e.getMessage(), e);
-                    }
-                }
+            if (newDriver != null && newDriver.getTruckUnit() != null) {
+                truckField.setText(newDriver.getTruckUnit());
+            } else {
+                truckField.clear();
             }
         });
         
-        // Trailer
-        Label trailerLabel = new Label("Trailer");
-        trailerLabel.getStyleClass().add("modern-form-label");
         dialogFields.trailerBox = new ComboBox<>(allTrailers);
         dialogFields.trailerBox.setPromptText("Select trailer");
-        dialogFields.trailerBox.getStyleClass().add("modern-combo-box");
-        dialogFields.trailerBox.setPrefWidth(200);
+        dialogFields.trailerBox.setPrefWidth(300);
         dialogFields.trailerBox.setCellFactory(cb -> new ListCell<Trailer>() {
             @Override
             protected void updateItem(Trailer t, boolean empty) {
@@ -5177,41 +5148,53 @@ public class LoadsPanel extends BorderPane {
         });
         dialogFields.trailerBox.setButtonCell(dialogFields.trailerBox.getCellFactory().call(null));
         
-        // Add to grid with professional spacing - move Truck # further right
+        // Add rows to grid
+        Label driverLabel = new Label("Driver:");
+        driverLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #495057;");
         driverEquipmentGrid.add(driverLabel, 0, 0);
         driverEquipmentGrid.add(dialogFields.driverBox, 1, 0);
-        driverEquipmentGrid.add(truckLabel, 4, 0);    // Move further right for professional look
-        driverEquipmentGrid.add(truckField, 5, 0);
         
-        driverEquipmentGrid.add(trailerLabel, 0, 1);
-        driverEquipmentGrid.add(dialogFields.trailerBox, 1, 1, 5, 1);
+        Label truckLabel = new Label("Truck #:");
+        truckLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #495057;");
+        driverEquipmentGrid.add(truckLabel, 0, 1);
+        driverEquipmentGrid.add(truckField, 1, 1);
+        
+        Label trailerLabel = new Label("Trailer:");
+        trailerLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #495057;");
+        driverEquipmentGrid.add(trailerLabel, 0, 2);
+        driverEquipmentGrid.add(dialogFields.trailerBox, 1, 2);
+        
+        // Set column constraints for proper alignment
+        ColumnConstraints labelCol = new ColumnConstraints();
+        labelCol.setPrefWidth(80);
+        labelCol.setHalignment(HPos.RIGHT);
+        ColumnConstraints fieldCol = new ColumnConstraints();
+        fieldCol.setHgrow(Priority.ALWAYS);
+        driverEquipmentGrid.getColumnConstraints().addAll(labelCol, fieldCol);
         
         driverEquipmentSection.getChildren().add(driverEquipmentGrid);
         
         // Schedule & Financial Section
-        VBox scheduleFinancialSection = createSection("Schedule & Financial", "");
+        VBox scheduleFinancialSection = createSection("Schedule & Financial", "Enter pickup/delivery times and financial details");
         
+        // Create GridPane for better layout
         GridPane scheduleGrid = new GridPane();
-        scheduleGrid.getStyleClass().add("modern-form-grid");
+        scheduleGrid.setHgap(15);
+        scheduleGrid.setVgap(10);
+        scheduleGrid.setPadding(new Insets(10));
         
-        // Pickup Date & Time
-        Label pickupDateLabel = new Label("Pickup Date");
-        pickupDateLabel.getStyleClass().add("modern-form-label");
         dialogFields.pickUpDatePicker = new DatePicker();
-        dialogFields.pickUpDatePicker.getStyleClass().add("modern-date-picker");
         dialogFields.pickUpDatePicker.setPrefWidth(150);
+        dialogFields.pickUpDatePicker.setPromptText("Select date");
         
-        Label pickupTimeLabel = new Label("Pickup Time");
-        pickupTimeLabel.getStyleClass().add("modern-form-label");
         dialogFields.pickUpTimeSpinner = createTimeSpinner24Hour();
-        dialogFields.pickUpTimeSpinner.getStyleClass().add("modern-spinner");
         dialogFields.pickUpTimeSpinner.setPrefWidth(100);
         
         // 12-hour display for pickup time
         TextField pickupTime12Hour = new TextField();
-        pickupTime12Hour.getStyleClass().add("time-display-12h");
         pickupTime12Hour.setPrefWidth(100);
         pickupTime12Hour.setEditable(false);
+        pickupTime12Hour.setStyle("-fx-background-color: #f8f9fa; -fx-border-color: #ced4da;");
         pickupTime12Hour.setPromptText("12-hour");
         
         // Update 12-hour display when 24-hour time changes
@@ -5221,24 +5204,18 @@ public class LoadsPanel extends BorderPane {
             }
         });
         
-        // Delivery Date & Time
-        Label deliveryDateLabel = new Label("Delivery Date");
-        deliveryDateLabel.getStyleClass().add("modern-form-label");
         dialogFields.deliveryDatePicker = new DatePicker();
-        dialogFields.deliveryDatePicker.getStyleClass().add("modern-date-picker");
         dialogFields.deliveryDatePicker.setPrefWidth(150);
+        dialogFields.deliveryDatePicker.setPromptText("Select date");
         
-        Label deliveryTimeLabel = new Label("Delivery Time");
-        deliveryTimeLabel.getStyleClass().add("modern-form-label");
         dialogFields.deliveryTimeSpinner = createTimeSpinner24Hour();
-        dialogFields.deliveryTimeSpinner.getStyleClass().add("modern-spinner");
         dialogFields.deliveryTimeSpinner.setPrefWidth(100);
         
         // 12-hour display for delivery time
         TextField deliveryTime12Hour = new TextField();
-        deliveryTime12Hour.getStyleClass().add("time-display-12h");
         deliveryTime12Hour.setPrefWidth(100);
         deliveryTime12Hour.setEditable(false);
+        deliveryTime12Hour.setStyle("-fx-background-color: #f8f9fa; -fx-border-color: #ced4da;");
         deliveryTime12Hour.setPromptText("12-hour");
         
         // Update 12-hour display when 24-hour time changes
@@ -5248,112 +5225,78 @@ public class LoadsPanel extends BorderPane {
             }
         });
         
-        // Financial Fields
-        Label grossLabel = new Label("Gross Amount");
-        grossLabel.getStyleClass().add("modern-form-label");
         dialogFields.grossField = new TextField();
-        dialogFields.grossField.setPromptText("$0.00");
-        dialogFields.grossField.getStyleClass().add("modern-text-field");
-        dialogFields.grossField.setPrefWidth(120);
+        dialogFields.grossField.setPromptText("Enter amount");
+        dialogFields.grossField.setPrefWidth(150);
         
-        Label statusLabel = new Label("Status");
-        statusLabel.getStyleClass().add("modern-form-label");
         dialogFields.statusBox = new ComboBox<>();
         dialogFields.statusBox.getItems().addAll(Load.Status.values());
         dialogFields.statusBox.setValue(Load.Status.BOOKED);
-        dialogFields.statusBox.getStyleClass().add("modern-combo-box");
         dialogFields.statusBox.setPrefWidth(150);
         
-        // Build the grid layout with professional spacing and 12-hour displays
-        // Row 0: Pickup - move time fields further right for better organization
-        scheduleGrid.add(pickupDateLabel, 0, 0);
-        scheduleGrid.add(dialogFields.pickUpDatePicker, 1, 0);
-        scheduleGrid.add(pickupTimeLabel, 4, 0);    // Move further right for professional look
-        scheduleGrid.add(dialogFields.pickUpTimeSpinner, 5, 0);
-        Label pickup12hLabel = new Label("(12h):");
-        pickup12hLabel.getStyleClass().add("modern-form-label");
-        scheduleGrid.add(pickup12hLabel, 6, 0);
-        scheduleGrid.add(pickupTime12Hour, 7, 0);
+        // Build the grid layout
+        // Row 0: Pickup Date/Time
+        Label pickupLabel = new Label("Pickup:");
+        pickupLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #495057;");
+        scheduleGrid.add(pickupLabel, 0, 0);
+        scheduleGrid.add(new Label("Date:"), 1, 0);
+        scheduleGrid.add(dialogFields.pickUpDatePicker, 2, 0);
+        scheduleGrid.add(new Label("Time (24h):"), 3, 0);
+        scheduleGrid.add(dialogFields.pickUpTimeSpinner, 4, 0);
+        scheduleGrid.add(new Label("(12h):"), 5, 0);
+        scheduleGrid.add(pickupTime12Hour, 6, 0);
         
-        // Row 1: Delivery - move time fields further right for better organization
-        scheduleGrid.add(deliveryDateLabel, 0, 1);
-        scheduleGrid.add(dialogFields.deliveryDatePicker, 1, 1);
-        scheduleGrid.add(deliveryTimeLabel, 4, 1);  // Move further right for professional look
-        scheduleGrid.add(dialogFields.deliveryTimeSpinner, 5, 1);
-        Label delivery12hLabel = new Label("(12h):");
-        delivery12hLabel.getStyleClass().add("modern-form-label");
-        scheduleGrid.add(delivery12hLabel, 6, 1);
-        scheduleGrid.add(deliveryTime12Hour, 7, 1);
+        // Row 1: Delivery Date/Time
+        Label deliveryLabel = new Label("Delivery:");
+        deliveryLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #495057;");
+        scheduleGrid.add(deliveryLabel, 0, 1);
+        scheduleGrid.add(new Label("Date:"), 1, 1);
+        scheduleGrid.add(dialogFields.deliveryDatePicker, 2, 1);
+        scheduleGrid.add(new Label("Time (24h):"), 3, 1);
+        scheduleGrid.add(dialogFields.deliveryTimeSpinner, 4, 1);
+        scheduleGrid.add(new Label("(12h):"), 5, 1);
+        scheduleGrid.add(deliveryTime12Hour, 6, 1);
         
-        // Row 2: Financial - move status further right for better organization
-        scheduleGrid.add(grossLabel, 0, 2);
-        scheduleGrid.add(dialogFields.grossField, 1, 2);
-        scheduleGrid.add(statusLabel, 4, 2);        // Move further right for professional look
-        scheduleGrid.add(dialogFields.statusBox, 5, 2, 3, 1);
+        // Row 2: Separator
+        Separator separator = new Separator();
+        separator.setPadding(new Insets(10, 0, 10, 0));
+        scheduleGrid.add(separator, 0, 2, 7, 1);
+        
+        // Row 3: Financial info
+        Label grossLabel = new Label("Gross Amount:");
+        grossLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #495057;");
+        scheduleGrid.add(grossLabel, 0, 3, 2, 1);
+        scheduleGrid.add(dialogFields.grossField, 2, 3);
+        
+        Label statusLabel = new Label("Status:");
+        statusLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #495057;");
+        scheduleGrid.add(statusLabel, 3, 3, 2, 1);
+        scheduleGrid.add(dialogFields.statusBox, 5, 3, 2, 1);
         
         scheduleFinancialSection.getChildren().add(scheduleGrid);
         
         // Additional Details Section
-        VBox additionalDetailsSection = createSection("Additional Details", "");
+        VBox additionalDetailsSection = createSection("Additional Details", "Enter notes and other details");
         
-        GridPane detailsGrid = new GridPane();
-        detailsGrid.getStyleClass().add("modern-form-grid");
-        
-        Label notesLabel = new Label("Notes");
-        notesLabel.getStyleClass().add("modern-form-label");
         dialogFields.notesField = new TextArea();
         dialogFields.notesField.setPromptText("Enter load notes");
-        dialogFields.notesField.getStyleClass().add("modern-text-area");
-        dialogFields.notesField.setPrefRowCount(2);
+        dialogFields.notesField.setPrefRowCount(3);
         dialogFields.notesField.setPrefWidth(400);
         dialogFields.notesField.setWrapText(true);
         
-        Label reminderLabel = new Label("Reminder");
-        reminderLabel.getStyleClass().add("modern-form-label");
         dialogFields.reminderField = new TextField();
-        dialogFields.reminderField.setPromptText("Optional reminder");
-        dialogFields.reminderField.getStyleClass().add("modern-text-field");
-        dialogFields.reminderField.setPrefWidth(400);
+        dialogFields.reminderField.setPromptText("Reminder notes");
+        dialogFields.reminderField.setPrefWidth(300);
         
         dialogFields.hasLumperCheck = new CheckBox("Has Lumper");
-        dialogFields.hasLumperCheck.getStyleClass().add("modern-check-box");
-        
-        // Lumper amount field
-        TextField lumperAmountField = new TextField();
-        lumperAmountField.setPromptText("$0.00");
-        lumperAmountField.getStyleClass().add("lumper-amount-field");
-        lumperAmountField.setPrefWidth(120);
-        lumperAmountField.setDisable(true); // Initially disabled
-        
-        // Enable/disable lumper amount field based on checkbox
-        dialogFields.hasLumperCheck.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
-            lumperAmountField.setDisable(!isSelected);
-            if (!isSelected) {
-                lumperAmountField.clear();
-            }
-        });
-        
-        // Store lumper amount field for later access
-        dialogFields.lumperAmountField = lumperAmountField;
-        
-        HBox lumperRow = new HBox();
-        lumperRow.getStyleClass().add("checkbox-with-amount");
-        lumperRow.getChildren().addAll(dialogFields.hasLumperCheck, lumperAmountField);
-        
         dialogFields.hasRevisedRateCheck = new CheckBox("Has Revised Rate");
-        dialogFields.hasRevisedRateCheck.getStyleClass().add("modern-check-box");
         
-        HBox checkBoxRow = new HBox();
-        checkBoxRow.getStyleClass().add("modern-button-row");
-        checkBoxRow.getChildren().addAll(lumperRow, dialogFields.hasRevisedRateCheck);
-        
-        detailsGrid.add(notesLabel, 0, 0);
-        detailsGrid.add(dialogFields.notesField, 1, 0, 3, 1);
-        detailsGrid.add(reminderLabel, 0, 1);
-        detailsGrid.add(dialogFields.reminderField, 1, 1, 3, 1);
-        detailsGrid.add(checkBoxRow, 1, 2, 3, 1);
-        
-        additionalDetailsSection.getChildren().add(detailsGrid);
+        additionalDetailsSection.getChildren().addAll(
+            createFieldRow("Notes:", dialogFields.notesField),
+            createFieldRow("Reminder:", dialogFields.reminderField),
+            createFieldRow("", dialogFields.hasLumperCheck),
+            createFieldRow("", dialogFields.hasRevisedRateCheck)
+        );
         
         // Pre-fill if editing
         if (load != null) {
@@ -5391,46 +5334,445 @@ public class LoadsPanel extends BorderPane {
             dialogFields.notesField.setText(load.getNotes());
             dialogFields.reminderField.setText(load.getReminder());
             dialogFields.hasLumperCheck.setSelected(load.isHasLumper());
-            // Pre-fill lumper amount if load has lumper
-            if (load.isHasLumper() && load.getLumperAmount() > 0) {
-                dialogFields.lumperAmountField.setText(String.format("%.2f", load.getLumperAmount()));
-            }
             dialogFields.hasRevisedRateCheck.setSelected(load.isHasRevisedRateConfirmation());
         }
         
-        // Add all sections with subtle separators for better visual hierarchy
+                // Customer & Location Section
+        VBox customerLocationSection = createSection("Customer & Location Details", "Enter pickup and drop information");
+        
+        // Create refresh button for Customer & Location section
+        Button refreshAddressesBtn = createInlineButton("🔄", "#007bff", "white");
+        refreshAddressesBtn.setTooltip(new Tooltip("Refresh customer addresses and locations"));
+        refreshAddressesBtn.setPrefWidth(100);
+        refreshAddressesBtn.setText("🔄 Refresh");
+        
+        // Pickup Customer
+        dialogFields.pickupCustomerBox = new ComboBox<>();
+        dialogFields.pickupCustomerBox.setPromptText("Select/Enter pickup customer");
+        dialogFields.pickupCustomerBox.setEditable(true);
+        dialogFields.pickupCustomerBox.setPrefWidth(280);
+        
+        // Load customers asynchronously for faster dialog opening
+        CompletableFuture.runAsync(() -> {
+            Platform.runLater(() -> loadCustomersIntoComboBox(dialogFields.pickupCustomerBox));
+        });
+        
+        // Add button for new pickup customer
+        Button addPickupCustomerBtn = createInlineButton("+", "#28a745", "white");
+        addPickupCustomerBtn.setTooltip(new Tooltip("Add new customer"));
+        addPickupCustomerBtn.setOnAction(e -> showAddCustomerDialog(dialogFields.pickupCustomerBox));
+        
+        HBox pickupCustomerBox = new HBox(5);
+        pickupCustomerBox.getChildren().addAll(dialogFields.pickupCustomerBox, addPickupCustomerBtn);
+        
+        // Pickup Location - using ComboBox with optimized loading
+        ComboBox<String> pickupLocationCombo = new ComboBox<>();
+        pickupLocationCombo.setPromptText("Select/Enter pickup location");
+        pickupLocationCombo.setEditable(true);
+        pickupLocationCombo.setPrefWidth(280);
+        
+        // Initialize location dropdown asynchronously for better performance
+        CompletableFuture.runAsync(() -> {
+            Platform.runLater(() -> enableLocationFiltering(pickupLocationCombo));
+        });
+        
+        // Add button for new pickup location
+        Button addPickupLocationBtn = createInlineButton("+", "#28a745", "white");
+        addPickupLocationBtn.setTooltip(new Tooltip("Add new location"));
+        addPickupLocationBtn.setOnAction(e -> showAddLocationDialogForCombo(pickupLocationCombo, dialogFields.pickupCustomerBox.getValue()));
+        
+        HBox pickupLocationBox = new HBox(5);
+        pickupLocationBox.getChildren().addAll(pickupLocationCombo, addPickupLocationBtn);
+        
+        // Store in dialog fields
+        dialogFields.pickupLocationBox = pickupLocationCombo;
+        
+        // Add customer change listener
+        dialogFields.pickupCustomerBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            updateLocationDropdown(pickupLocationCombo, newVal);
+        });
+        
+        // Add bidirectional listener - when location is selected, suggest matching customers
+        pickupLocationCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.isEmpty()) {
+                updateCustomerSuggestions(dialogFields.pickupCustomerBox, pickupLocationCombo, newVal);
+            }
+        });
+        
+        // Drop Customer
+        dialogFields.dropCustomerBox = new ComboBox<>();
+        dialogFields.dropCustomerBox.setPromptText("Select/Enter drop customer");
+        dialogFields.dropCustomerBox.setEditable(true);
+        dialogFields.dropCustomerBox.setPrefWidth(280);
+        
+        // Load customers asynchronously for faster dialog opening
+        CompletableFuture.runAsync(() -> {
+            Platform.runLater(() -> loadCustomersIntoComboBox(dialogFields.dropCustomerBox));
+        });
+        
+        // Add button for new drop customer
+        Button addDropCustomerBtn = createInlineButton("+", "#28a745", "white");
+        addDropCustomerBtn.setTooltip(new Tooltip("Add new customer"));
+        addDropCustomerBtn.setOnAction(e -> showAddCustomerDialog(dialogFields.dropCustomerBox));
+        
+        HBox dropCustomerBox = new HBox(5);
+        dropCustomerBox.getChildren().addAll(dialogFields.dropCustomerBox, addDropCustomerBtn);
+        
+        // Drop Location
+        ComboBox<String> dropLocationCombo = new ComboBox<>();
+        dropLocationCombo.setPromptText("Select/Enter drop location");
+        dropLocationCombo.setEditable(true);
+        dropLocationCombo.setPrefWidth(280);
+        
+        // Initialize drop location dropdown asynchronously with same data as pickup
+        CompletableFuture.runAsync(() -> {
+            Platform.runLater(() -> enableLocationFiltering(dropLocationCombo));
+        });
+        
+        // Add button for new drop location
+        Button addDropLocationBtn = createInlineButton("+", "#28a745", "white");
+        addDropLocationBtn.setTooltip(new Tooltip("Add new location"));
+        addDropLocationBtn.setOnAction(e -> showAddLocationDialogForCombo(dropLocationCombo, dialogFields.dropCustomerBox.getValue()));
+        
+        HBox dropLocationBox = new HBox(5);
+        dropLocationBox.getChildren().addAll(dropLocationCombo, addDropLocationBtn);
+        
+        // Store in dialog fields
+        dialogFields.dropLocationBox = dropLocationCombo;
+        
+        // Add customer change listener
+        dialogFields.dropCustomerBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            updateLocationDropdown(dropLocationCombo, newVal);
+        });
+        
+        // Add bidirectional listener - when location is selected, suggest matching customers
+        dropLocationCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.isEmpty()) {
+                updateCustomerSuggestions(dialogFields.dropCustomerBox, dropLocationCombo, newVal);
+            }
+        });
+        
+        // Create GridPane for side-by-side layout
+        GridPane customerLocationGrid = new GridPane();
+        customerLocationGrid.setHgap(20);
+        customerLocationGrid.setVgap(10);
+        customerLocationGrid.setPadding(new Insets(10));
+        
+        // Row 0: Pickup Customer and Location
+        customerLocationGrid.add(new Label("Pickup Customer:"), 0, 0);
+        customerLocationGrid.add(pickupCustomerBox, 1, 0);
+        customerLocationGrid.add(new Label("Pickup Location:"), 2, 0);
+        customerLocationGrid.add(pickupLocationBox, 3, 0);
+        
+        // Add button for additional pickup locations
+        Button addPickupLocationRowBtn = new Button("+ Add Pickup");
+        addPickupLocationRowBtn.getStyleClass().add("add-location-button");
+        addPickupLocationRowBtn.setTooltip(new Tooltip("Add another pickup location"));
+        customerLocationGrid.add(addPickupLocationRowBtn, 4, 0);
+        
+        // Row 1: Drop Customer and Location
+        customerLocationGrid.add(new Label("Drop Customer:"), 0, 1);
+        customerLocationGrid.add(dropCustomerBox, 1, 1);
+        customerLocationGrid.add(new Label("Drop Location:"), 2, 1);
+        customerLocationGrid.add(dropLocationBox, 3, 1);
+        
+        // Add button for additional drop locations
+        Button addDropLocationRowBtn = new Button("+ Add Drop");
+        addDropLocationRowBtn.getStyleClass().add("add-location-button");
+        addDropLocationRowBtn.setTooltip(new Tooltip("Add another drop location"));
+        customerLocationGrid.add(addDropLocationRowBtn, 4, 1);
+        
+        // Containers for additional pickup and drop locations
+        VBox additionalPickupsContainer = new VBox(5);
+        VBox additionalDropsContainer = new VBox(5);
+        
+        // Add headers for additional locations
+        Label additionalPickupsLabel = new Label("Additional Pickup Locations:");
+        additionalPickupsLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #2c3e50;");
+        additionalPickupsLabel.setVisible(false); // Hidden until first additional location is added
+        
+        Label additionalDropsLabel = new Label("Additional Drop Locations:");
+        additionalDropsLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #2c3e50;");
+        additionalDropsLabel.setVisible(false); // Hidden until first additional location is added
+        
+        // Store in dialog fields for access
+        dialogFields.additionalPickupsContainer = additionalPickupsContainer;
+        dialogFields.additionalDropsContainer = additionalDropsContainer;
+        dialogFields.additionalPickupLocations = FXCollections.observableArrayList();
+        dialogFields.additionalDropLocations = FXCollections.observableArrayList();
+        
+        // Refresh all addresses button
+        refreshAddressesBtn.setOnAction(e -> {
+            refreshAddressesBtn.setDisable(true);
+            refreshAddressesBtn.setText("🔄 Refreshing...");
+            
+            CompletableFuture.runAsync(() -> {
+                try {
+                    // Clear and refresh caches
+                    cacheManager.clearCache();
+                    Thread.sleep(500); // Brief pause for user feedback
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+            }).thenCompose(v -> 
+                // Reload customers in parallel
+                CompletableFuture.allOf(
+                    CompletableFuture.runAsync(() -> cacheManager.getCachedCustomers()),
+                    CompletableFuture.runAsync(() -> cacheManager.getCachedBillingEntities())
+                )
+            ).thenRun(() -> {
+                Platform.runLater(() -> {
+                    // Refresh all combo boxes
+                    loadCustomersIntoComboBox(dialogFields.pickupCustomerBox);
+                    loadCustomersIntoComboBox(dialogFields.dropCustomerBox);
+                    loadBillingEntitiesIntoComboBox(dialogFields.billToBox);
+                    
+                    refreshAddressesBtn.setDisable(false);
+                    refreshAddressesBtn.setText("🔄 Refresh");
+                    showInfo("All data refreshed successfully!");
+                });
+            })
+            .exceptionally(ex -> {
+                logger.error("Error refreshing data", ex);
+                Platform.runLater(() -> {
+                    refreshAddressesBtn.setDisable(false);
+                    refreshAddressesBtn.setText("🔄 Refresh");
+                    showError("Failed to refresh data: " + ex.getMessage());
+                });
+                return null;
+            });
+        });
+        
+        customerLocationSection.getChildren().addAll(
+            createFieldRow("", refreshAddressesBtn),
+            customerLocationGrid,
+            additionalPickupsLabel,
+            additionalPickupsContainer,
+            additionalDropsLabel,
+            additionalDropsContainer
+        );
+        
+        // Driver & Equipment Section
+        VBox driverEquipmentSection = createSection("Driver & Equipment", "Select driver and equipment");
+        
+        // Create GridPane for vertical stacking
+        GridPane driverEquipmentGrid = new GridPane();
+        driverEquipmentGrid.setVgap(10);
+        driverEquipmentGrid.setPadding(new Insets(10));
+        
+        dialogFields.driverBox = new ComboBox<>(activeDrivers);
+        dialogFields.driverBox.setPromptText("Select driver");
+        dialogFields.driverBox.setPrefWidth(300);
+        dialogFields.driverBox.setCellFactory(cb -> new ListCell<Employee>() {
+            @Override
+            protected void updateItem(Employee e, boolean empty) {
+                super.updateItem(e, empty);
+                if (empty || e == null) {
+                    setText("");
+                    setGraphic(null);
+                } else {
+                    setText(formatDriverDisplay(e));
+                }
+            }
+        });
+        dialogFields.driverBox.setButtonCell(dialogFields.driverBox.getCellFactory().call(null));
+        
+        // Truck field (read-only, auto-populated from driver)
+        TextField truckField = new TextField();
+        truckField.setPromptText("Truck # (auto-filled from driver)");
+        truckField.setPrefWidth(300);
+        truckField.setEditable(false);
+        truckField.setStyle("-fx-background-color: #f8f9fa; -fx-border-color: #ced4da;");
+        
+        // Update truck field when driver is selected
+        dialogFields.driverBox.valueProperty().addListener((obs, oldDriver, newDriver) -> {
+            if (newDriver != null && newDriver.getTruckUnit() != null) {
+                truckField.setText(newDriver.getTruckUnit());
+            } else {
+                truckField.clear();
+            }
+        });
+        
+        dialogFields.trailerBox = new ComboBox<>(allTrailers);
+        dialogFields.trailerBox.setPromptText("Select trailer");
+        dialogFields.trailerBox.setPrefWidth(300);
+        dialogFields.trailerBox.setCellFactory(cb -> new ListCell<Trailer>() {
+            @Override
+            protected void updateItem(Trailer t, boolean empty) {
+                super.updateItem(t, empty);
+                if (empty || t == null) {
+                    setText("");
+                } else {
+                    setText(t.getTrailerNumber() + (t.getType() != null ? " (" + t.getType() + ")" : ""));
+                }
+            }
+        });
+        dialogFields.trailerBox.setButtonCell(dialogFields.trailerBox.getCellFactory().call(null));
+        
+        driverEquipmentGrid.add(createFieldRow("Driver:", dialogFields.driverBox), 0, 0);
+        driverEquipmentGrid.add(createFieldRow("Truck #:", truckField), 0, 1);
+        driverEquipmentGrid.add(createFieldRow("Trailer:", dialogFields.trailerBox), 0, 2);
+        
+        driverEquipmentSection.getChildren().add(driverEquipmentGrid);
+        
+        // Schedule & Financial Section
+        VBox scheduleFinancialSection = createSection("Schedule & Financial", "Enter pickup/delivery times and financial details");
+        
+        // Pickup date and time
+        dialogFields.pickupDatePicker = new DatePicker();
+        dialogFields.pickupDatePicker.setPromptText("Select date");
+        dialogFields.pickupDatePicker.setPrefWidth(150);
+        
+        dialogFields.pickupTimeSpinner = createTimeSpinner();
+        dialogFields.pickup12HourField = new TextField();
+        dialogFields.pickup12HourField.setPromptText("12-hour");
+        dialogFields.pickup12HourField.setPrefWidth(80);
+        dialogFields.pickup12HourField.setEditable(false);
+        
+        HBox pickupTimeBox = new HBox(5, dialogFields.pickupTimeSpinner, dialogFields.pickup12HourField);
+        
+        // Delivery date and time
+        dialogFields.deliveryDatePicker = new DatePicker();
+        dialogFields.deliveryDatePicker.setPromptText("Select date");
+        dialogFields.deliveryDatePicker.setPrefWidth(150);
+        
+        dialogFields.deliveryTimeSpinner = createTimeSpinner();
+        dialogFields.delivery12HourField = new TextField();
+        dialogFields.delivery12HourField.setPromptText("12-hour");
+        dialogFields.delivery12HourField.setPrefWidth(80);
+        dialogFields.delivery12HourField.setEditable(false);
+        
+        HBox deliveryTimeBox = new HBox(5, dialogFields.deliveryTimeSpinner, dialogFields.delivery12HourField);
+        
+        // Gross amount and status
+        dialogFields.grossAmountField = new TextField();
+        dialogFields.grossAmountField.setPromptText("Enter amount");
+        dialogFields.grossAmountField.setPrefWidth(150);
+        
+        dialogFields.statusBox = new ComboBox<>(FXCollections.observableArrayList(Load.Status.values()));
+        dialogFields.statusBox.setValue(Load.Status.BOOKED);
+        dialogFields.statusBox.setPrefWidth(150);
+        
+        scheduleFinancialSection.getChildren().addAll(
+            createFieldRow("Pickup Date:", dialogFields.pickupDatePicker),
+            createFieldRow("Pickup Time:", pickupTimeBox),
+            createFieldRow("Delivery Date:", dialogFields.deliveryDatePicker),
+            createFieldRow("Delivery Time:", deliveryTimeBox),
+            createFieldRow("Gross Amount:", dialogFields.grossAmountField),
+            createFieldRow("Status:", dialogFields.statusBox)
+        );
+        
+        // Additional Details Section
+        VBox additionalDetailsSection = createSection("Additional Details", "Enter notes and other details");
+        
+        dialogFields.notesArea = new TextArea();
+        dialogFields.notesArea.setPromptText("Enter load notes");
+        dialogFields.notesArea.setPrefRowCount(3);
+        dialogFields.notesArea.setPrefWidth(400);
+        
+        dialogFields.reminderArea = new TextArea();
+        dialogFields.reminderArea.setPromptText("Reminder notes");
+        dialogFields.reminderArea.setPrefRowCount(2);
+        dialogFields.reminderArea.setPrefWidth(400);
+        
+        dialogFields.hasLumperCheck = new CheckBox("Has Lumper");
+        dialogFields.hasRevisedRateCheck = new CheckBox("Has Revised Rate");
+        
+        VBox checkboxBox = new VBox(5, dialogFields.hasLumperCheck, dialogFields.hasRevisedRateCheck);
+        
+        additionalDetailsSection.getChildren().addAll(
+            createFieldRow("Notes:", dialogFields.notesArea),
+            createFieldRow("Reminder:", dialogFields.reminderArea),
+            createFieldRow("", checkboxBox)
+        );
+        
+        // Pre-fill if editing
+        if (load != null) {
+            // Pre-fill pickup customer and location
+            if (load.getCustomer() != null) {
+                dialogFields.pickupCustomerBox.setValue(load.getCustomer());
+                updateLocationDropdown(pickupLocationCombo, load.getCustomer());
+            }
+            if (load.getPickUpLocation() != null) {
+                Platform.runLater(() -> {
+                    pickupLocationCombo.setValue(load.getPickUpLocation());
+                });
+            }
+            
+            // Pre-fill drop customer and location
+            if (load.getCustomer2() != null) {
+                dialogFields.dropCustomerBox.setValue(load.getCustomer2());
+                updateLocationDropdown(dropLocationCombo, load.getCustomer2());
+            }
+            if (load.getDropLocation() != null) {
+                Platform.runLater(() -> {
+                    dropLocationCombo.setValue(load.getDropLocation());
+                });
+            }
+            
+            // Pre-fill other fields
+            if (load.getDriver() != null) {
+                dialogFields.driverBox.setValue(load.getDriver());
+            }
+            if (load.getTrailerNumber() != null) {
+                for (Trailer trailer : allTrailers) {
+                    if (trailer.getTrailerNumber().equals(load.getTrailerNumber())) {
+                        dialogFields.trailerBox.setValue(trailer);
+                        break;
+                    }
+                }
+            }
+            if (load.getPickUpDate() != null) {
+                dialogFields.pickupDatePicker.setValue(load.getPickUpDate());
+            }
+            if (load.getPickUpTime() != null) {
+                dialogFields.pickupTimeSpinner.getValueFactory().setValue(load.getPickUpTime());
+            }
+            if (load.getDeliveryDate() != null) {
+                dialogFields.deliveryDatePicker.setValue(load.getDeliveryDate());
+            }
+            if (load.getDeliveryTime() != null) {
+                dialogFields.deliveryTimeSpinner.getValueFactory().setValue(load.getDeliveryTime());
+            }
+            if (load.getGrossAmount() > 0) {
+                dialogFields.grossAmountField.setText(String.valueOf(load.getGrossAmount()));
+            }
+            dialogFields.statusBox.setValue(load.getStatus());
+            dialogFields.notesArea.setText(load.getNotes());
+            dialogFields.reminderArea.setText(load.getReminder());
+            dialogFields.hasLumperCheck.setSelected(load.isHasLumper());
+            dialogFields.hasRevisedRateCheck.setSelected(load.isHasRevisedRateConfirmation());
+        }
+        
+        // Add all sections to content
         content.getChildren().addAll(
             loadInfoSection,
-            createSeparator(),
             customerLocationSection,
-            createSeparator(),
             driverEquipmentSection,
-            createSeparator(),
             scheduleFinancialSection,
-            createSeparator(),
             additionalDetailsSection
         );
         
         scrollPane.setContent(content);
         mainContainer.getChildren().add(scrollPane);
         
+        // Create validation and status area
+        VBox validationArea = createValidationArea();
+        mainContainer.getChildren().add(validationArea);
+        
         // Set dialog content
         dialog.getDialogPane().setContent(mainContainer);
         
-        // Configure dialog buttons with better styling
+        // Ensure dialog pane can expand properly
+        // Size constraints already set above
+        
+        // Configure dialog buttons
         Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
         Button cancelButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.CANCEL);
         
         okButton.setText(isAdd ? "Create Load" : "Save Changes");
-        okButton.getStyleClass().clear();
-        okButton.getStyleClass().add("modern-button-success");
-        
-        cancelButton.setText("Cancel");
-        cancelButton.getStyleClass().clear();
-        cancelButton.getStyleClass().add("modern-button-secondary");
-        
-        // Style the button bar
-        dialog.getDialogPane().lookup(".button-bar").getStyleClass().add("modern-dialog-button-bar");
+        okButton.setStyle("-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-weight: bold;");
+        cancelButton.setStyle("-fx-background-color: #6c757d; -fx-text-fill: white;");
         
         // Set result converter
         dialog.setResultConverter(dialogButton -> {
@@ -5815,24 +6157,30 @@ public class LoadsPanel extends BorderPane {
     }
     
     /**
-     * Creates a subtle separator for visual hierarchy
-     */
-    private Separator createSeparator() {
-        Separator separator = new Separator();
-        separator.getStyleClass().add("modern-separator");
-        return separator;
-    }
-    
-    /**
      * Creates a section with title and description
      */
     private VBox createSection(String title, String description) {
-        VBox section = new VBox();
-        section.getStyleClass().add("modern-section");
+        VBox section = new VBox(10);
+        section.setPadding(new Insets(20));
+        section.setStyle(
+            "-fx-background-color: #ffffff; " +
+            "-fx-background-radius: 12px; " +
+            "-fx-border-color: #e8eaed; " +
+            "-fx-border-radius: 12px; " +
+            "-fx-border-width: 1px; " +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);"
+        );
         section.setFillWidth(true);
+        section.setPrefWidth(1050);
+        section.setMaxWidth(1200);
         
         Label titleLabel = new Label(title);
-        titleLabel.getStyleClass().add("modern-section-title");
+        titleLabel.setStyle(
+            "-fx-font-size: 16px; " +
+            "-fx-font-weight: 700; " +
+            "-fx-text-fill: #1a1a1a; " +
+            "-fx-font-family: 'Segoe UI', sans-serif;"
+        );
         
         Label descLabel = new Label(description);
         descLabel.setStyle(
@@ -5845,6 +6193,48 @@ public class LoadsPanel extends BorderPane {
         Separator separator = new Separator();
         separator.setStyle("-fx-background-color: #e8eaed; -fx-border-color: #e8eaed;");
         separator.setPadding(new Insets(5, 0, 5, 0));
+        
+        section.getChildren().addAll(titleLabel, descLabel, separator);
+        return section;
+    }
+    
+    /**
+     * Creates a compact section for two-column layout
+     */
+    private VBox createCompactSection(String title, String description) {
+        VBox section = new VBox(8);
+        section.setPadding(new Insets(12));
+        section.setStyle(
+            "-fx-background-color: #ffffff; " +
+            "-fx-background-radius: 8px; " +
+            "-fx-border-color: #e8eaed; " +
+            "-fx-border-radius: 8px; " +
+            "-fx-border-width: 1px; " +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.04), 4, 0, 0, 1);"
+        );
+        section.setFillWidth(true);
+        section.setPrefWidth(380);
+        section.setMaxWidth(400);
+        
+        Label titleLabel = new Label(title);
+        titleLabel.setStyle(
+            "-fx-font-size: 13px; " +
+            "-fx-font-weight: 600; " +
+            "-fx-text-fill: #1a1a1a; " +
+            "-fx-font-family: 'Segoe UI', sans-serif;"
+        );
+        
+        Label descLabel = new Label(description);
+        descLabel.setStyle(
+            "-fx-font-size: 11px; " +
+            "-fx-text-fill: #6b7280; " +
+            "-fx-font-family: 'Segoe UI', sans-serif;"
+        );
+        
+        // Compact separator
+        Separator separator = new Separator();
+        separator.setStyle("-fx-background-color: #e8eaed; -fx-border-color: #e8eaed;");
+        separator.setPadding(new Insets(3, 0, 3, 0));
         
         section.getChildren().addAll(titleLabel, descLabel, separator);
         return section;
@@ -5879,6 +6269,43 @@ public class LoadsPanel extends BorderPane {
         } else if (control instanceof TextField) {
             control.setStyle(control.getStyle() + 
                 "; -fx-pref-width: 300px; -fx-min-width: 250px; -fx-max-width: 400px;");
+        }
+        
+        row.getChildren().add(control);
+        HBox.setHgrow(control, Priority.SOMETIMES);
+        
+        return row;
+    }
+    
+    /**
+     * Creates a compact field row for two-column layout
+     */
+    private HBox createCompactFieldRow(String labelText, Node control) {
+        HBox row = new HBox(10);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(5, 0, 5, 0));
+        
+        if (!labelText.isEmpty()) {
+            Label label = new Label(labelText);
+            label.setPrefWidth(90);
+            label.setMinWidth(90);
+            label.setMaxWidth(90);
+            label.setStyle(
+                "-fx-font-weight: 500; " +
+                "-fx-text-fill: #1a1a1a; " +
+                "-fx-font-size: 12px; " +
+                "-fx-font-family: 'Segoe UI', sans-serif;"
+            );
+            row.getChildren().add(label);
+        }
+        
+        // Compact control sizing
+        if (control instanceof ComboBox) {
+            control.setStyle(control.getStyle() + 
+                "; -fx-pref-width: 280px; -fx-min-width: 250px; -fx-max-width: 320px;");
+        } else if (control instanceof TextField) {
+            control.setStyle(control.getStyle() + 
+                "; -fx-pref-width: 280px; -fx-min-width: 250px; -fx-max-width: 320px;");
         }
         
         row.getChildren().add(control);
@@ -5933,7 +6360,7 @@ public class LoadsPanel extends BorderPane {
             }
             
             // Create or update load
-            Load load = isAdd ? new Load(0, "", "", "", "", "", "", "", null, "", Load.Status.BOOKED, 0.0, "", null, null, null, null, "", false, 0.0, false) : originalLoad;
+            Load load = isAdd ? new Load(0, "", "", "", "", "", "", "", null, "", Load.Status.BOOKED, 0.0, "", null, null, null, null, "", false, false) : originalLoad;
             
             // Set basic information
             load.setLoadNumber(loadNumber);
@@ -6108,30 +6535,6 @@ public class LoadsPanel extends BorderPane {
             load.setNotes(dialogFields.notesField.getText() != null ? dialogFields.notesField.getText().trim() : "");
             load.setReminder(dialogFields.reminderField.getText() != null ? dialogFields.reminderField.getText().trim() : "");
             load.setHasLumper(dialogFields.hasLumperCheck.isSelected());
-            
-            // Process lumper amount
-            if (dialogFields.hasLumperCheck.isSelected()) {
-                String lumperAmountText = dialogFields.lumperAmountField.getText();
-                if (lumperAmountText != null && !lumperAmountText.trim().isEmpty()) {
-                    try {
-                        // Remove any currency symbols and parse
-                        String cleanAmount = lumperAmountText.replaceAll("[^0-9.]", "");
-                        if (!cleanAmount.isEmpty()) {
-                            load.setLumperAmount(Double.parseDouble(cleanAmount));
-                        } else {
-                            load.setLumperAmount(0.0);
-                        }
-                    } catch (NumberFormatException e) {
-                        logger.warn("Invalid lumper amount format: '{}', setting to 0.0", lumperAmountText);
-                        load.setLumperAmount(0.0);
-                    }
-                } else {
-                    load.setLumperAmount(0.0);
-                }
-            } else {
-                load.setLumperAmount(0.0);
-            }
-            
             load.setHasRevisedRateConfirmation(dialogFields.hasRevisedRateCheck.isSelected());
             
             // Save any manually entered addresses

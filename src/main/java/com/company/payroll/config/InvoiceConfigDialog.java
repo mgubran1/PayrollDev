@@ -235,7 +235,7 @@ public class InvoiceConfigDialog extends Dialog<Void> {
         section.setPadding(new Insets(10));
         section.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 5;");
         
-        Label sectionTitle = new Label("📄 Invoice Settings");
+        Label sectionTitle = new Label("Invoice Settings");
         sectionTitle.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #34495e;");
         
         GridPane grid = new GridPane();

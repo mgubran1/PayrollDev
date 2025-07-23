@@ -32,6 +32,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.DatePicker;
@@ -127,32 +128,128 @@ public class DriverGridTab extends Tab {
         leftPanel.setPadding(new Insets(20));
         leftPanel.setStyle("-fx-background-color: #f8fafc;");
         
-        HBox headerBox = new HBox(20);
-        headerBox.setAlignment(Pos.CENTER_LEFT);
-        headerBox.setPadding(new Insets(0, 0, 20, 0));
-        Button prevWeekBtn = new Button("◀");
-        Button nextWeekBtn = new Button("▶");
+        // Create main header with title and week navigation
+        HBox mainHeader = new HBox(20);
+        mainHeader.setAlignment(Pos.CENTER_LEFT);
+        mainHeader.setPadding(new Insets(0, 0, 20, 0));
+        mainHeader.getStyleClass().add("driver-grid-main-header");
+        
+        // Left side: Title and week navigation
+        VBox leftSide = new VBox(10);
+        leftSide.setAlignment(Pos.CENTER_LEFT);
+        leftSide.getStyleClass().add("driver-grid-left-side");
+        
+        // Title
+        Label titleLabel = new Label("Driver Scheduling Grid");
+        titleLabel.getStyleClass().add("driver-grid-title");
+        
+        // Week navigation
+        HBox weekControls = new HBox(10);
+        weekControls.setAlignment(Pos.CENTER_LEFT);
+        weekControls.getStyleClass().add("driver-grid-week-nav");
+        Button prevWeekBtn = new Button("◀ Previous");
+        Button todayBtn = new Button("Today");
+        Button nextWeekBtn = new Button("Next ▶");
         Label weekLabel = new Label();
         weekLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
         weekLabel.setTextFill(Color.rgb(31, 41, 55));
         prevWeekBtn.setOnAction(e -> { weekStart = weekStart.minusWeeks(1); weekFilterPicker.setValue(weekStart); refresh(); });
         nextWeekBtn.setOnAction(e -> { weekStart = weekStart.plusWeeks(1); weekFilterPicker.setValue(weekStart); refresh(); });
+        todayBtn.setOnAction(e -> { weekStart = LocalDate.now().with(DayOfWeek.SUNDAY); weekFilterPicker.setValue(LocalDate.now()); refresh(); });
         weekFilterPicker.valueProperty().addListener((obs, oldV, newV) -> { if (newV != null) { weekStart = newV.with(DayOfWeek.SUNDAY); refresh(); }});
-        HBox weekControls = new HBox(10, prevWeekBtn, weekFilterPicker, nextWeekBtn);
-        weekControls.setAlignment(Pos.CENTER_LEFT);
-        headerBox.getChildren().addAll(weekControls, refreshBtn, statusMsg);
-        leftPanel.getChildren().add(headerBox);
+        weekControls.getChildren().addAll(prevWeekBtn, todayBtn, weekFilterPicker, nextWeekBtn);
         
-        // Simplified filter: just a search box
-        HBox filterBox = new HBox(10, searchField);
-        filterBox.setAlignment(Pos.CENTER_LEFT);
-        filterBox.setPadding(new Insets(0, 0, 10, 0));
-        searchField.setPromptText("Search driver, truck/unit, or load number...");
+        leftSide.getChildren().addAll(titleLabel, weekControls);
+        
+        // Right side: Action buttons and summary statistics
+        VBox rightSide = new VBox(15);
+        rightSide.setAlignment(Pos.TOP_RIGHT);
+        rightSide.getStyleClass().add("driver-grid-right-side");
+        
+        // Action buttons row
+        HBox actionButtons = new HBox(10);
+        actionButtons.setAlignment(Pos.CENTER_RIGHT);
+        actionButtons.getStyleClass().add("driver-grid-action-buttons");
+        Button scheduleLoadBtn = new Button("📅 Schedule Load");
+        Button assignDriverBtn = new Button("👤 Assign Driver");
+        Button exportScheduleBtn = new Button("📊 Export Schedule");
+        Button printViewBtn = new Button("🖨️ Print View");
+        Button refreshBtn = new Button("🔄 Refresh");
+        CheckBox autoRefreshCheck = new CheckBox("Auto-refresh");
+        
+        // Style action buttons
+        scheduleLoadBtn.getStyleClass().add("driver-grid-action-button");
+        assignDriverBtn.getStyleClass().add("driver-grid-action-button");
+        exportScheduleBtn.getStyleClass().add("driver-grid-action-button");
+        printViewBtn.getStyleClass().add("driver-grid-action-button");
+        refreshBtn.getStyleClass().add("driver-grid-action-button");
+        autoRefreshCheck.getStyleClass().add("driver-grid-auto-refresh");
+        
+        actionButtons.getChildren().addAll(scheduleLoadBtn, assignDriverBtn, exportScheduleBtn, printViewBtn, refreshBtn, autoRefreshCheck);
+        
+        // Summary statistics boxes row
+        HBox summaryBoxes = new HBox(15);
+        summaryBoxes.setAlignment(Pos.CENTER_RIGHT);
+        summaryBoxes.getStyleClass().add("driver-grid-summary-container");
+        
+        totalLoadsBox = createSummaryBox("Total Loads", "0");
+        activeDriversBox = createSummaryBox("Active Drivers", "0");
+        conflictsBox = createSummaryBox("Conflicts", "0");
+        unassignedBox = createSummaryBox("Unassigned", "0");
+        
+        summaryBoxes.getChildren().addAll(totalLoadsBox, activeDriversBox, conflictsBox, unassignedBox);
+        
+        // Multi-stop indicator
+        Label multiStopIndicator = new Label("- Multi-stop load indicator");
+        multiStopIndicator.getStyleClass().add("driver-grid-multi-stop-indicator");
+        
+        rightSide.getChildren().addAll(actionButtons, summaryBoxes, multiStopIndicator);
+        
+        // Add left and right sides to main header
+        mainHeader.getChildren().addAll(leftSide, rightSide);
+        HBox.setHgrow(leftSide, Priority.ALWAYS);
+        
+        leftPanel.getChildren().add(mainHeader);
+        
+        // Search and filter section
+        HBox searchFilterSection = new HBox(15);
+        searchFilterSection.setAlignment(Pos.CENTER_LEFT);
+        searchFilterSection.setPadding(new Insets(0, 0, 20, 0));
+        searchFilterSection.getStyleClass().add("driver-grid-search-section");
+        
+        Label searchLabel = new Label("Search:");
+        searchField.setPromptText("Search by load #, driver, truck");
         searchField.setMinWidth(200);
+        searchField.getStyleClass().add("driver-grid-search-field");
         searchField.textProperty().addListener((obs, oldV, newV) -> applyAdvancedFilter());
-        leftPanel.getChildren().add(filterBox);
         
-        leftPanel.getChildren().addAll(createSummaryCard(), createLegend());
+        ComboBox<String> driverFilter = new ComboBox<>();
+        driverFilter.setPromptText("Driver: All Driv...");
+        driverFilter.setMinWidth(150);
+        driverFilter.getStyleClass().add("driver-grid-filter-combo");
+        
+        ComboBox<String> customerFilter = new ComboBox<>();
+        customerFilter.setPromptText("Customer: All Cust...");
+        customerFilter.setMinWidth(150);
+        customerFilter.getStyleClass().add("driver-grid-filter-combo");
+        
+        ComboBox<String> statusFilter = new ComboBox<>();
+        statusFilter.setPromptText("Status: All Stat...");
+        statusFilter.setMinWidth(150);
+        statusFilter.getStyleClass().add("driver-grid-filter-combo");
+        
+        CheckBox showConflictsOnly = new CheckBox("Show Conflicts Only");
+        showConflictsOnly.getStyleClass().add("driver-grid-checkbox");
+        CheckBox showUnassigned = new CheckBox("Show Unassigned");
+        showUnassigned.getStyleClass().add("driver-grid-checkbox");
+        
+        Button clearFiltersBtn = new Button("Clear Filters");
+        clearFiltersBtn.getStyleClass().add("driver-grid-action-button");
+        
+        searchFilterSection.getChildren().addAll(searchLabel, searchField, driverFilter, customerFilter, statusFilter, showConflictsOnly, showUnassigned, clearFiltersBtn);
+        leftPanel.getChildren().add(searchFilterSection);
+        
+        leftPanel.getChildren().addAll(createLegend());
         weekHeaderRow.setSpacing(1);
         weekHeaderRow.setStyle("-fx-background-color: #f9fafb; -fx-border-color: #e5e7eb; -fx-border-width: 0 1 1 0;");
         weekHeaderRow.setMinHeight(50);
@@ -174,6 +271,21 @@ public class DriverGridTab extends Tab {
         refreshBtn.setOnAction(e -> refresh());
         mainLayout.setLeft(leftPanel);
         mainLayout.setStyle("-fx-background-color: #f8fafc;");
+    }
+    
+    private VBox createSummaryBox(String title, String value) {
+        VBox box = new VBox(5);
+        box.setAlignment(Pos.CENTER);
+        box.getStyleClass().add("driver-grid-summary-box");
+        
+        Label valueLabel = new Label(value);
+        valueLabel.getStyleClass().add("driver-grid-summary-value");
+        
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("driver-grid-summary-title");
+        
+        box.getChildren().addAll(valueLabel, titleLabel);
+        return box;
     }
 
     public void refresh() {
@@ -667,64 +779,35 @@ public class DriverGridTab extends Tab {
         alert.showAndWait();
     }
 
-    private HBox createSummaryCard() {
-        HBox card = new HBox(30);
-        card.setPadding(new Insets(10, 0, 10, 0));
-        card.setAlignment(Pos.CENTER_LEFT);
-        Label activeDriversLabel = new Label();
-        Label totalLoadsLabel = new Label();
-        Label completedLabel = new Label();
-        Label conflictsLabel = new Label();
-        activeDriversLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
-        totalLoadsLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
-        completedLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
-        conflictsLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
-        card.getChildren().addAll(activeDriversLabel, totalLoadsLabel, completedLabel, conflictsLabel);
-        // Update labels on filter
-        Platform.runLater(() -> {
-            activeDriversLabel.setText(activeDrivers + " Active Drivers");
-            totalLoadsLabel.setText(totalLoads + " Total Loads");
-            completedLabel.setText(completedLoads + " Completed");
-            conflictsLabel.setText(conflictCount + " Conflicts");
-        });
-        return card;
-    }
-
     private HBox createLegend() {
         HBox legend = new HBox(20);
         legend.setAlignment(Pos.CENTER_LEFT);
         legend.setPadding(new Insets(10, 0, 15, 0));
+        legend.getStyleClass().add("driver-grid-legend");
         Label legendTitle = new Label("Load Status:");
-        legendTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
-        legendTitle.setTextFill(Color.rgb(55, 65, 81));
+        legendTitle.getStyleClass().add("driver-grid-legend-title");
         legend.getChildren().add(legendTitle);
         for (Load.Status status : Load.Status.values()) {
             HBox statusItem = new HBox(8);
             statusItem.setAlignment(Pos.CENTER_LEFT);
+            statusItem.getStyleClass().add("driver-grid-legend-item");
             Rectangle rect = new Rectangle(16, 16);
             rect.setFill(Color.web(STATUS_COLOR.getOrDefault(status, "#9ca3af")));
-            rect.setArcWidth(4);
-            rect.setArcHeight(4);
-            rect.setStroke(Color.web("#d1d5db"));
-            rect.setStrokeWidth(1);
+            rect.getStyleClass().add("driver-grid-legend-rect");
             Label lbl = new Label(STATUS_ICON.getOrDefault(status, "") + " " + status.toString());
-            lbl.setFont(Font.font("Segoe UI", 11));
-            lbl.setTextFill(Color.rgb(55, 65, 81));
+            lbl.getStyleClass().add("driver-grid-legend-label");
             statusItem.getChildren().addAll(rect, lbl);
             legend.getChildren().add(statusItem);
         }
         // Add conflict indicator
         HBox conflictItem = new HBox(8);
         conflictItem.setAlignment(Pos.CENTER_LEFT);
+        conflictItem.getStyleClass().add("driver-grid-legend-item");
         Rectangle conflictRect = new Rectangle(16, 16);
         conflictRect.setFill(Color.web("#dc2626"));
-        conflictRect.setArcWidth(4);
-        conflictRect.setArcHeight(4);
-        conflictRect.setStroke(Color.web("#991b1b"));
-        conflictRect.setStrokeWidth(2);
+        conflictRect.getStyleClass().add("driver-grid-legend-rect");
         Label conflictLbl = new Label("⚠️ Scheduling Conflict");
-        conflictLbl.setFont(Font.font("Segoe UI", 11));
-        conflictLbl.setTextFill(Color.rgb(220, 38, 38));
+        conflictLbl.getStyleClass().add("driver-grid-legend-label");
         conflictItem.getChildren().addAll(conflictRect, conflictLbl);
         legend.getChildren().add(conflictItem);
         return legend;
@@ -799,6 +882,12 @@ public class DriverGridTab extends Tab {
     private int totalLoads = 0;
     private int completedLoads = 0;
     private int conflictCount = 0;
+    
+    // References to summary boxes for updating
+    private VBox totalLoadsBox;
+    private VBox activeDriversBox;
+    private VBox conflictsBox;
+    private VBox unassignedBox;
 
     private void updateSummaryCard() {
         Set<Employee> drivers = new HashSet<>();
@@ -813,6 +902,25 @@ public class DriverGridTab extends Tab {
         totalLoads = filteredRows.size();
         completedLoads = completed;
         conflictCount = (int) conflictMap.values().stream().flatMap(List::stream).count();
-        // Update UI labels if needed
+        
+        // Update the summary box labels
+        Platform.runLater(() -> {
+            if (totalLoadsBox != null) {
+                Label valueLabel = (Label) totalLoadsBox.getChildren().get(0);
+                valueLabel.setText(String.valueOf(totalLoads));
+            }
+            if (activeDriversBox != null) {
+                Label valueLabel = (Label) activeDriversBox.getChildren().get(0);
+                valueLabel.setText(String.valueOf(activeDrivers));
+            }
+            if (conflictsBox != null) {
+                Label valueLabel = (Label) conflictsBox.getChildren().get(0);
+                valueLabel.setText(String.valueOf(conflictCount));
+            }
+            if (unassignedBox != null) {
+                Label valueLabel = (Label) unassignedBox.getChildren().get(0);
+                valueLabel.setText(String.valueOf(0)); // TODO: Calculate unassigned loads
+            }
+        });
     }
 } 
