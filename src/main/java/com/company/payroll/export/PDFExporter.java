@@ -529,16 +529,16 @@ public class PDFExporter {
                 yPosition -= 60;
                 
                 // Revenue table headers
-                String[] revenueHeaders = {"Week", "Driver", "Gross", "Service Fee", "Company Pay", "Company Net"};
+                // The "Week" column has been removed to simplify the report
+                String[] revenueHeaders = {"Driver", "Gross", "Service Fee", "Company Pay", "Company Net"};
                 // Dynamically size columns to fit within the printable area to avoid
-                // overlapping text.  Percentages must sum to 1.0f
+                // overlapping text. Percentages must sum to 1.0f
                 float[] revenueColWidths = {
-                    contentWidth * 0.22f, // Week
-                    contentWidth * 0.24f, // Driver
-                    contentWidth * 0.13f, // Gross
-                    contentWidth * 0.13f, // Service Fee
-                    contentWidth * 0.14f, // Company Pay
-                    contentWidth * 0.14f  // Company Net
+                    contentWidth * 0.31f, // Driver
+                    contentWidth * 0.17f, // Gross
+                    contentWidth * 0.17f, // Service Fee
+                    contentWidth * 0.17f, // Company Pay
+                    contentWidth * 0.18f  // Company Net
                 };
                 
                 drawTableHeader(contentStream, margin, yPosition, revenueHeaders, revenueColWidths);
@@ -568,8 +568,8 @@ public class PDFExporter {
                         return; // For simplicity, using recursion protection
                     }
                     
+                    // Values correspond to headers without the removed "Week" column
                     String[] values = {
-                        row.weekProperty().get(),
                         row.driverProperty().get(),
                         row.grossProperty().get(),
                         row.serviceFeeProperty().get(),
