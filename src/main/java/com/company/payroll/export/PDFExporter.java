@@ -530,7 +530,16 @@ public class PDFExporter {
                 
                 // Revenue table headers
                 String[] revenueHeaders = {"Week", "Driver", "Gross", "Service Fee", "Company Pay", "Company Net"};
-                float[] revenueColWidths = {110, 120, 80, 80, 80, 80};
+                // Dynamically size columns to fit within the printable area to avoid
+                // overlapping text.  Percentages must sum to 1.0f
+                float[] revenueColWidths = {
+                    contentWidth * 0.22f, // Week
+                    contentWidth * 0.24f, // Driver
+                    contentWidth * 0.13f, // Gross
+                    contentWidth * 0.13f, // Service Fee
+                    contentWidth * 0.14f, // Company Pay
+                    contentWidth * 0.14f  // Company Net
+                };
                 
                 drawTableHeader(contentStream, margin, yPosition, revenueHeaders, revenueColWidths);
                 yPosition -= 25;
