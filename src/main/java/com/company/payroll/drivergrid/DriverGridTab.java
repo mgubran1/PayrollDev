@@ -22,6 +22,7 @@ import com.company.payroll.loads.Load;
 import com.company.payroll.loads.LoadDAO;
 import com.company.payroll.loads.LoadLocation;
 import com.company.payroll.loads.LoadsTab;
+import com.company.payroll.drivergrid.LoadStatusUtil;
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -75,23 +76,6 @@ public class DriverGridTab extends Tab {
     // Loads tab integration
     private LoadsTab loadsTab;
     
-    private static final Map<Load.Status, String> STATUS_COLOR = Map.of(
-        Load.Status.BOOKED, "#1976D2",
-        Load.Status.ASSIGNED, "#FBC02D",
-        Load.Status.IN_TRANSIT, "#2196F3",
-        Load.Status.DELIVERED, "#43A047",
-        Load.Status.PAID, "#8E24AA",
-        Load.Status.CANCELLED, "#E53935"
-    );
-    
-    private static final Map<Load.Status, String> STATUS_ICON = Map.of(
-        Load.Status.BOOKED, "📘",
-        Load.Status.ASSIGNED, "📝",
-        Load.Status.IN_TRANSIT, "🚚",
-        Load.Status.DELIVERED, "✅",
-        Load.Status.PAID, "💵",
-        Load.Status.CANCELLED, "❌"
-    );
 
     private static final ZoneId DEFAULT_ZONE = ZoneId.of("America/Chicago");
     private static final DateTimeFormatter AMERICAN_TIME_FORMAT = DateTimeFormatter.ofPattern("h:mm a").withLocale(Locale.US);
@@ -513,7 +497,7 @@ public class DriverGridTab extends Tab {
             if (endCol < 0 || startCol > 6) continue;
             double barHeight = 32;
             double barMargin = 8 + barIndex * (barHeight + 6);
-            String color = STATUS_COLOR.getOrDefault(loadRow.load.getStatus(), "#9ca3af");
+            String color = LoadStatusUtil.colorFor(loadRow.load.getStatus());
             
             // Check if this load has conflicts
             boolean hasConflict = conflictMap.containsKey(driver) && 
@@ -543,7 +527,8 @@ public class DriverGridTab extends Tab {
                 bar.setOnMouseClicked(e -> {/* Show load details dialog if needed */});
                 dayCells[d].getChildren().add(bar);
                 if (d == startCol) {
-                    Label infoLabel = new Label(STATUS_ICON.getOrDefault(loadRow.load.getStatus(), "") + " " + loadRow.load.getLoadNumber() + "\n" + loadRow.load.getCustomer());
+                    Label infoLabel = new Label(LoadStatusUtil.iconFor(loadRow.load.getStatus()) + " " +
+                            loadRow.load.getLoadNumber() + "\n" + loadRow.load.getCustomer());
                     infoLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 10));
                     infoLabel.setTextFill(Color.WHITE);
                     infoLabel.setStyle("-fx-background-radius: 6; -fx-padding: 2 8 2 8;");
@@ -792,9 +777,9 @@ public class DriverGridTab extends Tab {
             statusItem.setAlignment(Pos.CENTER_LEFT);
             statusItem.getStyleClass().add("driver-grid-legend-item");
             Rectangle rect = new Rectangle(16, 16);
-            rect.setFill(Color.web(STATUS_COLOR.getOrDefault(status, "#9ca3af")));
+            rect.setFill(Color.web(LoadStatusUtil.colorFor(status)));
             rect.getStyleClass().add("driver-grid-legend-rect");
-            Label lbl = new Label(STATUS_ICON.getOrDefault(status, "") + " " + status.toString());
+            Label lbl = new Label(LoadStatusUtil.iconFor(status) + " " + status.toString());
             lbl.getStyleClass().add("driver-grid-legend-label");
             statusItem.getChildren().addAll(rect, lbl);
             legend.getChildren().add(statusItem);
@@ -815,7 +800,8 @@ public class DriverGridTab extends Tab {
     
     private String buildLoadTooltipText(Load load, boolean hasConflict) {
         StringBuilder tooltip = new StringBuilder();
-        tooltip.append(STATUS_ICON.getOrDefault(load.getStatus(), "")).append(" ").append(load.getLoadNumber()).append("\n")
+        tooltip.append(LoadStatusUtil.iconFor(load.getStatus())).append(" ")
+               .append(load.getLoadNumber()).append("\n")
                .append("Status: ").append(load.getStatus()).append("\n")
                .append("Customer: ").append(load.getCustomer()).append("\n")
                .append("Pickup: ").append(load.getPickUpLocation()).append(" ").append(load.getPickUpDate()).append(" ").append(load.getPickUpTime()).append("\n")

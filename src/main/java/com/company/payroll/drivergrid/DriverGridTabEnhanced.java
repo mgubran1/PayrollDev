@@ -8,6 +8,7 @@ import com.company.payroll.loads.LoadsTab;
 import com.company.payroll.loads.LoadLocation;
 import com.company.payroll.trailers.Trailer;
 import com.company.payroll.trailers.TrailerDAO;
+import com.company.payroll.drivergrid.LoadStatusUtil;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
@@ -102,28 +103,7 @@ public class DriverGridTabEnhanced extends DriverGridTab {
     private final Label statusLabel = new Label();
     private final ProgressIndicator loadingIndicator = new ProgressIndicator();
     
-    // Style constants
-    private static final Map<Load.Status, String> STATUS_COLORS = new HashMap<>() {{
-        put(Load.Status.BOOKED, "#2563eb");
-        put(Load.Status.ASSIGNED, "#f59e0b");
-        put(Load.Status.IN_TRANSIT, "#10b981");
-        put(Load.Status.DELIVERED, "#059669");
-        put(Load.Status.PAID, "#7c3aed");
-        put(Load.Status.CANCELLED, "#ef4444");
-        put(Load.Status.PICKUP_LATE, "#ff9999");
-        put(Load.Status.DELIVERY_LATE, "#ff6666");
-    }};
-    
-    private static final Map<Load.Status, String> STATUS_ICONS = new HashMap<>() {{
-        put(Load.Status.BOOKED, "📘");
-        put(Load.Status.ASSIGNED, "📋");
-        put(Load.Status.IN_TRANSIT, "🚚");
-        put(Load.Status.DELIVERED, "✅");
-        put(Load.Status.PAID, "💰");
-        put(Load.Status.CANCELLED, "❌");
-        put(Load.Status.PICKUP_LATE, "⚠️");
-        put(Load.Status.DELIVERY_LATE, "🚨");
-    }};
+    // Style constants are shared via LoadStatusUtil
     
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("h:mm a");
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MMM d");
@@ -1001,7 +981,7 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setMaxWidth(Double.MAX_VALUE);
         
-        String color = STATUS_COLORS.get(load.getStatus());
+        String color = LoadStatusUtil.colorFor(load.getStatus());
         boolean hasConflict = conflictMap.containsKey(driver.getName()) &&
             conflictMap.get(driver.getName()).stream()
                 .anyMatch(c -> c.load1.equals(load) || c.load2.equals(load));
@@ -1022,7 +1002,7 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         bar.setPrefHeight(22);
         
         // Load info with multi-stop indicator
-        Label iconLabel = new Label(STATUS_ICONS.get(load.getStatus()));
+        Label iconLabel = new Label(LoadStatusUtil.iconFor(load.getStatus()));
         iconLabel.setFont(Font.font("Segoe UI", 12));
         
         Label loadLabel = new Label(load.getLoadNumber());
@@ -1817,8 +1797,8 @@ public class DriverGridTabEnhanced extends DriverGridTab {
                 setText("All Statuses");
                 setGraphic(null);
             } else {
-                setText(STATUS_ICONS.get(status) + " " + status.toString());
-                setTextFill(Color.web(STATUS_COLORS.get(status)));
+                setText(LoadStatusUtil.iconFor(status) + " " + status.toString());
+                setTextFill(Color.web(LoadStatusUtil.colorFor(status)));
             }
         }
     }
