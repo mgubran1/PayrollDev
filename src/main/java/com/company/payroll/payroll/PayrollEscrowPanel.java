@@ -307,13 +307,16 @@ public class PayrollEscrowPanel extends BorderPane {
         Button refreshBtn = ModernButtonStyles.createSecondaryButton("🔄 Refresh");
         refreshBtn.setOnAction(e -> updateEscrowTable());
         
+        Button clearBtn = ModernButtonStyles.createSecondaryButton("🗑️ Clear Data");
+        clearBtn.setOnAction(e -> clearAllData());
+        
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
         Label filterLabel = new Label("Filter by driver:");
         filterLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
         
-        buttonBox.getChildren().addAll(addDepositBtn, withdrawBtn, exportBtn, refreshBtn, spacer, filterLabel);
+        buttonBox.getChildren().addAll(addDepositBtn, withdrawBtn, exportBtn, refreshBtn, clearBtn, spacer, filterLabel);
         
         return buttonBox;
     }
@@ -342,9 +345,9 @@ public class PayrollEscrowPanel extends BorderPane {
         // Week column
         TableColumn<PayrollEscrow.EscrowEntry, String> weekCol = new TableColumn<>("Week");
         weekCol.setCellValueFactory(entry -> {
-            LocalDate date = entry.getValue().getDate();
-            LocalDate weekStart = date.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
-            return new SimpleStringProperty(weekStart.format(DateTimeFormatter.ofPattern("MM/dd")));
+            LocalDate weekStart = entry.getValue().getWeekStart();
+            return new SimpleStringProperty(weekStart != null ? 
+                weekStart.format(DateTimeFormatter.ofPattern("MM/dd")) : "N/A");
         });
         weekCol.setPrefWidth(80);
         
@@ -588,8 +591,8 @@ public class PayrollEscrowPanel extends BorderPane {
                     LocalDate weekStartForDate = selectedDate.with(
                         java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
                     
-                    payrollEscrow.addDeposit(selectedDriver, weekStartForDate, amount, 
-                        notesArea.getText() + " (Date: " + selectedDate.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) + ")");
+                    payrollEscrow.addDeposit(selectedDriver, selectedDate, weekStartForDate, amount, 
+                        notesArea.getText());
                     updateEscrowTable();
                     showAlert(Alert.AlertType.INFORMATION, "Deposit Added", 
                         String.format("Added $%,.2f deposit for %s on %s", 
@@ -676,8 +679,12 @@ public class PayrollEscrowPanel extends BorderPane {
                 }
                 
                 if (amount.compareTo(BigDecimal.ZERO) > 0 && amount.compareTo(currentBalance) <= 0) {
-                    payrollEscrow.addWithdrawal(selectedDriver, selectedDate, amount, 
-                        notesArea.getText() + " (Date: " + selectedDate.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) + ")");
+                    // Calculate the week start for the selected date
+                    LocalDate weekStartForDate = selectedDate.with(
+                        java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+                    
+                    payrollEscrow.addWithdrawal(selectedDriver, selectedDate, weekStartForDate, amount, 
+                        notesArea.getText());
                     updateEscrowTable();
                     showAlert(Alert.AlertType.INFORMATION, "Withdrawal Completed", 
                         String.format("Withdrew $%,.2f from %s's escrow on %s", 
@@ -717,6 +724,20 @@ public class PayrollEscrowPanel extends BorderPane {
             }
         }
         return null;
+    }
+    
+    private void clearAllData() {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Clear All Escrow Data");
+        confirm.setHeaderText("Clear All Escrow Data");
+        confirm.setContentText("This will delete ALL escrow entries. This action cannot be undone. Are you sure?");
+        
+        Optional<ButtonType> result = confirm.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            payrollEscrow.clearAllData();
+            updateEscrowTable();
+            showAlert(Alert.AlertType.INFORMATION, "Data Cleared", "All escrow data has been cleared.");
+        }
     }
     
     private void showAlert(Alert.AlertType type, String title, String content) {

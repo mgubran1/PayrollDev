@@ -94,15 +94,15 @@ public class PayrollEscrow implements Serializable {
     }
     
     // Entry management
-    public EscrowEntry addDeposit(Employee driver, LocalDate weekStart, BigDecimal amount, String notes) {
-        EscrowEntry entry = new EscrowEntry(LocalDate.now(), weekStart, driver, EscrowType.DEPOSIT, amount, notes);
+    public EscrowEntry addDeposit(Employee driver, LocalDate transactionDate, LocalDate weekStart, BigDecimal amount, String notes) {
+        EscrowEntry entry = new EscrowEntry(transactionDate, weekStart, driver, EscrowType.DEPOSIT, amount, notes);
         entries.add(entry);
         saveData();
-        logger.info("Added escrow deposit for driver {} amount ${}", driver.getName(), amount);
+        logger.info("Added escrow deposit for driver {} amount ${} on {}", driver.getName(), amount, transactionDate);
         return entry;
     }
     
-    public EscrowEntry addWithdrawal(Employee driver, LocalDate weekStart, BigDecimal amount, String notes) {
+    public EscrowEntry addWithdrawal(Employee driver, LocalDate transactionDate, LocalDate weekStart, BigDecimal amount, String notes) {
         BigDecimal currentBalance = getCurrentBalance(driver);
         if (amount.compareTo(currentBalance) > 0) {
             logger.warn("Withdrawal amount ${} exceeds current balance ${} for driver {}", 
@@ -110,10 +110,10 @@ public class PayrollEscrow implements Serializable {
             return null;
         }
         
-        EscrowEntry entry = new EscrowEntry(LocalDate.now(), weekStart, driver, EscrowType.WITHDRAWAL, amount, notes);
+        EscrowEntry entry = new EscrowEntry(transactionDate, weekStart, driver, EscrowType.WITHDRAWAL, amount, notes);
         entries.add(entry);
         saveData();
-        logger.info("Added escrow withdrawal for driver {} amount ${}", driver.getName(), amount);
+        logger.info("Added escrow withdrawal for driver {} amount ${} on {}", driver.getName(), amount, transactionDate);
         return entry;
     }
     
@@ -121,6 +121,15 @@ public class PayrollEscrow implements Serializable {
         entries.removeIf(e -> e.getId().equals(entryId));
         saveData();
         logger.info("Deleted escrow entry {}", entryId);
+    }
+    
+    /**
+     * Clear all escrow data (for testing/debugging)
+     */
+    public void clearAllData() {
+        entries.clear();
+        saveData();
+        logger.info("Cleared all escrow data");
     }
     
     // Query methods
@@ -246,6 +255,8 @@ public class PayrollEscrow implements Serializable {
                 entries.clear();
                 entries.addAll(loaded);
                 logger.info("Loaded {} escrow entries from {}", entries.size(), DATA_FILE);
+                
+
             } catch (Exception e) {
                 logger.error("Failed to load escrow data", e);
             }

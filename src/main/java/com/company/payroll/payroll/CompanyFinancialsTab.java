@@ -382,29 +382,6 @@ public class CompanyFinancialsTab extends BorderPane {
         financialTable.getColumns().clear();
         
         // Create columns with professional styling
-        TableColumn<FinancialRow, String> weekCol = new TableColumn<>("Date Range");
-        weekCol.setCellValueFactory(data -> data.getValue().weekProperty());
-        weekCol.setPrefWidth(250);
-        weekCol.setStyle("-fx-alignment: CENTER-LEFT;");
-        
-        // Custom cell factory for date range column
-        weekCol.setCellFactory(column -> new TableCell<FinancialRow, String>() {
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setText(null);
-                    setStyle("");
-                } else if (item.equals("TOTAL_ROW")) {
-                    setText("SUMMARY");
-                    setStyle("-fx-font-weight: bold; -fx-text-fill: #2c3e50;");
-                } else {
-                    setText(item);
-                    setStyle("-fx-padding: 0 0 0 10;");
-                }
-            }
-        });
-        
         TableColumn<FinancialRow, String> driverCol = new TableColumn<>("Driver");
         driverCol.setCellValueFactory(data -> data.getValue().driverProperty());
         driverCol.setPrefWidth(220);
@@ -451,7 +428,7 @@ public class CompanyFinancialsTab extends BorderPane {
         
         @SuppressWarnings("unchecked")
         TableColumn<FinancialRow, ?>[] financialColumns = new TableColumn[] {
-            weekCol, driverCol, grossCol, serviceFeeCol, companyPayCol, companyNetCol
+            driverCol, grossCol, serviceFeeCol, companyPayCol, companyNetCol
         };
         financialTable.getColumns().addAll(financialColumns);
         
@@ -1607,10 +1584,9 @@ public class CompanyFinancialsTab extends BorderPane {
                 
                 // Write revenue details
                 writer.println("REVENUE DETAILS");
-                writer.println("Week,Driver,Gross Revenue,Service Fee,Company Pay,Company Revenue");
+                writer.println("Driver,Gross Revenue,Service Fee,Company Pay,Company Revenue");
                 for (FinancialRow row : financialTable.getItems()) {
-                    writer.printf("%s,%s,%s,%s,%s,%s%n",
-                        row.weekProperty().get(),
+                    writer.printf("%s,%s,%s,%s,%s%n",
                         row.driverProperty().get(),
                         row.grossProperty().get(),
                         row.serviceFeeProperty().get(),
