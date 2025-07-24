@@ -372,7 +372,7 @@ public class QuickActions {
                 openAlert.setContentText("Would you like to open the PDF?");
                 
                 if (openAlert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK) {
-                    java.awt.Desktop.getDesktop().open(file);
+                    java.awt.Desktop.getDesktop().open(filePath.toFile());
                 }
             }
             
