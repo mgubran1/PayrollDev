@@ -46,27 +46,32 @@ public class PayrollSummaryTable extends VBox {
     private static final Color BACKGROUND_COLOR = Color.web("#FAFAFA");
     private static final Color CARD_COLOR = Color.WHITE;
     
-	private final TableView<PayrollCalculator.PayrollRow> table;
-	private final FilteredList<PayrollCalculator.PayrollRow> filteredData;
-	private TextField searchField;
-	private ComboBox<String> filterCombo;
-	private Label statsLabel;
-	private final ContextMenu contextMenu;
-	private final Map<Integer, EmployeePercentageHistory> configuredPercentages = new HashMap<>();
-	private EmployeePercentageHistoryDAO percentageHistoryDAO;
-	private LocalDate effectiveDate;
+    private final TableView<PayrollCalculator.PayrollRow> table;
+    private final FilteredList<PayrollCalculator.PayrollRow> filteredData;
+    private TextField searchField;
+    private ComboBox<String> filterCombo;
+    private Label statsLabel;
+    private final ContextMenu contextMenu;
+    private final Map<Integer, EmployeePercentageHistory> configuredPercentages = new HashMap<>();
+    private EmployeePercentageHistoryDAO percentageHistoryDAO;
+    private LocalDate effectiveDate;
+    private java.util.function.Predicate<PayrollCalculator.PayrollRow> paidChecker = r -> false;
     
     public PayrollSummaryTable(ObservableList<PayrollCalculator.PayrollRow> payrollRows) {
-        this(payrollRows, null, null);
+        this(payrollRows, null, null, null);
     }
-    
-    public PayrollSummaryTable(ObservableList<PayrollCalculator.PayrollRow> payrollRows, 
-                              Connection connection, LocalDate effectiveDate) {
+
+    public PayrollSummaryTable(ObservableList<PayrollCalculator.PayrollRow> payrollRows,
+                              Connection connection, LocalDate effectiveDate,
+                              java.util.function.Predicate<PayrollCalculator.PayrollRow> paidChecker) {
         super(10);
         setPadding(new Insets(10));
         setStyle("-fx-background-color: transparent;");
-        
+
         this.effectiveDate = effectiveDate;
+        if (paidChecker != null) {
+            this.paidChecker = paidChecker;
+        }
         
         // Initialize percentage history DAO if connection provided
         if (connection != null && effectiveDate != null) {
@@ -451,6 +456,30 @@ public class PayrollSummaryTable extends VBox {
         netCol.setPrefWidth(150);
         netCol.setMinWidth(140);
 
+        // Status column to indicate paid weeks
+        TableColumn<PayrollCalculator.PayrollRow, String> statusCol = new TableColumn<>("Status");
+        statusCol.setCellValueFactory(p -> {
+            boolean paid = paidChecker != null && paidChecker.test(p.getValue());
+            return new SimpleStringProperty(paid ? "PAID" : "");
+        });
+        statusCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null || item.isEmpty()) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    setText(item);
+                    setAlignment(Pos.CENTER);
+                    setTextFill(POSITIVE_COLOR);
+                    setFont(Font.font("System", FontWeight.BOLD, 12));
+                }
+            }
+        });
+        statusCol.setPrefWidth(100);
+        statusCol.setMinWidth(100);
+
         // Current Percentages columns
         TableColumn<PayrollCalculator.PayrollRow, String> currentPercentagesCol = new TableColumn<>("Current %");
         currentPercentagesCol.setCellValueFactory(p -> new SimpleStringProperty(
@@ -533,7 +562,8 @@ public class PayrollSummaryTable extends VBox {
             escrowDepositsCol,
             otherDeductionsCol,
             reimbursementsCol,
-            netCol
+            netCol,
+            statusCol
         ));
     }
     
@@ -621,10 +651,13 @@ public class PayrollSummaryTable extends VBox {
                         setStyle("");
                         setTooltip(null);
                     } else {
-                        // Row highlighting based on net pay
+                        // Row highlighting based on net pay and lock status
                         String baseStyle = "-fx-background-insets: 0, 1; -fx-padding: 0.0em;";
-                        
-                        if (item.netPay < 0) {
+
+                        boolean paid = paidChecker != null && paidChecker.test(item);
+                        if (paid) {
+                            setStyle(baseStyle + "-fx-background-color: #E8F5E9, #C8E6C9;");
+                        } else if (item.netPay < 0) {
                             setStyle(baseStyle + "-fx-background-color: #FFEBEE, #FFCDD2;");
                         } else if (item.netPay < 500) {
                             setStyle(baseStyle + "-fx-background-color: #FFF3E0, #FFE0B2;");
@@ -1053,6 +1086,16 @@ public class PayrollSummaryTable extends VBox {
      */
     public Map<Integer, EmployeePercentageHistory> getConfiguredPercentages() {
         return configuredPercentages;
+    }
+
+    /**
+     * Set the predicate used to determine if a payroll row is paid/locked
+     */
+    public void setPaidChecker(java.util.function.Predicate<PayrollCalculator.PayrollRow> checker) {
+        if (checker != null) {
+            this.paidChecker = checker;
+            table.refresh();
+        }
     }
     
     /**

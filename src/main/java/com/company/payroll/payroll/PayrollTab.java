@@ -132,6 +132,7 @@ public class PayrollTab extends BorderPane implements
     // Summary components
     private final Map<String, Label> summaryLabels = new LinkedHashMap<>();
     private Label netPayLabel;
+    private Label paidStatusLabel;
     private Label statusLabel;
     private ProgressIndicator loadingIndicator;
     
@@ -486,10 +487,19 @@ public class PayrollTab extends BorderPane implements
         netPayLabel.setFont(Font.font("System", FontWeight.BOLD, 36));
         netPayLabel.setTextFill(Color.web("#1565C0"));
         netPayLabel.setTooltip(new Tooltip("Total net pay for all drivers."));
-        
+
         netPayBox.getChildren().add(netPayLabel);
-        
-        summaryBox.getChildren().addAll(summaryTitle, titleSep, summaryGrid, separator, netPayBox);
+
+        paidStatusLabel = new Label("");
+        paidStatusLabel.setFont(Font.font("System", FontWeight.BOLD, 28));
+        paidStatusLabel.setTextFill(Color.web("#4CAF50"));
+        paidStatusLabel.setVisible(false);
+
+        VBox statusContainer = new VBox(paidStatusLabel);
+        statusContainer.setAlignment(Pos.CENTER);
+        statusContainer.setPadding(new Insets(5));
+
+        summaryBox.getChildren().addAll(summaryTitle, titleSep, summaryGrid, separator, netPayBox, statusContainer);
         
         return summaryBox;
     }
@@ -534,7 +544,17 @@ public class PayrollTab extends BorderPane implements
         
         // Create summary table with connection and date support
         // The date will be updated when payroll is calculated
-        summaryTable = new PayrollSummaryTable(summaryRows, calculator.getConnection(), null);
+        summaryTable = new PayrollSummaryTable(
+            summaryRows,
+            calculator.getConnection(),
+            null,
+            row -> {
+                LocalDate ws = weekStartPicker.getValue();
+                String id = String.valueOf(row.driverId);
+                return lockedWeeks.getOrDefault(id, Collections.emptySet()).contains(ws) ||
+                       lockedWeeks.getOrDefault("ALL", Collections.emptySet()).contains(ws);
+            }
+        );
         loadsTable = new PayrollLoadsTable(loadsRows);
         fuelTable = new PayrollFuelTable(fuelRows);
         
@@ -1094,7 +1114,16 @@ public class PayrollTab extends BorderPane implements
         boolean isLocked = driverLocks.contains(weekStart);
         lockWeekBtn.setText(isLocked ? "🔓 Unlock Week" : "🔒 Lock Week");
         lockWeekBtn.setDisable(false);
-        
+
+        paidStatusLabel.setVisible(isLocked);
+        paidStatusLabel.setText(isLocked ? "PAID" : "");
+
+        summaryTable.setPaidChecker(row -> {
+            String id = String.valueOf(row.driverId);
+            return lockedWeeks.getOrDefault(id, Collections.emptySet()).contains(weekStart) ||
+                   lockedWeeks.getOrDefault("ALL", Collections.emptySet()).contains(weekStart);
+        });
+
         // Update UI elements
         boolean hasData = !summaryRows.isEmpty();
         printPreviewBtn.setDisable(!hasData);
