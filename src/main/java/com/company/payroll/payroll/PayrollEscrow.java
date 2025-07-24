@@ -217,7 +217,25 @@ public class PayrollEscrow implements Serializable {
         return remaining.compareTo(BigDecimal.ZERO) > 0 ? remaining : BigDecimal.ZERO;
     }
     
+    /**
+     * Check if escrow is fully funded. Modified to only return true when
+     * the balance EXCEEDS the target, not when it equals it.
+     * This ensures deductions continue even when exactly at target.
+     */
     public boolean isEscrowFullyFunded(Employee driver) {
+        if (driver == null) return false;
+        
+        BigDecimal currentBalance = getCurrentBalance(driver);
+        BigDecimal targetAmount = getTargetAmount(driver);
+        // Changed from >= to > to allow deductions when exactly at target
+        return currentBalance.compareTo(targetAmount) > 0;
+    }
+    
+    /**
+     * Alternative method to check if escrow has reached the target amount.
+     * This can be used for display purposes to show "Fully Funded" status.
+     */
+    public boolean hasReachedTarget(Employee driver) {
         if (driver == null) return false;
         
         BigDecimal currentBalance = getCurrentBalance(driver);
@@ -255,8 +273,6 @@ public class PayrollEscrow implements Serializable {
                 entries.clear();
                 entries.addAll(loaded);
                 logger.info("Loaded {} escrow entries from {}", entries.size(), DATA_FILE);
-                
-
             } catch (Exception e) {
                 logger.error("Failed to load escrow data", e);
             }

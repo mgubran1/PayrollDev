@@ -236,6 +236,9 @@ public class CashAdvancePanel extends BorderPane {
         Button refreshBtn = ModernButtonStyles.createSecondaryButton("🔄 Refresh");
         refreshBtn.setOnAction(e -> updateAdvanceTable());
         
+        Button recalculateBtn = ModernButtonStyles.createPrimaryButton("🔧 Recalculate Status");
+        recalculateBtn.setOnAction(e -> recalculateStatuses());
+        
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
@@ -247,7 +250,8 @@ public class CashAdvancePanel extends BorderPane {
         filterCombo.setValue("Active Only");
         filterCombo.setOnAction(e -> updateAdvanceTable());
         
-        buttonBox.getChildren().addAll(createAdvanceBtn, recordPaymentBtn, viewDetailsBtn, exportBtn, refreshBtn, spacer, filterLabel, filterCombo);
+        buttonBox.getChildren().addAll(createAdvanceBtn, recordPaymentBtn, viewDetailsBtn, 
+            exportBtn, refreshBtn, recalculateBtn, spacer, filterLabel, filterCombo);
         
         return buttonBox;
     }
@@ -554,9 +558,9 @@ public class CashAdvancePanel extends BorderPane {
                         return null;
                     }
                     
+                    // Don't add date to notes anymore since we're passing it as a parameter
                     return new AdvanceRequest(amount, weeksSpinner.getValue(), 
-                        notesArea.getText() + " (Date: " + selectedDate.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) + ")", 
-                        approvedByField.getText(), selectedDate);
+                        notesArea.getText(), approvedByField.getText(), selectedDate);
                 } catch (NumberFormatException e) {
                     return null;
                 }
@@ -568,21 +572,26 @@ public class CashAdvancePanel extends BorderPane {
         
         result.ifPresent(request -> {
             if (request.amount.compareTo(BigDecimal.ZERO) > 0) {
-                // Calculate the week start for the selected date
-                LocalDate weekStartForDate = request.date.with(
-                    java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+                // Log the date being passed
+                logger.info("Creating advance with selected date: {}", request.date);
+                logger.info("Driver: {}, Amount: ${}, Weeks: {}", 
+                    selectedDriver.getName(), request.amount, request.weeks);
                 
+                // Pass the actual selected date (not week start) to createAdvance
+                // The createAdvance method should handle storing the exact date
                 PayrollAdvances.AdvanceEntry entry = payrollAdvances.createAdvance(
-                    selectedDriver, weekStartForDate, request.amount, request.weeks,
+                    selectedDriver, request.date, request.amount, request.weeks,
                     request.notes, request.approvedBy);
                 
                 if (entry != null) {
+                    logger.info("Advance created successfully with ID: {}", entry.getAdvanceId());
                     updateAdvanceTable();
                     showAlert(Alert.AlertType.INFORMATION, "Advance Created", 
                         String.format("Created advance of $%,.2f for %s on %s", 
                             request.amount, selectedDriver.getName(),
                             request.date.format(DateTimeFormatter.ofPattern("MM/dd/yyyy"))));
                 } else {
+                    logger.error("Failed to create advance");
                     showAlert(Alert.AlertType.ERROR, "Creation Failed", 
                         "Failed to create advance. Check settings and existing advances.");
                 }
@@ -599,15 +608,19 @@ public class CashAdvancePanel extends BorderPane {
             return;
         }
         
-        // Get active advances for dropdown
-        List<PayrollAdvances.AdvanceEntry> activeAdvances = payrollAdvances.getAdvancesForEmployee(selectedDriver)
+        // Get all advances with outstanding balances (not just ACTIVE status)
+        List<PayrollAdvances.AdvanceEntry> repayableAdvances = payrollAdvances.getAdvancesForEmployee(selectedDriver)
             .stream()
             .filter(a -> a.getAdvanceType() == PayrollAdvances.AdvanceType.ADVANCE)
-            .filter(a -> a.getStatus() == PayrollAdvances.AdvanceStatus.ACTIVE)
+            .filter(a -> {
+                BigDecimal balance = payrollAdvances.getAdvanceBalance(a.getAdvanceId());
+                return balance.compareTo(BigDecimal.ZERO) > 0;
+            })
             .collect(java.util.stream.Collectors.toList());
         
-        if (activeAdvances.isEmpty()) {
-            showAlert(Alert.AlertType.WARNING, "No Active Advances", "No active advances to repay.");
+        if (repayableAdvances.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Repayable Advances", 
+                "No advances with outstanding balances found for " + selectedDriver.getName());
             return;
         }
         
@@ -621,14 +634,14 @@ public class CashAdvancePanel extends BorderPane {
         grid.setPadding(new Insets(20, 150, 10, 10));
         
         ComboBox<PayrollAdvances.AdvanceEntry> advanceCombo = new ComboBox<>();
-        advanceCombo.setItems(FXCollections.observableArrayList(activeAdvances));
+        advanceCombo.setItems(FXCollections.observableArrayList(repayableAdvances));
         advanceCombo.setConverter(new StringConverter<PayrollAdvances.AdvanceEntry>() {
             @Override
             public String toString(PayrollAdvances.AdvanceEntry entry) {
                 if (entry == null) return "";
                 BigDecimal balance = payrollAdvances.getAdvanceBalance(entry.getAdvanceId());
-                return String.format("%s - $%,.2f (Balance: $%,.2f)", 
-                    entry.getAdvanceId(), entry.getAmount(), balance);
+                return String.format("%s - $%,.2f (Balance: $%,.2f) [%s]", 
+                    entry.getAdvanceId(), entry.getAmount(), balance, entry.getStatus());
             }
             
             @Override
@@ -640,6 +653,19 @@ public class CashAdvancePanel extends BorderPane {
         
         TextField amountField = new TextField();
         amountField.setPromptText("Payment amount");
+        
+        // Show current balance for selected advance
+        Label balanceLabel = new Label();
+        Runnable updateBalanceLabel = () -> {
+            PayrollAdvances.AdvanceEntry selected = advanceCombo.getValue();
+            if (selected != null) {
+                BigDecimal balance = payrollAdvances.getAdvanceBalance(selected.getAdvanceId());
+                balanceLabel.setText(String.format("Current balance: $%,.2f", balance));
+                balanceLabel.setTextFill(balance.compareTo(BigDecimal.ZERO) > 0 ? Color.RED : Color.GREEN);
+            }
+        };
+        updateBalanceLabel.run();
+        advanceCombo.setOnAction(e -> updateBalanceLabel.run());
         
         ComboBox<PayrollAdvances.PaymentMethod> methodCombo = new ComboBox<>();
         methodCombo.setItems(FXCollections.observableArrayList(PayrollAdvances.PaymentMethod.values()));
@@ -675,16 +701,17 @@ public class CashAdvancePanel extends BorderPane {
         grid.add(datePicker, 1, 0);
         grid.add(new Label("Advance:"), 0, 1);
         grid.add(advanceCombo, 1, 1);
-        grid.add(new Label("Amount:"), 0, 2);
-        grid.add(amountField, 1, 2);
-        grid.add(new Label("Method:"), 0, 3);
-        grid.add(methodCombo, 1, 3);
-        grid.add(new Label("Reference:"), 0, 4);
-        grid.add(referenceField, 1, 4);
-        grid.add(new Label("Processed by:"), 0, 5);
-        grid.add(processedByField, 1, 5);
-        grid.add(new Label("Notes:"), 0, 6);
-        grid.add(notesArea, 1, 6);
+        grid.add(balanceLabel, 1, 2);
+        grid.add(new Label("Amount:"), 0, 3);
+        grid.add(amountField, 1, 3);
+        grid.add(new Label("Method:"), 0, 4);
+        grid.add(methodCombo, 1, 4);
+        grid.add(new Label("Reference:"), 0, 5);
+        grid.add(referenceField, 1, 5);
+        grid.add(new Label("Processed by:"), 0, 6);
+        grid.add(processedByField, 1, 6);
+        grid.add(new Label("Notes:"), 0, 7);
+        grid.add(notesArea, 1, 7);
         
         dialog.getDialogPane().setContent(grid);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
@@ -704,10 +731,10 @@ public class CashAdvancePanel extends BorderPane {
                     }
                     
                     BigDecimal amount = new BigDecimal(amountField.getText());
+                    // Don't add date to notes anymore since we're passing it as a parameter
                     return new PaymentRequest(advance.getAdvanceId(), amount, 
                         methodCombo.getValue(), referenceField.getText(),
-                        notesArea.getText() + " (Date: " + selectedDate.format(DateTimeFormatter.ofPattern("MM/dd/yyyy")) + ")", 
-                        processedByField.getText(), selectedDate);
+                        notesArea.getText(), processedByField.getText(), selectedDate);
                 } catch (NumberFormatException e) {
                     return null;
                 }
@@ -719,22 +746,26 @@ public class CashAdvancePanel extends BorderPane {
         
         result.ifPresent(request -> {
             if (request.amount.compareTo(BigDecimal.ZERO) > 0) {
-                // Calculate the week start for the selected date
-                LocalDate weekStartForDate = request.date.with(
-                    java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+                // Log the date being passed
+                logger.info("Recording payment with selected date: {}", request.date);
+                logger.info("Advance ID: {}, Amount: ${}, Method: {}", 
+                    request.advanceId, request.amount, request.method);
                 
+                // Pass the actual selected date to recordRepayment
                 PayrollAdvances.AdvanceEntry entry = payrollAdvances.recordRepayment(
-                    selectedDriver, weekStartForDate, request.amount, request.advanceId,
+                    selectedDriver, request.date, request.amount, request.advanceId,
                     request.method, request.reference, request.notes, request.processedBy);
                 
                 if (entry != null) {
+                    logger.info("Payment recorded successfully");
                     updateAdvanceTable();
                     showAlert(Alert.AlertType.INFORMATION, "Payment Recorded", 
                         String.format("Recorded payment of $%,.2f on %s", 
                             request.amount, request.date.format(DateTimeFormatter.ofPattern("MM/dd/yyyy"))));
                 } else {
+                    logger.error("Failed to record payment");
                     showAlert(Alert.AlertType.ERROR, "Recording Failed", 
-                        "Failed to record payment.");
+                        "Failed to record payment. Check if amount exceeds balance.");
                 }
             } else {
                 showAlert(Alert.AlertType.ERROR, "Invalid Amount", "Amount must be greater than zero.");
@@ -844,6 +875,21 @@ public class CashAdvancePanel extends BorderPane {
         detailStage.show();
     }
     
+    private void recalculateStatuses() {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Recalculate All Statuses");
+        confirm.setHeaderText("Recalculate Advance Statuses");
+        confirm.setContentText("This will recalculate the status of all advances based on their current balance. Continue?");
+        
+        Optional<ButtonType> result = confirm.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            payrollAdvances.recalculateAllAdvanceStatuses();
+            updateAdvanceTable();
+            showAlert(Alert.AlertType.INFORMATION, "Recalculation Complete", 
+                "All advance statuses have been recalculated based on current balances.");
+        }
+    }
+    
     private void confirmAndDeleteEntry(PayrollAdvances.AdvanceEntry entry) {
         String message;
         
@@ -862,7 +908,7 @@ public class CashAdvancePanel extends BorderPane {
                     entry.getDate().format(DateTimeFormatter.ofPattern("MM/dd/yyyy")));
             }
         } else {
-            message = String.format("Delete %s entry of $%,.2f on %s?",
+            message = String.format("Delete %s entry of $%,.2f on %s?\n\nNote: If deleting a repayment, the advance status will be automatically recalculated.",
                 entry.getType(), entry.getAmount().abs(),
                 entry.getDate().format(DateTimeFormatter.ofPattern("MM/dd/yyyy")));
         }

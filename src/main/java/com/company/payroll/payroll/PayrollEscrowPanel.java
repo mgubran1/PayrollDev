@@ -246,11 +246,18 @@ public class PayrollEscrowPanel extends BorderPane {
             progress = Math.min(1.0, Math.max(0.0, progress));
             escrowProgressBar.setProgress(progress);
             
-            // Update status
-            if (balance.compareTo(target) >= 0) {
+            // Update status - use hasReachedTarget for display purposes
+            if (payrollEscrow.hasReachedTarget(selectedDriver)) {
                 escrowStatusLabel.setText("Fully Funded");
                 escrowStatusLabel.setTextFill(Color.GREEN);
-                suggestedWeeklyLabel.setText("$0.00");
+                
+                // Show suggested weekly as 0 only if balance exceeds target
+                if (payrollEscrow.isEscrowFullyFunded(selectedDriver)) {
+                    suggestedWeeklyLabel.setText("$0.00");
+                } else {
+                    // Still at target but not over - suggest maintaining
+                    suggestedWeeklyLabel.setText("$0.00 (At Target)");
+                }
             } else {
                 escrowStatusLabel.setText("In Progress");
                 escrowStatusLabel.setTextFill(Color.ORANGE);

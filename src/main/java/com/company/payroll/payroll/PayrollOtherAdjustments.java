@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
  */
 public class PayrollOtherAdjustments implements Serializable {
     private static final Logger logger = LoggerFactory.getLogger(PayrollOtherAdjustments.class);
-    private static final long serialVersionUID = 2L; // Incremented for compatibility
+    private static final long serialVersionUID = 3L; // Incremented for compatibility
     private static final String ADJ_DATA_FILE = "payroll_other_adjustments.dat";
     private static final String BACKUP_DATA_FILE = "payroll_other_adjustments.bak";
     private static final BigDecimal MAX_ADJUSTMENT_AMOUNT = new BigDecimal("50000.00");
@@ -174,6 +174,7 @@ public class PayrollOtherAdjustments implements Serializable {
 
     private PayrollOtherAdjustments() {
         logger.info("Initializing PayrollOtherAdjustments system");
+        loadData();
         initializeNextId();
     }
 
@@ -181,7 +182,7 @@ public class PayrollOtherAdjustments implements Serializable {
         if (instance == null) {
             synchronized (PayrollOtherAdjustments.class) {
                 if (instance == null) {
-                    instance = load();
+                    instance = new PayrollOtherAdjustments();
                 }
             }
         }
@@ -199,13 +200,14 @@ public class PayrollOtherAdjustments implements Serializable {
         lock.readLock().lock();
         try {
             logger.debug("Getting adjustments for driver {} week {}", driverId, weekStart);
-            List<OtherAdjustment> list = adjustments.getOrDefault(key(driverId, weekStart), Collections.emptyList())
+            String keyStr = key(driverId, weekStart);
+            List<OtherAdjustment> list = adjustments.getOrDefault(keyStr, Collections.emptyList())
                 .stream()
                 .filter(adj -> adj.status == OtherAdjustment.AdjustmentStatus.ACTIVE || 
                               adj.status == OtherAdjustment.AdjustmentStatus.APPROVED)
                 .map(OtherAdjustment::clone)
                 .collect(Collectors.toList());
-            logger.debug("Found {} active adjustments", list.size());
+            logger.debug("Found {} active adjustments for key {}", list.size(), keyStr);
             return list;
         } finally {
             lock.readLock().unlock();
@@ -227,11 +229,18 @@ public class PayrollOtherAdjustments implements Serializable {
                 return false;
             }
             
-            // Assign IDs to new adjustments
+            String keyStr = key(driverId, weekStart);
+            List<OtherAdjustment> existingList = adjustments.getOrDefault(keyStr, new ArrayList<>());
+            
+            // Build a map of existing adjustments by ID for tracking changes
+            Map<Integer, OtherAdjustment> existingMap = existingList.stream()
+                .collect(Collectors.toMap(adj -> adj.id, adj -> adj));
+            
+            // Process the new list
             List<OtherAdjustment> processedList = new ArrayList<>();
             for (OtherAdjustment adj : list) {
                 if (adj.id == 0) {
-                    // Create new adjustment with ID
+                    // New adjustment - assign ID
                     OtherAdjustment newAdj = new OtherAdjustment(
                         getNextId(), adj.driverId, adj.category, adj.type, adj.amount,
                         adj.description, adj.weekStart, adj.loadNumber, adj.createdBy,
@@ -243,15 +252,23 @@ public class PayrollOtherAdjustments implements Serializable {
                         String.format("Created %s adjustment: %s - $%.2f", 
                             adj.category, adj.type, adj.amount), adj.createdBy);
                 } else {
+                    // Existing adjustment - check for changes
+                    OtherAdjustment existing = existingMap.get(adj.id);
+                    if (existing != null && !existing.equals(adj)) {
+                        addAuditEntry("ADJUSTMENT_MODIFIED", String.valueOf(driverId),
+                            String.format("Modified adjustment ID %d: %s", adj.id, adj.type), 
+                            adj.createdBy);
+                    }
                     processedList.add(adj);
                 }
             }
             
-            adjustments.put(key(driverId, weekStart), new ArrayList<>(processedList));
+            // Replace the entire list for this key
+            adjustments.put(keyStr, new ArrayList<>(processedList));
             dataModified = true;
             save();
             
-            logger.info("Adjustments saved successfully");
+            logger.info("Adjustments saved successfully for key {}", keyStr);
             return true;
             
         } catch (Exception e) {
@@ -271,37 +288,66 @@ public class PayrollOtherAdjustments implements Serializable {
             logger.info("Removing adjustment with id {} by {}", id, removedBy);
             
             boolean found = false;
-            for (List<OtherAdjustment> list : adjustments.values()) {
-                for (int i = 0; i < list.size(); i++) {
-                    OtherAdjustment adj = list.get(i);
-                    if (adj.id == id) {
-                        // Create reversed adjustment instead of removing
-                        OtherAdjustment reversed = new OtherAdjustment(
-                            getNextId(), adj.driverId, adj.category, adj.type, adj.amount,
-                            "REVERSED: " + adj.description + " - " + reason,
-                            adj.weekStart, adj.loadNumber, removedBy, adj.referenceNumber,
-                            OtherAdjustment.AdjustmentStatus.REVERSED
-                        );
-                        list.add(reversed);
-                        
-                        addAuditEntry("ADJUSTMENT_REVERSED", String.valueOf(adj.driverId),
-                            String.format("Reversed adjustment ID %d: %s", id, reason), removedBy);
-                        
+            String foundKey = null;
+            OtherAdjustment toRemove = null;
+            
+            // Find the adjustment
+            for (Map.Entry<String, List<OtherAdjustment>> entry : adjustments.entrySet()) {
+                for (OtherAdjustment adj : entry.getValue()) {
+                    if (adj.id == id && (adj.status == OtherAdjustment.AdjustmentStatus.ACTIVE ||
+                                        adj.status == OtherAdjustment.AdjustmentStatus.APPROVED)) {
                         found = true;
+                        foundKey = entry.getKey();
+                        toRemove = adj;
                         break;
                     }
                 }
                 if (found) break;
             }
             
-            if (found) {
+            if (found && toRemove != null) {
+                List<OtherAdjustment> list = adjustments.get(foundKey);
+                
+                // Create reversed entry
+                OtherAdjustment reversed = new OtherAdjustment(
+                    getNextId(), toRemove.driverId, toRemove.category, toRemove.type, toRemove.amount,
+                    "REVERSED: " + toRemove.description + " - " + reason,
+                    toRemove.weekStart, toRemove.loadNumber, removedBy, toRemove.referenceNumber,
+                    OtherAdjustment.AdjustmentStatus.REVERSED
+                );
+                
+                // Update original to reversed status
+                List<OtherAdjustment> updatedList = new ArrayList<>();
+                for (OtherAdjustment adj : list) {
+                    if (adj.id == id) {
+                        // Mark original as reversed
+                        OtherAdjustment reversedOriginal = new OtherAdjustment(
+                            adj.id, adj.driverId, adj.category, adj.type, adj.amount,
+                            adj.description, adj.weekStart, adj.loadNumber, adj.createdBy,
+                            adj.referenceNumber, OtherAdjustment.AdjustmentStatus.REVERSED
+                        );
+                        updatedList.add(reversedOriginal);
+                    } else {
+                        updatedList.add(adj);
+                    }
+                }
+                
+                // Add the reversal entry
+                updatedList.add(reversed);
+                
+                adjustments.put(foundKey, updatedList);
+                
+                addAuditEntry("ADJUSTMENT_REVERSED", String.valueOf(toRemove.driverId),
+                    String.format("Reversed adjustment ID %d: %s - %s", id, toRemove.type, reason), removedBy);
+                
                 dataModified = true;
                 save();
+                
                 logger.info("Adjustment {} reversed successfully", id);
                 return new OperationResult(true, "Adjustment reversed successfully");
             } else {
-                logger.warn("No adjustment found with id {}", id);
-                return new OperationResult(false, "Adjustment not found");
+                logger.warn("No active adjustment found with id {}", id);
+                return new OperationResult(false, "Adjustment not found or already reversed");
             }
             
         } catch (Exception e) {
@@ -341,6 +387,32 @@ public class PayrollOtherAdjustments implements Serializable {
     // Backward compatibility
     public double getTotalDeductions(int driverId, LocalDate weekStart) {
         return getTotalDeductionsBD(driverId, weekStart).doubleValue();
+    }
+    
+    /**
+     * Get fuel deductions specifically
+     */
+    public BigDecimal getFuelDeductionsBD(int driverId, LocalDate weekStart) {
+        lock.readLock().lock();
+        try {
+            logger.debug("Calculating fuel deductions for driver {} week {}", driverId, weekStart);
+            List<OtherAdjustment> list = adjustments.getOrDefault(key(driverId, weekStart), Collections.emptyList());
+            BigDecimal total = list.stream()
+                .filter(adj -> "Deduction".equals(adj.category) && 
+                              "Fuel".equals(adj.type) &&
+                              (adj.status == OtherAdjustment.AdjustmentStatus.ACTIVE || 
+                               adj.status == OtherAdjustment.AdjustmentStatus.APPROVED))
+                .map(adj -> adj.amount.abs())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            logger.debug("Fuel deductions for driver {} week {}: ${}", driverId, weekStart, total);
+            return total;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+    
+    public double getFuelDeductions(int driverId, LocalDate weekStart) {
+        return getFuelDeductionsBD(driverId, weekStart).doubleValue();
     }
 
     /**
@@ -410,19 +482,23 @@ public class PayrollOtherAdjustments implements Serializable {
             BigDecimal totalDeductions = BigDecimal.ZERO;
             BigDecimal totalReimbursements = BigDecimal.ZERO;
             BigDecimal totalBonuses = BigDecimal.ZERO;
+            BigDecimal totalFuelDeductions = BigDecimal.ZERO;
             long adjustmentCount = 0;
             
             for (Map.Entry<String, List<OtherAdjustment>> entry : adjustments.entrySet()) {
                 if (entry.getKey().startsWith(driverId + "_")) {
                     for (OtherAdjustment adj : entry.getValue()) {
                         if ((adj.status == OtherAdjustment.AdjustmentStatus.ACTIVE || 
-                             adj.status == OtherAdjustment.AdjustmentStatus.APPROVED) &&
+							 adj.status == OtherAdjustment.AdjustmentStatus.APPROVED) &&
                             !adj.weekStart.isBefore(startDate) && 
                             !adj.weekStart.isAfter(endDate)) {
                             
                             adjustmentCount++;
                             if ("Deduction".equals(adj.category)) {
                                 totalDeductions = totalDeductions.add(adj.amount);
+                                if ("Fuel".equals(adj.type)) {
+                                    totalFuelDeductions = totalFuelDeductions.add(adj.amount);
+                                }
                             } else if ("Reimbursement".equals(adj.category)) {
                                 if (adj.type != null && adj.type.startsWith("Load Bonus:")) {
                                     totalBonuses = totalBonuses.add(adj.amount);
@@ -436,7 +512,7 @@ public class PayrollOtherAdjustments implements Serializable {
             }
             
             return new AdjustmentSummary(driverId, totalDeductions, totalReimbursements, 
-                                       totalBonuses, adjustmentCount);
+                                       totalBonuses, totalFuelDeductions, adjustmentCount);
         } finally {
             lock.readLock().unlock();
         }
@@ -475,6 +551,7 @@ public class PayrollOtherAdjustments implements Serializable {
             }
         }
         nextId = maxId + 1;
+        logger.info("Initialized nextId to {}", nextId);
     }
 
     private ValidationResult validateAdjustments(List<OtherAdjustment> adjustments) {
@@ -495,9 +572,19 @@ public class PayrollOtherAdjustments implements Serializable {
     private void addAuditEntry(String action, String employeeId, String details, String performedBy) {
         AuditEntry entry = new AuditEntry(action, employeeId, details, performedBy);
         auditTrail.put(entry.id, entry);
+        // Keep audit trail size manageable
+        if (auditTrail.size() > 10000) {
+            // Remove oldest entries
+            List<String> oldestKeys = auditTrail.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue((a, b) -> a.timestamp.compareTo(b.timestamp)))
+                .limit(1000)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+            oldestKeys.forEach(auditTrail::remove);
+        }
     }
 
-    private synchronized void save() {
+    private void save() {
         if (!dataModified) {
             return;
         }
@@ -529,29 +616,30 @@ public class PayrollOtherAdjustments implements Serializable {
         }
     }
 
-    private static PayrollOtherAdjustments load() {
+    private void loadData() {
         File mainFile = new File(ADJ_DATA_FILE);
         File backupFile = new File(BACKUP_DATA_FILE);
         
         // Try main file first
         PayrollOtherAdjustments loaded = loadFromFile(mainFile);
         if (loaded != null) {
-            return loaded;
+            copyFrom(loaded);
+            return;
         }
         
         // Try backup file
         logger.warn("Main data file corrupted or missing, trying backup");
         loaded = loadFromFile(backupFile);
         if (loaded != null) {
-            return loaded;
+            copyFrom(loaded);
+            return;
         }
         
-        // Create new instance
-        logger.info("No valid data files found, creating new instance");
-        return new PayrollOtherAdjustments();
+        // No data files found
+        logger.info("No valid data files found, starting with empty data");
     }
 
-    private static PayrollOtherAdjustments loadFromFile(File file) {
+    private PayrollOtherAdjustments loadFromFile(File file) {
         if (!file.exists()) {
             return null;
         }
@@ -560,16 +648,22 @@ public class PayrollOtherAdjustments implements Serializable {
                 new BufferedInputStream(new FileInputStream(file)))) {
             Object obj = ois.readObject();
             if (obj instanceof PayrollOtherAdjustments) {
-                PayrollOtherAdjustments instance = (PayrollOtherAdjustments) obj;
-                instance.initializeNextId();
                 logger.info("Loaded adjustments data from {}", file.getName());
-                return instance;
+                return (PayrollOtherAdjustments) obj;
             }
         } catch (Exception e) {
             logger.error("Error loading from {}: {}", file.getName(), e.getMessage());
         }
         
         return null;
+    }
+    
+    private void copyFrom(PayrollOtherAdjustments other) {
+        this.adjustments.clear();
+        this.adjustments.putAll(other.adjustments);
+        this.auditTrail.clear();
+        this.auditTrail.putAll(other.auditTrail);
+        this.dataModified = false;
     }
 
     // Result classes
@@ -605,15 +699,21 @@ public class PayrollOtherAdjustments implements Serializable {
         public final BigDecimal totalDeductions;
         public final BigDecimal totalReimbursements;
         public final BigDecimal totalBonuses;
+        public final BigDecimal totalFuelDeductions;
         public final long adjustmentCount;
         
         public AdjustmentSummary(int driverId, BigDecimal totalDeductions, BigDecimal totalReimbursements,
-                               BigDecimal totalBonuses, long adjustmentCount) {
+                               BigDecimal totalBonuses, BigDecimal totalFuelDeductions, long adjustmentCount) {
             this.driverId = driverId;
             this.totalDeductions = totalDeductions;
             this.totalReimbursements = totalReimbursements;
             this.totalBonuses = totalBonuses;
+            this.totalFuelDeductions = totalFuelDeductions;
             this.adjustmentCount = adjustmentCount;
+        }
+        
+        public BigDecimal getNetAdjustment() {
+            return totalReimbursements.add(totalBonuses).subtract(totalDeductions);
         }
     }
 }

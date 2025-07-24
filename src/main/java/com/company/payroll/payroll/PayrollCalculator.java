@@ -132,12 +132,24 @@ public class PayrollCalculator {
         double gross = grossBD.doubleValue();
         logger.debug("Driver {} - Gross from {} loads: ${}", driver.getName(), loads.size(), gross);
 
-        // Calculate fuel costs
-        BigDecimal fuelBD = fuels.stream()
+        // Calculate fuel costs from fuel transactions
+        BigDecimal fuelTransactionsBD = fuels.stream()
             .map(f -> BigDecimal.valueOf(f.getAmt() + f.getFees()))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
-        double fuel = fuelBD.doubleValue();
-        logger.debug("Driver {} - Fuel from {} transactions: ${}", driver.getName(), fuels.size(), fuel);
+        
+        // Get fuel deductions from adjustments panel
+        BigDecimal fuelAdjustmentsBD = payrollOtherAdjustments.getFuelDeductionsBD(driver.getId(), start);
+        
+        // Total fuel is sum of both sources
+        BigDecimal totalFuelBD = fuelTransactionsBD.add(fuelAdjustmentsBD);
+        double fuel = totalFuelBD.doubleValue();
+        
+        if (fuelAdjustmentsBD.compareTo(BigDecimal.ZERO) > 0) {
+            logger.info("Driver {} - Fuel deductions: ${} from transactions, ${} from adjustments, total: ${}", 
+                driver.getName(), fuelTransactionsBD, fuelAdjustmentsBD, totalFuelBD);
+        } else {
+            logger.debug("Driver {} - Fuel from {} transactions: ${}", driver.getName(), fuels.size(), fuel);
+        }
 
         // Calculate service fee with bonus adjustments
         BigDecimal serviceFeePct = BigDecimal.valueOf(serviceFeePercent);
@@ -196,18 +208,25 @@ public class PayrollCalculator {
         logger.debug("Driver {} - Advances given this week: ${}", driver.getName(), advancesGiven);
         
         // Only deduct repayments that are manually scheduled/recorded for the week
+        // IMPORTANT: Repayments are stored as negative values, so we need to handle this correctly
         List<PayrollAdvances.AdvanceEntry> weeklyRepayments = payrollAdvances.getEntriesForEmployee(driver.getId()).stream()
             .filter(e -> e.getAdvanceType() == PayrollAdvances.AdvanceType.REPAYMENT)
             .filter(e -> !e.getDate().isBefore(start) && !e.getDate().isAfter(end))
             .collect(Collectors.toList());
+        
+        // Sum the repayments (they're already negative, so we get the absolute value for display)
         advanceRepaymentsBD = weeklyRepayments.stream()
             .map(PayrollAdvances.AdvanceEntry::getAmount)
+            .map(BigDecimal::abs)  // Convert to positive for display/calculation
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         double advanceRepayments = advanceRepaymentsBD.doubleValue();
         logger.debug("Driver {} - Advance repayments this week: ${}", driver.getName(), advanceRepayments);
 
-        // Other deductions and reimbursements
-        double otherDeductions = payrollOtherAdjustments.getTotalDeductions(driver.getId(), start);
+        // Other deductions and reimbursements (excluding fuel which is handled separately)
+        BigDecimal otherDeductionsBD = payrollOtherAdjustments.getTotalDeductionsBD(driver.getId(), start)
+            .subtract(fuelAdjustmentsBD); // Subtract fuel to avoid double counting
+        double otherDeductions = otherDeductionsBD.doubleValue();
+        
         double reimbursements = payrollOtherAdjustments.getTotalReimbursements(driver.getId(), start);
         double totalReimbursements = Math.abs(reimbursements) + Math.abs(totalBonus);
 
@@ -218,7 +237,7 @@ public class PayrollCalculator {
             BigDecimal.valueOf(grossAfterFuel), 
             BigDecimal.valueOf(recurringFees),
             advanceRepaymentsBD, 
-            BigDecimal.valueOf(otherDeductions), 
+            otherDeductionsBD, 
             BigDecimal.valueOf(totalReimbursements)
         );
         
@@ -230,8 +249,8 @@ public class PayrollCalculator {
         double net = grossAfterFuel - Math.abs(recurringFees) - Math.abs(advanceRepayments) 
                    - Math.abs(escrowDeposits) - Math.abs(otherDeductions) + totalReimbursements;
 
-        logger.info("Driver {} - Summary: Gross=${}, Deductions=${}, Reimbursements=${}, Net=${}", 
-            driver.getName(), gross, totalDeductions, totalReimbursements, net);
+        logger.info("Driver {} - Summary: Gross=${}, Fuel=${}, Deductions=${}, Reimbursements=${}, Net=${}", 
+            driver.getName(), gross, fuel, totalDeductions, totalReimbursements, net);
 
         // Create payroll row - UPDATED to include driver ID
         return new PayrollRow(
@@ -283,32 +302,38 @@ public class PayrollCalculator {
     }
     
     /**
-     * Calculate escrow deposit amount
+     * Calculate escrow deposit amount - UPDATED to use isEscrowFullyFunded()
      */
     private BigDecimal calculateEscrowDeposit(Employee driver, LocalDate weekStart, BigDecimal gross,
                                             BigDecimal grossAfterFuel, BigDecimal recurringFees,
                                             BigDecimal advanceRepayments, BigDecimal otherDeductions,
                                             BigDecimal reimbursements) {
-        BigDecimal remainingToTarget = payrollEscrow.getRemainingToTarget(driver);
         
-        // Check if escrow is already fully funded
-        if (remainingToTarget.compareTo(BigDecimal.ZERO) <= 0) {
-            logger.debug("Driver {} - Escrow already fully funded", driver.getName());
+        // Use the new isEscrowFullyFunded method which only returns true when balance EXCEEDS target
+        if (payrollEscrow.isEscrowFullyFunded(driver)) {
+            logger.debug("Driver {} - Escrow balance exceeds target, no deduction needed", driver.getName());
             return BigDecimal.ZERO;
         }
+        
+        BigDecimal remainingToTarget = payrollEscrow.getRemainingToTarget(driver);
+        BigDecimal currentBalance = payrollEscrow.getCurrentBalance(driver);
+        BigDecimal targetAmount = payrollEscrow.getTargetAmount(driver);
+        
+        logger.debug("Driver {} - Escrow status: Current=${}, Target=${}, Remaining=${}", 
+            driver.getName(), currentBalance, targetAmount, remainingToTarget);
         
         // Check for manual weekly deposit first
         BigDecimal manualEscrowDeposit = payrollEscrow.getWeeklyAmount(driver, weekStart);
         
-        // If manual deposit exists, use it
+        // If manual deposit exists, use it (even if at target amount)
         if (manualEscrowDeposit.compareTo(BigDecimal.ZERO) > 0) {
-            logger.info("Manual escrow deposit for driver {}: ${} (Remaining to target: ${})", 
-                driver.getName(), manualEscrowDeposit, remainingToTarget);
+            logger.info("Manual escrow deposit for driver {}: ${} (Current balance: ${}, Target: ${})", 
+                driver.getName(), manualEscrowDeposit, currentBalance, targetAmount);
             return manualEscrowDeposit;
         }
         
         // Calculate suggested amount for informational purposes only (not applied)
-        if (gross.compareTo(BigDecimal.ZERO) > 0) {
+        if (gross.compareTo(BigDecimal.ZERO) > 0 && remainingToTarget.compareTo(BigDecimal.ZERO) > 0) {
             // Calculate potential net before escrow
             BigDecimal potentialNetBeforeEscrow = grossAfterFuel
                 .subtract(recurringFees.abs())
@@ -486,7 +511,7 @@ public class PayrollCalculator {
          * Export to CSV format with proper escaping
          */
         public String toCSVRow() {
-            return String.format("%s,%s,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+            return String.format("%s,%s,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
                     escapeCSV(driverName), 
                     escapeCSV(truckUnit), 
                     loadCount, 

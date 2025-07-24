@@ -186,8 +186,8 @@ public class PayrollAdvances implements Serializable {
         return instance;
     }
     
-    // Advance management
-    public AdvanceEntry createAdvance(Employee employee, LocalDate weekStart, BigDecimal amount, 
+    // Advance management - Updated to accept date parameter
+    public AdvanceEntry createAdvance(Employee employee, LocalDate advanceDate, BigDecimal amount, 
                                     int weeksToRepay, String notes, String approvedBy) {
         // Validation
         if (amount.compareTo(DEFAULT_MIN_ADVANCE) < 0) {
@@ -213,16 +213,20 @@ public class PayrollAdvances implements Serializable {
             return null;
         }
         
-        AdvanceEntry entry = new AdvanceEntry(LocalDate.now(), weekStart, employee, 
+        // Calculate week start for the given date
+        LocalDate weekStart = advanceDate.with(
+            java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        
+        AdvanceEntry entry = new AdvanceEntry(advanceDate, weekStart, employee, 
             amount, weeksToRepay, notes, approvedBy);
         entries.add(entry);
         saveData();
-        logger.info("Created advance {} for employee {} amount ${}", 
-            entry.getAdvanceId(), employee.getName(), amount);
+        logger.info("Created advance {} for employee {} amount ${} on date {}", 
+            entry.getAdvanceId(), employee.getName(), amount, advanceDate);
         return entry;
     }
     
-    public AdvanceEntry recordRepayment(Employee employee, LocalDate weekStart, BigDecimal amount,
+    public AdvanceEntry recordRepayment(Employee employee, LocalDate paymentDate, BigDecimal amount,
                                       String advanceId, PaymentMethod method, String referenceNumber,
                                       String notes, String processedBy) {
         // Find the parent advance
@@ -232,12 +236,26 @@ public class PayrollAdvances implements Serializable {
             return null;
         }
         
-        if (parentAdvance.getStatus() != AdvanceStatus.ACTIVE) {
+        // Allow repayments on COMPLETED advances (in case of deletion/correction scenarios)
+        if (parentAdvance.getStatus() != AdvanceStatus.ACTIVE && 
+            parentAdvance.getStatus() != AdvanceStatus.COMPLETED) {
             logger.warn("Cannot add repayment to {} advance", parentAdvance.getStatus());
             return null;
         }
         
-        AdvanceEntry entry = new AdvanceEntry(LocalDate.now(), weekStart, employee,
+        // Check if repayment exceeds balance
+        BigDecimal currentBalance = getAdvanceBalance(advanceId);
+        if (amount.compareTo(currentBalance) > 0) {
+            logger.warn("Repayment amount ${} exceeds current balance ${} for advance {}", 
+                amount, currentBalance, advanceId);
+            return null;
+        }
+        
+        // Calculate week start for the given date
+        LocalDate weekStart = paymentDate.with(
+            java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        
+        AdvanceEntry entry = new AdvanceEntry(paymentDate, weekStart, employee,
             amount, advanceId, method, referenceNumber, notes, processedBy);
         entries.add(entry);
         
@@ -245,18 +263,23 @@ public class PayrollAdvances implements Serializable {
         updateAdvanceStatus(advanceId);
         
         saveData();
-        logger.info("Recorded repayment of ${} for advance {}", amount, advanceId);
+        logger.info("Recorded repayment of ${} for advance {} on date {}", amount, advanceId, paymentDate);
         return entry;
     }
     
     public AdvanceEntry createAdjustment(Employee employee, AdvanceType type, BigDecimal amount,
                                        String advanceId, String notes, String processedBy) {
+        return createAdjustment(employee, LocalDate.now(), type, amount, advanceId, notes, processedBy);
+    }
+    
+    public AdvanceEntry createAdjustment(Employee employee, LocalDate adjustmentDate, AdvanceType type, 
+                                       BigDecimal amount, String advanceId, String notes, String processedBy) {
         if (type != AdvanceType.ADJUSTMENT && type != AdvanceType.FORGIVENESS) {
             logger.error("Invalid adjustment type: {}", type);
             return null;
         }
         
-        AdvanceEntry entry = new AdvanceEntry(LocalDate.now(), employee, type,
+        AdvanceEntry entry = new AdvanceEntry(adjustmentDate, employee, type,
             amount, advanceId, notes, processedBy);
         entries.add(entry);
         
@@ -269,14 +292,70 @@ public class PayrollAdvances implements Serializable {
         }
         
         saveData();
-        logger.info("Created {} of ${} for advance {}", type, amount, advanceId);
+        logger.info("Created {} of ${} for advance {} on date {}", type, amount, advanceId, adjustmentDate);
         return entry;
     }
     
     public void deleteEntry(String entryId) {
+        // Find the entry to be deleted
+        Optional<AdvanceEntry> entryOpt = entries.stream()
+            .filter(e -> e.getId().equals(entryId))
+            .findFirst();
+            
+        if (entryOpt.isPresent()) {
+            AdvanceEntry entry = entryOpt.get();
+            
+            if (entry.getAdvanceType() == AdvanceType.ADVANCE) {
+                // Delete all repayments for this advance
+                String advanceId = entry.getAdvanceId();
+                entries.removeIf(e -> advanceId.equals(e.getParentAdvanceId()));
+                logger.info("Deleted all repayments for advance {}", advanceId);
+            } else if (entry.getAdvanceType() == AdvanceType.REPAYMENT) {
+                // If deleting a repayment, we need to recalculate the advance status
+                String parentAdvanceId = entry.getParentAdvanceId();
+                
+                // Remove the entry first
+                entries.removeIf(e -> e.getId().equals(entryId));
+                
+                // Then update the parent advance status
+                if (parentAdvanceId != null) {
+                    recalculateAdvanceStatus(parentAdvanceId);
+                    logger.info("Deleted repayment and recalculated status for advance {}", parentAdvanceId);
+                }
+                
+                saveData();
+                return; // Return early to avoid double removal
+            }
+        }
+        
         entries.removeIf(e -> e.getId().equals(entryId));
         saveData();
         logger.info("Deleted advance entry {}", entryId);
+    }
+    
+    /**
+     * Recalculate advance status after changes (like deletion of repayments)
+     */
+    private void recalculateAdvanceStatus(String advanceId) {
+        AdvanceEntry advance = findAdvanceById(advanceId);
+        if (advance == null) return;
+        
+        // Don't change status if it's been manually set to cancelled, defaulted, or forgiven
+        if (advance.getStatus() == AdvanceStatus.CANCELLED ||
+            advance.getStatus() == AdvanceStatus.DEFAULTED ||
+            advance.getStatus() == AdvanceStatus.FORGIVEN) {
+            return;
+        }
+        
+        BigDecimal balance = getAdvanceBalance(advanceId);
+        
+        if (balance.compareTo(BigDecimal.ZERO) <= 0) {
+            advance.setStatus(AdvanceStatus.COMPLETED);
+            logger.info("Advance {} marked as completed (balance: ${})", advanceId, balance);
+        } else {
+            advance.setStatus(AdvanceStatus.ACTIVE);
+            logger.info("Advance {} marked as active (balance: ${})", advanceId, balance);
+        }
     }
     
     // Query methods
@@ -441,6 +520,23 @@ public class PayrollAdvances implements Serializable {
         }
     }
     
+    /**
+     * Manually recalculate all advance statuses in the system.
+     * Useful for data integrity checks or after bulk operations.
+     */
+    public void recalculateAllAdvanceStatuses() {
+        List<AdvanceEntry> advances = entries.stream()
+            .filter(e -> e.getAdvanceType() == AdvanceType.ADVANCE)
+            .collect(Collectors.toList());
+            
+        for (AdvanceEntry advance : advances) {
+            recalculateAdvanceStatus(advance.getAdvanceId());
+        }
+        
+        saveData();
+        logger.info("Recalculated status for {} advances", advances.size());
+    }
+    
     public void markAdvanceAsDefaulted(String advanceId, String reason) {
         AdvanceEntry advance = findAdvanceById(advanceId);
         if (advance != null && advance.getStatus() == AdvanceStatus.ACTIVE) {
@@ -455,8 +551,8 @@ public class PayrollAdvances implements Serializable {
         AdvanceEntry advance = findAdvanceById(advanceId);
         if (advance != null && advance.getStatus() == AdvanceStatus.ACTIVE) {
             // Check if there are any repayments
-            BigDecimal totalRepaid = getTotalRepaid(advance.getEmployeeId());
-            if (totalRepaid.compareTo(BigDecimal.ZERO) > 0) {
+            List<AdvanceEntry> repayments = getRepaymentsForAdvance(advanceId);
+            if (!repayments.isEmpty()) {
                 logger.warn("Cannot cancel advance {} with existing repayments", advanceId);
                 return;
             }
