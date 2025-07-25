@@ -243,11 +243,17 @@ public class PayrollCalculator {
         
         double escrowDeposits = escrowDepositBD.doubleValue();
 
+        // Escrow withdrawals for the week (add to net pay)
+        BigDecimal escrowWithdrawalBD = payrollEscrow.getWeeklyWithdrawals(driver, start);
+        double escrowWithdrawals = escrowWithdrawalBD.doubleValue();
+
         // Calculate final net pay
-        double totalDeductions = Math.abs(fuel) + Math.abs(recurringFees) + Math.abs(advanceRepayments) 
-                              + Math.abs(escrowDeposits) + Math.abs(otherDeductions);
-        double net = grossAfterFuel - Math.abs(recurringFees) - Math.abs(advanceRepayments) 
-                   - Math.abs(escrowDeposits) - Math.abs(otherDeductions) + totalReimbursements;
+        double totalDeductions = Math.abs(fuel) + Math.abs(recurringFees) + Math.abs(advanceRepayments)
+                              + Math.abs(escrowDeposits) + Math.abs(otherDeductions)
+                              + Math.abs(advancesGiven);
+        double net = grossAfterFuel - Math.abs(recurringFees) - Math.abs(advanceRepayments)
+                   - Math.abs(escrowDeposits) - Math.abs(otherDeductions)
+                   - Math.abs(advancesGiven) + totalReimbursements + Math.abs(escrowWithdrawals);
 
         logger.info("Driver {} - Summary: Gross=${}, Fuel=${}, Deductions=${}, Reimbursements=${}, Net=${}", 
             driver.getName(), gross, fuel, totalDeductions, totalReimbursements, net);
@@ -269,6 +275,7 @@ public class PayrollCalculator {
             advancesGiven,
             Math.abs(advanceRepayments),
             Math.abs(escrowDeposits),
+            Math.abs(escrowWithdrawals),
             Math.abs(otherDeductions),
             totalReimbursements,
             net,
@@ -378,7 +385,7 @@ public class PayrollCalculator {
             driver.getId(),  // Added driver ID
             driver.getName() + " (ERROR: " + errorMessage + ")",
             driver.getTruckUnit() != null ? driver.getTruckUnit() : "",
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             Collections.emptyList(),
             Collections.emptyList(),
             0.0,
@@ -404,6 +411,7 @@ public class PayrollCalculator {
         double totalAdvancesGiven = rows.stream().mapToDouble(r -> r.advancesGiven).sum();
         double totalAdvanceRepayments = rows.stream().mapToDouble(r -> r.advanceRepayments).sum();
         double totalEscrowDeposits = rows.stream().mapToDouble(r -> r.escrowDeposits).sum();
+        double totalEscrowWithdrawals = rows.stream().mapToDouble(r -> r.escrowWithdrawals).sum();
         double totalOtherDeductions = rows.stream().mapToDouble(r -> r.otherDeductions).sum();
         double totalReimbursements = rows.stream().mapToDouble(r -> r.reimbursements).sum();
         double totalNetPay = rows.stream().mapToDouble(r -> r.netPay).sum();
@@ -419,6 +427,7 @@ public class PayrollCalculator {
         totals.put("advancesGiven", totalAdvancesGiven);
         totals.put("advanceRepayments", totalAdvanceRepayments);
         totals.put("escrowDeposits", totalEscrowDeposits);
+        totals.put("escrowWithdrawals", totalEscrowWithdrawals);
         totals.put("otherDeductions", totalOtherDeductions);
         totals.put("reimbursements", totalReimbursements);
         totals.put("netPay", totalNetPay);
@@ -462,6 +471,7 @@ public class PayrollCalculator {
         public final double advancesGiven;
         public final double advanceRepayments;
         public final double escrowDeposits;
+        public final double escrowWithdrawals;
         public final double otherDeductions;
         public final double reimbursements;
         public final double netPay;
@@ -476,11 +486,12 @@ public class PayrollCalculator {
             return loadCount;
         }
 
-        public PayrollRow(int driverId, String driverName, String truckUnit, int loadCount, double gross, double serviceFee, 
-                          double grossAfterServiceFee, double companyPay, double driverPay, double fuel, 
-                          double grossAfterFuel, double recurringFees, double advancesGiven, 
-                          double advanceRepayments, double escrowDeposits, double otherDeductions, 
-                          double reimbursements, double netPay, List<Load> loads, List<FuelTransaction> fuels,
+        public PayrollRow(int driverId, String driverName, String truckUnit, int loadCount, double gross, double serviceFee,
+                          double grossAfterServiceFee, double companyPay, double driverPay, double fuel,
+                          double grossAfterFuel, double recurringFees, double advancesGiven,
+                          double advanceRepayments, double escrowDeposits, double escrowWithdrawals,
+                          double otherDeductions, double reimbursements, double netPay,
+                          List<Load> loads, List<FuelTransaction> fuels,
                           double companyPercent, double driverPercent, double serviceFeePercent) {
             this.driverId = driverId;  // Store driver ID
             this.driverName = driverName;
@@ -497,6 +508,7 @@ public class PayrollCalculator {
             this.advancesGiven = advancesGiven;
             this.advanceRepayments = advanceRepayments;
             this.escrowDeposits = escrowDeposits;
+            this.escrowWithdrawals = escrowWithdrawals;
             this.otherDeductions = otherDeductions;
             this.reimbursements = reimbursements;
             this.netPay = netPay;
@@ -511,23 +523,24 @@ public class PayrollCalculator {
          * Export to CSV format with proper escaping
          */
         public String toCSVRow() {
-            return String.format("%s,%s,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
-                    escapeCSV(driverName), 
-                    escapeCSV(truckUnit), 
-                    loadCount, 
-                    gross, 
-                    serviceFee, 
+            return String.format("%s,%s,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+                    escapeCSV(driverName),
+                    escapeCSV(truckUnit),
+                    loadCount,
+                    gross,
+                    serviceFee,
                     grossAfterServiceFee,
                     companyPay, 
                     driverPay, 
                     fuel, 
                     grossAfterFuel,
                     recurringFees, 
-                    advancesGiven, 
+                    advancesGiven,
                     advanceRepayments,
-                    escrowDeposits, 
-                    otherDeductions, 
-                    reimbursements, 
+                    escrowDeposits,
+                    escrowWithdrawals,
+                    otherDeductions,
+                    reimbursements,
                     netPay);
         }
         
@@ -535,23 +548,24 @@ public class PayrollCalculator {
          * Export to TSV format
          */
         public String toTSVRow() {
-            return String.format("%s\t%s\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f",
-                    driverName, 
-                    truckUnit, 
-                    loadCount, 
-                    gross, 
-                    serviceFee, 
+            return String.format("%s\t%s\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f",
+                    driverName,
+                    truckUnit,
+                    loadCount,
+                    gross,
+                    serviceFee,
                     grossAfterServiceFee,
                     companyPay, 
                     driverPay, 
                     fuel, 
                     grossAfterFuel,
                     recurringFees, 
-                    advancesGiven, 
+                    advancesGiven,
                     advanceRepayments,
-                    escrowDeposits, 
-                    otherDeductions, 
-                    reimbursements, 
+                    escrowDeposits,
+                    escrowWithdrawals,
+                    otherDeductions,
+                    reimbursements,
                     netPay);
         }
         
@@ -570,8 +584,9 @@ public class PayrollCalculator {
          * Get a detailed summary of deductions
          */
         public double getTotalDeductions() {
-            return Math.abs(serviceFee) + Math.abs(fuel) + Math.abs(recurringFees) + 
-                   Math.abs(advanceRepayments) + Math.abs(escrowDeposits) + Math.abs(otherDeductions);
+            return Math.abs(serviceFee) + Math.abs(fuel) + Math.abs(recurringFees) +
+                   Math.abs(advanceRepayments) + Math.abs(escrowDeposits) +
+                   Math.abs(advancesGiven) + Math.abs(otherDeductions);
         }
         
         /**
@@ -601,6 +616,7 @@ public class PayrollCalculator {
             breakdown.put("recurringFees", (Math.abs(recurringFees) / total) * 100);
             breakdown.put("advanceRepayments", (Math.abs(advanceRepayments) / total) * 100);
             breakdown.put("escrowDeposits", (Math.abs(escrowDeposits) / total) * 100);
+            breakdown.put("advancesGiven", (Math.abs(advancesGiven) / total) * 100);
             breakdown.put("otherDeductions", (Math.abs(otherDeductions) / total) * 100);
             
             return breakdown;
