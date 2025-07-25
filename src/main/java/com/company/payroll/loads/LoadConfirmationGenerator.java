@@ -321,13 +321,18 @@ public class LoadConfirmationGenerator {
             
             for (int i = 0; i < additionalPickups.size(); i++) {
                 LoadLocation loc = additionalPickups.get(i);
-                String info = String.format("%d. %s - %s", 
-                    i + 1, 
+                String info = String.format("%d. %s - %s",
+                    i + 1,
                     loc.getCustomer() != null ? loc.getCustomer() : "",
                     formatLocationAddress(loc));
-                
-                if (loc.getTime() != null) {
-                    info += " @ " + loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a"));
+                String dt = formatDateTime(loc.getDate(), loc.getTime());
+                if (!dt.isEmpty()) {
+                    info += " - " + dt;
+                }
+
+                String dt = formatDateTime(loc.getDate(), loc.getTime());
+                if (!dt.isEmpty()) {
+                    info += " - " + dt;
                 }
                 
                 contentStream.setFont(normalFont, 9);
@@ -396,13 +401,18 @@ public class LoadConfirmationGenerator {
             
             for (int i = 0; i < additionalDrops.size(); i++) {
                 LoadLocation loc = additionalDrops.get(i);
-                String info = String.format("%d. %s - %s", 
-                    i + 1, 
+                String info = String.format("%d. %s - %s",
+                    i + 1,
                     loc.getCustomer() != null ? loc.getCustomer() : "",
                     formatLocationAddress(loc));
-                
-                if (loc.getTime() != null) {
-                    info += " @ " + loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a"));
+                String dt = formatDateTime(loc.getDate(), loc.getTime());
+                if (!dt.isEmpty()) {
+                    info += " - " + dt;
+                }
+
+                String dt = formatDateTime(loc.getDate(), loc.getTime());
+                if (!dt.isEmpty()) {
+                    info += " - " + dt;
                 }
                 
                 contentStream.setFont(normalFont, 9);
@@ -744,10 +754,10 @@ public class LoadConfirmationGenerator {
                 String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
                     loc.getCustomer() : "";
                 String address = formatLocationAddress(loc);
-                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
-                
-                String locationLine = String.format("%d. %s - %s - %s", 
-                    i + 1, customer, address, time);
+                String dt = formatDateTime(loc.getDate(), loc.getTime());
+
+                String locationLine = String.format("%d. %s - %s%s",
+                    i + 1, customer, address, dt.isEmpty() ? "" : " - " + dt);
                 
                 contentStream.setFont(normalFont, 10);
                 contentStream.beginText();
@@ -814,10 +824,10 @@ public class LoadConfirmationGenerator {
                 String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
                     loc.getCustomer() : "";
                 String address = formatLocationAddress(loc);
-                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
-                
-                String locationLine = String.format("%d. %s - %s - %s", 
-                    i + 1, customer, address, time);
+                String dt = formatDateTime(loc.getDate(), loc.getTime());
+
+                String locationLine = String.format("%d. %s - %s%s",
+                    i + 1, customer, address, dt.isEmpty() ? "" : " - " + dt);
                 
                 contentStream.setFont(normalFont, 10);
                 contentStream.beginText();
@@ -1071,10 +1081,10 @@ public class LoadConfirmationGenerator {
                 String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
                     loc.getCustomer() : "";
                 String address = formatLocationAddress(loc);
-                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
-                
-                String locationLine = String.format("%d. %s - %s - %s", 
-                    i + 1, customer, address, time);
+                String dt = formatDateTime(loc.getDate(), loc.getTime());
+
+                String locationLine = String.format("%d. %s - %s%s",
+                    i + 1, customer, address, dt.isEmpty() ? "" : " - " + dt);
                 
                 contentStream.setFont(normalFont, 7); // Reduced font size
                 contentStream.beginText();
@@ -1137,10 +1147,10 @@ public class LoadConfirmationGenerator {
                 String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
                     loc.getCustomer() : "";
                 String address = formatLocationAddress(loc);
-                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
-                
-                String locationLine = String.format("%d. %s - %s - %s", 
-                    i + 1, customer, address, time);
+                String dt = formatDateTime(loc.getDate(), loc.getTime());
+
+                String locationLine = String.format("%d. %s - %s%s",
+                    i + 1, customer, address, dt.isEmpty() ? "" : " - " + dt);
                 
                 contentStream.setFont(normalFont, 7); // Reduced font size
                 contentStream.beginText();

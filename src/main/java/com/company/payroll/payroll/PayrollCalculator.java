@@ -249,11 +249,10 @@ public class PayrollCalculator {
 
         // Calculate final net pay
         double totalDeductions = Math.abs(fuel) + Math.abs(recurringFees) + Math.abs(advanceRepayments)
-                              + Math.abs(escrowDeposits) + Math.abs(otherDeductions)
-                              + Math.abs(advancesGiven);
+                              + Math.abs(escrowDeposits) + Math.abs(otherDeductions);
         double net = grossAfterFuel - Math.abs(recurringFees) - Math.abs(advanceRepayments)
                    - Math.abs(escrowDeposits) - Math.abs(otherDeductions)
-                   - Math.abs(advancesGiven) + totalReimbursements + Math.abs(escrowWithdrawals);
+                   + totalReimbursements + Math.abs(escrowWithdrawals);
 
         logger.info("Driver {} - Summary: Gross=${}, Fuel=${}, Deductions=${}, Reimbursements=${}, Net=${}", 
             driver.getName(), gross, fuel, totalDeductions, totalReimbursements, net);
@@ -586,7 +585,7 @@ public class PayrollCalculator {
         public double getTotalDeductions() {
             return Math.abs(serviceFee) + Math.abs(fuel) + Math.abs(recurringFees) +
                    Math.abs(advanceRepayments) + Math.abs(escrowDeposits) +
-                   Math.abs(advancesGiven) + Math.abs(otherDeductions);
+                   Math.abs(otherDeductions);
         }
         
         /**
@@ -616,7 +615,6 @@ public class PayrollCalculator {
             breakdown.put("recurringFees", (Math.abs(recurringFees) / total) * 100);
             breakdown.put("advanceRepayments", (Math.abs(advanceRepayments) / total) * 100);
             breakdown.put("escrowDeposits", (Math.abs(escrowDeposits) / total) * 100);
-            breakdown.put("advancesGiven", (Math.abs(advancesGiven) / total) * 100);
             breakdown.put("otherDeductions", (Math.abs(otherDeductions) / total) * 100);
             
             return breakdown;

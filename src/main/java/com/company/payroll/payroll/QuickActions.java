@@ -795,7 +795,6 @@ public class QuickActions {
         String[][] deductions = {
             {"Fuel (see page 2 for details):", String.format("$%,.2f", Math.abs(row.fuel))},
             {"Recurring Fees:", String.format("$%,.2f", Math.abs(row.recurringFees))},
-            {"Advances Given:", String.format("$%,.2f", Math.abs(row.advancesGiven))},
             {"Advance Repayments:", String.format("$%,.2f", Math.abs(row.advanceRepayments))},
             {"Escrow Deposits:", String.format("$%,.2f", Math.abs(row.escrowDeposits))},
             {"Other Deductions:", String.format("$%,.2f", Math.abs(row.otherDeductions))}
@@ -817,7 +816,7 @@ public class QuickActions {
         
         // Total deductions
         double totalDeductions = Math.abs(row.fuel) + Math.abs(row.recurringFees) +
-                               Math.abs(row.advancesGiven) + Math.abs(row.advanceRepayments) +
+                               Math.abs(row.advanceRepayments) +
                                Math.abs(row.escrowDeposits) + Math.abs(row.otherDeductions);
         
         yPosition -= 5;
