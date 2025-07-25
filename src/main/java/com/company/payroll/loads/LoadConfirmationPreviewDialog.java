@@ -400,14 +400,13 @@ public class LoadConfirmationPreviewDialog {
         
         for (int i = 0; i < locations.size(); i++) {
             LoadLocation loc = locations.get(i);
-            String info = String.format("%d. %s - %s",
-                i + 1,
+            String info = String.format("%d. %s - %s", 
+                i + 1, 
                 loc.getCustomer() != null ? loc.getCustomer() : "",
                 formatLocationAddress(loc));
-
-            String dt = formatDateTime(loc.getDate(), loc.getTime());
-            if (!dt.isEmpty()) {
-                info += " - " + dt;
+            
+            if (loc.getTime() != null) {
+                info += " @ " + loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a"));
             }
             
             Label locLabel = new Label(info);
@@ -869,14 +868,11 @@ public class LoadConfirmationPreviewDialog {
             
             for (int i = 0; i < additionalPickups.size(); i++) {
                 LoadLocation loc = additionalPickups.get(i);
-                String info = String.format("%d. %s - %s",
-                    i + 1,
+                String info = String.format("%d. %s - %s - %s", 
+                    i + 1, 
                     loc.getCustomer() != null ? loc.getCustomer() : "",
-                    formatLocationAddress(loc));
-                String dt = formatDateTime(loc.getDate(), loc.getTime());
-                if (!dt.isEmpty()) {
-                    info += " - " + dt;
-                }
+                    formatLocationAddress(loc),
+                    loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "");
                 Label locLabel = new Label(info);
                 locLabel.setFont(Font.font("Arial", 8)); // Reduced font size
                 pickupList.getChildren().add(locLabel);
@@ -937,14 +933,11 @@ public class LoadConfirmationPreviewDialog {
             
             for (int i = 0; i < additionalDrops.size(); i++) {
                 LoadLocation loc = additionalDrops.get(i);
-                String info = String.format("%d. %s - %s",
-                    i + 1,
+                String info = String.format("%d. %s - %s - %s", 
+                    i + 1, 
                     loc.getCustomer() != null ? loc.getCustomer() : "",
-                    formatLocationAddress(loc));
-                String dt = formatDateTime(loc.getDate(), loc.getTime());
-                if (!dt.isEmpty()) {
-                    info += " - " + dt;
-                }
+                    formatLocationAddress(loc),
+                    loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "");
                 Label locLabel = new Label(info);
                 locLabel.setFont(Font.font("Arial", 8)); // Reduced font size
                 dropList.getChildren().add(locLabel);

@@ -245,33 +245,11 @@ public class PayrollEscrow implements Serializable {
     
     public BigDecimal getWeeklyAmount(Employee driver, LocalDate weekStart) {
         if (driver == null || weekStart == null) return BigDecimal.ZERO;
-
+        
         return entries.stream()
             .filter(e -> e.getDriverId() == driver.getId())
             .filter(e -> e.getWeekStart() != null && e.getWeekStart().equals(weekStart))
             .filter(e -> e.type == EscrowType.DEPOSIT)
-            .map(EscrowEntry::getAmount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    /**
-     * Get the total deposits for a specific week. Alias for backward
-     * compatibility with existing calls to {@code getWeeklyAmount}.
-     */
-    public BigDecimal getWeeklyDeposits(Employee driver, LocalDate weekStart) {
-        return getWeeklyAmount(driver, weekStart);
-    }
-
-    /**
-     * Get the total withdrawals for a specific week.
-     */
-    public BigDecimal getWeeklyWithdrawals(Employee driver, LocalDate weekStart) {
-        if (driver == null || weekStart == null) return BigDecimal.ZERO;
-
-        return entries.stream()
-            .filter(e -> e.getDriverId() == driver.getId())
-            .filter(e -> e.getWeekStart() != null && e.getWeekStart().equals(weekStart))
-            .filter(e -> e.type == EscrowType.WITHDRAWAL)
             .map(EscrowEntry::getAmount)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     }

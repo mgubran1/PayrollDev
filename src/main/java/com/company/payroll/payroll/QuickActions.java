@@ -815,9 +815,9 @@ public class QuickActions {
         }
         
         // Total deductions
-        double totalDeductions = Math.abs(row.fuel) + Math.abs(row.recurringFees) +
-                               Math.abs(row.advanceRepayments) +
-                               Math.abs(row.escrowDeposits) + Math.abs(row.otherDeductions);
+        double totalDeductions = Math.abs(row.fuel) + Math.abs(row.recurringFees) + 
+                               Math.abs(row.advanceRepayments) + Math.abs(row.escrowDeposits) + 
+                               Math.abs(row.otherDeductions);
         
         yPosition -= 5;
         stream.setStrokingColor(200f/255f, 200f/255f, 200f/255f);
@@ -888,23 +888,8 @@ public class QuickActions {
         stream.newLineAtOffset(400, yPosition);
         stream.showText(String.format("$%,.2f", row.advancesGiven));
         stream.endText();
-        yPosition -= 15;
-
-        if (row.escrowWithdrawals > 0) {
-            stream.beginText();
-            stream.newLineAtOffset(60, yPosition);
-            stream.showText("Escrow Withdrawals:");
-            stream.endText();
-
-            stream.beginText();
-            stream.newLineAtOffset(400, yPosition);
-            stream.showText(String.format("$%,.2f", row.escrowWithdrawals));
-            stream.endText();
-
-            yPosition -= 15;
-        }
-
-        return yPosition - 10;
+        
+        return yPosition - 25;
     }
     
     private float drawNetPay(PDPageContentStream stream, float yPosition, 
@@ -1139,7 +1124,7 @@ public class QuickActions {
                 // Write headers
                 String headers = "Driver,Truck/Unit,Loads,Gross Pay,Service Fee,Gross After Fee," +
                                "Company Pay,Driver Pay,Fuel,After Fuel,Recurring,Advances Given," +
-                               "Advance Repayments,Escrow Deposits,Escrow Withdrawals,Other Deductions,Reimbursements,NET PAY";
+                               "Advance Repayments,Escrow,Other Deductions,Reimbursements,NET PAY";
                 writer.write(headers);
                 writer.newLine();
                 
@@ -1169,7 +1154,6 @@ public class QuickActions {
                         row.advancesGiven,
                         row.advanceRepayments,
                         row.escrowDeposits,
-                        row.escrowWithdrawals,
                         row.otherDeductions,
                         row.reimbursements,
                         row.netPay
@@ -1196,7 +1180,7 @@ public class QuickActions {
         // Headers
         sb.append("Driver\tTruck/Unit\tLoads\tGross Pay\tService Fee\tGross After Fee\t");
         sb.append("Company Pay\tDriver Pay\tFuel\tAfter Fuel\tRecurring\tAdvances Given\t");
-        sb.append("Advance Repayments\tEscrow Deposits\tEscrow Withdrawals\tOther Deductions\tReimbursements\tNET PAY\n");
+        sb.append("Advance Repayments\tEscrow\tOther Deductions\tReimbursements\tNET PAY\n");
         
         // Data
         for (PayrollCalculator.PayrollRow row : summaryRows) {
@@ -1224,7 +1208,6 @@ public class QuickActions {
                 row.advancesGiven,
                 row.advanceRepayments,
                 row.escrowDeposits,
-                row.escrowWithdrawals,
                 row.otherDeductions,
                 row.reimbursements,
                 row.netPay

@@ -382,9 +382,9 @@ public class PDFExporter {
         }
         
         // Total deductions
-        double totalDeductions = Math.abs(data.fuel) + Math.abs(data.recurringFees) +
-                               Math.abs(data.advanceRepayments) +
-                               Math.abs(data.escrowDeposits) + Math.abs(data.otherDeductions);
+        double totalDeductions = Math.abs(data.fuel) + Math.abs(data.recurringFees) + 
+                               Math.abs(data.advanceRepayments) + Math.abs(data.escrowDeposits) + 
+                               Math.abs(data.otherDeductions);
         
         yPosition -= 5;
         stream.setStrokingColor(0.8f, 0.8f, 0.8f);
@@ -431,13 +431,7 @@ public class PDFExporter {
         stream.setNonStrokingColor(0, 0, 0);
         stream.setFont(fontNormal, FONT_SIZE_NORMAL);
         drawAmountRow(stream, yPosition, "Advances Given This Week:", String.format("$%,.2f", data.advancesGiven));
-
-        yPosition -= LINE_HEIGHT;
-        if (data.escrowWithdrawals > 0) {
-            drawAmountRow(stream, yPosition, "Escrow Withdrawals:", String.format("$%,.2f", data.escrowWithdrawals));
-            yPosition -= LINE_HEIGHT;
-        }
-
+        
         return yPosition - SECTION_SPACING;
     }
     

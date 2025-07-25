@@ -480,40 +480,12 @@ public class PayrollAdvances implements Serializable {
     
     public BigDecimal getScheduledRepaymentForWeek(Employee employee, LocalDate weekStart) {
         if (employee == null || weekStart == null) return BigDecimal.ZERO;
-
+        
         return getActiveAdvances().stream()
             .filter(a -> a.getEmployeeId() == employee.getId())
             .filter(a -> !weekStart.isBefore(a.getFirstRepaymentDate()))
             .filter(a -> !weekStart.isAfter(a.getLastRepaymentDate()))
             .map(AdvanceEntry::getWeeklyRepaymentAmount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    /**
-     * Get total advance amounts created in a specific week.
-     */
-    public BigDecimal getAdvancesForWeek(Employee employee, LocalDate weekStart) {
-        if (employee == null || weekStart == null) return BigDecimal.ZERO;
-
-        return entries.stream()
-            .filter(e -> e.getEmployeeId() == employee.getId())
-            .filter(e -> e.getAdvanceType() == AdvanceType.ADVANCE)
-            .filter(e -> weekStart.equals(e.getWeekStart()))
-            .map(AdvanceEntry::getAmount)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    /**
-     * Get total repayment amounts recorded in a specific week.
-     */
-    public BigDecimal getRepaymentsForWeek(Employee employee, LocalDate weekStart) {
-        if (employee == null || weekStart == null) return BigDecimal.ZERO;
-
-        return entries.stream()
-            .filter(e -> e.getEmployeeId() == employee.getId())
-            .filter(e -> e.getAdvanceType() == AdvanceType.REPAYMENT)
-            .filter(e -> weekStart.equals(e.getWeekStart()))
-            .map(e -> e.getAmount().abs())
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
     
