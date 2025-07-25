@@ -341,6 +341,11 @@ public class LoadsPanel extends BorderPane {
             }
             showAddLocationDialogForCombo(locationCombo, customer);
         });
+
+        DatePicker datePicker = new DatePicker();
+        datePicker.setPrefWidth(120);
+        Spinner<LocalTime> timeSpinner = createTimeSpinner24Hour();
+        timeSpinner.setPrefWidth(90);
         
         // Remove button
         Button removeBtn = new Button("×");
@@ -355,9 +360,19 @@ public class LoadsPanel extends BorderPane {
             parentContainer.getChildren().remove(row);
             // Remove from the appropriate list in dialog fields
             if (isPickup) {
+                int idx = dialogFields.additionalPickupLocations.indexOf(locationCombo);
                 dialogFields.additionalPickupLocations.remove(locationCombo);
+                if (idx >= 0) {
+                    dialogFields.additionalPickupDates.remove(idx);
+                    dialogFields.additionalPickupTimes.remove(idx);
+                }
             } else {
+                int idx = dialogFields.additionalDropLocations.indexOf(locationCombo);
                 dialogFields.additionalDropLocations.remove(locationCombo);
+                if (idx >= 0) {
+                    dialogFields.additionalDropDates.remove(idx);
+                    dialogFields.additionalDropTimes.remove(idx);
+                }
             }
             
             logger.debug("Removed additional {} location. Remaining locations: {}", 
@@ -365,13 +380,18 @@ public class LoadsPanel extends BorderPane {
                 isPickup ? dialogFields.additionalPickupLocations.size() : dialogFields.additionalDropLocations.size());
         });
         
-        row.getChildren().addAll(rowLabel, customerCombo, addCustomerBtn, locationCombo, addLocationBtn, removeBtn);
+        row.getChildren().addAll(rowLabel, customerCombo, addCustomerBtn,
+                locationCombo, addLocationBtn, datePicker, timeSpinner, removeBtn);
         
         // Add to the appropriate list in dialog fields
         if (isPickup) {
             dialogFields.additionalPickupLocations.add(locationCombo);
+            dialogFields.additionalPickupDates.add(datePicker);
+            dialogFields.additionalPickupTimes.add(timeSpinner);
         } else {
             dialogFields.additionalDropLocations.add(locationCombo);
+            dialogFields.additionalDropDates.add(datePicker);
+            dialogFields.additionalDropTimes.add(timeSpinner);
         }
         
         // IMPORTANT: Store the customer combo reference in a way that won't get lost
@@ -4592,7 +4612,11 @@ public class LoadsPanel extends BorderPane {
         
         // Multi-location support
         List<ComboBox<String>> additionalPickupLocations = new ArrayList<>();
+        List<DatePicker> additionalPickupDates = new ArrayList<>();
+        List<Spinner<LocalTime>> additionalPickupTimes = new ArrayList<>();
         List<ComboBox<String>> additionalDropLocations = new ArrayList<>();
+        List<DatePicker> additionalDropDates = new ArrayList<>();
+        List<Spinner<LocalTime>> additionalDropTimes = new ArrayList<>();
         
         // Enhanced Driver & Equipment
         ComboBox<Employee> driverBox;
@@ -4992,7 +5016,11 @@ public class LoadsPanel extends BorderPane {
             
             // Clear the additional location lists to prevent stale references
             dialogFields.additionalPickupLocations.clear();
+            dialogFields.additionalPickupDates.clear();
+            dialogFields.additionalPickupTimes.clear();
             dialogFields.additionalDropLocations.clear();
+            dialogFields.additionalDropDates.clear();
+            dialogFields.additionalDropTimes.clear();
             
             // Load additional locations if they exist
             if (load.getLocations() != null && !load.getLocations().isEmpty()) {
@@ -5023,20 +5051,24 @@ public class LoadsPanel extends BorderPane {
                     processedPickupSequences.add(loc.getSequence());
                     
                     pickupRowCount[0]++;
-                    HBox row = createAdditionalLocationRow("Additional Pickup " + loc.getSequence() + ":", 
+                    HBox row = createAdditionalLocationRow("Additional Pickup " + loc.getSequence() + ":",
                                                          loc.getCustomer(), // Use the location's independent customer
                                                          true,
                                                          additionalPickupsContainer);
                     additionalPickupsContainer.getChildren().add(row);
-                    
+
                     // Ensure customer-location relationship is properly established
                     ComboBox<String> locationCombo = (ComboBox<String>) row.getChildren().get(3);
+                    DatePicker datePicker = (DatePicker) row.getChildren().get(5);
+                    Spinner<LocalTime> timeSpinner = (Spinner<LocalTime>) row.getChildren().get(6);
                     ComboBox<String> customerCombo = (ComboBox<String>) row.getChildren().get(1);
                     
                     // Set location value
                     String locationString = formatLocationAddress(loc.getAddress(), loc.getCity(), loc.getState());
                     Platform.runLater(() -> {
                         locationCombo.setValue(locationString);
+                        datePicker.setValue(loc.getDate());
+                        timeSpinner.getValueFactory().setValue(loc.getTime());
                         // Double-check customer value is set correctly
                         if (loc.getCustomer() != null && !loc.getCustomer().trim().isEmpty()) {
                             customerCombo.setValue(loc.getCustomer());
@@ -5071,20 +5103,24 @@ public class LoadsPanel extends BorderPane {
                     processedDropSequences.add(loc.getSequence());
                     
                     dropRowCount[0]++;
-                    HBox row = createAdditionalLocationRow("Additional Drop " + loc.getSequence() + ":", 
+                    HBox row = createAdditionalLocationRow("Additional Drop " + loc.getSequence() + ":",
                                                          loc.getCustomer(), // Use the location's independent customer
                                                          false,
                                                          additionalDropsContainer);
                     additionalDropsContainer.getChildren().add(row);
-                    
+
                     // Ensure customer-location relationship is properly established
                     ComboBox<String> locationCombo = (ComboBox<String>) row.getChildren().get(3);
+                    DatePicker datePicker = (DatePicker) row.getChildren().get(5);
+                    Spinner<LocalTime> timeSpinner = (Spinner<LocalTime>) row.getChildren().get(6);
                     ComboBox<String> customerCombo = (ComboBox<String>) row.getChildren().get(1);
                     
                     // Set location value
                     String locationString = formatLocationAddress(loc.getAddress(), loc.getCity(), loc.getState());
                     Platform.runLater(() -> {
                         locationCombo.setValue(locationString);
+                        datePicker.setValue(loc.getDate());
+                        timeSpinner.getValueFactory().setValue(loc.getTime());
                         // Double-check customer value is set correctly
                         if (loc.getCustomer() != null && !loc.getCustomer().trim().isEmpty()) {
                             customerCombo.setValue(loc.getCustomer());
@@ -5963,6 +5999,8 @@ public class LoadsPanel extends BorderPane {
             int pickupSequence = 2;
             for (int i = 0; i < dialogFields.additionalPickupLocations.size(); i++) {
                 ComboBox<String> locationBox = dialogFields.additionalPickupLocations.get(i);
+                DatePicker datePicker = dialogFields.additionalPickupDates.get(i);
+                Spinner<LocalTime> timeSpinner = dialogFields.additionalPickupTimes.get(i);
                 if (locationBox.getValue() != null && !locationBox.getValue().trim().isEmpty()) {
                     // Parse address components
                     String[] parts = parseAddressParts(locationBox.getValue());
@@ -6012,8 +6050,8 @@ public class LoadsPanel extends BorderPane {
                         0, load.getId(), LoadLocation.LocationType.PICKUP,
                         customerName,
                         parts[0], parts[1], parts[2],
-                        dialogFields.pickUpDatePicker.getValue(), // Use same date as primary by default
-                        dialogFields.pickUpTimeSpinner.getValue(), // Use same time as primary by default
+                        datePicker.getValue(),
+                        timeSpinner.getValue(),
                         "", sequence
                     );
                     load.addLocation(additionalPickup);
@@ -6024,6 +6062,8 @@ public class LoadsPanel extends BorderPane {
             int dropSequence = 2;
             for (int i = 0; i < dialogFields.additionalDropLocations.size(); i++) {
                 ComboBox<String> locationBox = dialogFields.additionalDropLocations.get(i);
+                DatePicker datePicker = dialogFields.additionalDropDates.get(i);
+                Spinner<LocalTime> timeSpinner = dialogFields.additionalDropTimes.get(i);
                 if (locationBox.getValue() != null && !locationBox.getValue().trim().isEmpty()) {
                     // Parse address components
                     String[] parts = parseAddressParts(locationBox.getValue());
@@ -6073,8 +6113,8 @@ public class LoadsPanel extends BorderPane {
                         0, load.getId(), LoadLocation.LocationType.DROP,
                         customerName,
                         parts[0], parts[1], parts[2],
-                        dialogFields.deliveryDatePicker.getValue(), // Use same date as primary by default
-                        dialogFields.deliveryTimeSpinner.getValue(), // Use same time as primary by default
+                        datePicker.getValue(),
+                        timeSpinner.getValue(),
                         "", sequence
                     );
                     load.addLocation(additionalDrop);

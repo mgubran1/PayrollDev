@@ -371,7 +371,6 @@ public class PDFExporter {
         String[][] deductions = {
             {"Fuel:", String.format("$%,.2f", Math.abs(data.fuel))},
             {"Recurring Fees:", String.format("$%,.2f", Math.abs(data.recurringFees))},
-            {"Advances Given:", String.format("$%,.2f", Math.abs(data.advancesGiven))},
             {"Advance Repayments:", String.format("$%,.2f", Math.abs(data.advanceRepayments))},
             {"Escrow Deposits:", String.format("$%,.2f", Math.abs(data.escrowDeposits))},
             {"Other Deductions:", String.format("$%,.2f", Math.abs(data.otherDeductions))}
@@ -384,7 +383,7 @@ public class PDFExporter {
         
         // Total deductions
         double totalDeductions = Math.abs(data.fuel) + Math.abs(data.recurringFees) +
-                               Math.abs(data.advancesGiven) + Math.abs(data.advanceRepayments) +
+                               Math.abs(data.advanceRepayments) +
                                Math.abs(data.escrowDeposits) + Math.abs(data.otherDeductions);
         
         yPosition -= 5;
