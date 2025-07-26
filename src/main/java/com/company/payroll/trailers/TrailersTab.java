@@ -14,6 +14,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import com.company.payroll.util.WindowAware;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
@@ -47,7 +48,7 @@ import java.time.format.DateTimeFormatter;
  * Enhanced Trailers tab for managing fleet information with focus on document tracking
  * and inspection expiration dates.
  */
-public class TrailersTab extends BorderPane {
+public class TrailersTab extends BorderPane implements WindowAware {
     private static final Logger logger = LoggerFactory.getLogger(TrailersTab.class);
     
     private final TrailerDAO trailerDAO = new TrailerDAO();

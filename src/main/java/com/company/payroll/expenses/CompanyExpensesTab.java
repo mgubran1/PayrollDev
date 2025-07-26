@@ -23,6 +23,7 @@ import javafx.util.StringConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.company.payroll.payroll.ModernButtonStyles;
+import com.company.payroll.util.WindowAware;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -53,7 +54,7 @@ import com.company.payroll.config.DocumentManagerSettingsDialog;
 /**
  * Enhanced Company Expenses Tab for tracking all business expenses in the trucking fleet management system
  */
-public class CompanyExpensesTab extends Tab {
+public class CompanyExpensesTab extends Tab implements WindowAware {
     private static final Logger logger = LoggerFactory.getLogger(CompanyExpensesTab.class);
     
     // Config file constants (same as PayrollTab)

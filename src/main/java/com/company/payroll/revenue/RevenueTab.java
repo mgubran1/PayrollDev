@@ -28,6 +28,7 @@ import com.company.payroll.payroll.ModernButtonStyles;
 import com.company.payroll.loads.Load;
 import com.company.payroll.loads.Load.Status;
 import javafx.stage.FileChooser;
+import com.company.payroll.util.WindowAware;
 import java.io.File;
 import javafx.concurrent.Task;
 import javafx.scene.control.Alert.AlertType;
@@ -45,7 +46,7 @@ import java.time.DayOfWeek;
 /**
  * Enhanced Revenue Management Tab with comprehensive analytics and reporting
  */
-public class RevenueTab extends Tab {
+public class RevenueTab extends Tab implements WindowAware {
     // UI Components
     private TableView<RevenueEntry> revenueTable;
     private DatePicker startDatePicker;

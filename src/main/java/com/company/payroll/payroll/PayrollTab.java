@@ -38,6 +38,7 @@ import com.company.payroll.payroll.CheckListView;
 import com.company.payroll.payroll.PayrollHistoryEntry;
 import com.company.payroll.payroll.ProgressDialog;
 import com.company.payroll.payroll.ModernButtonStyles;
+import com.company.payroll.util.WindowAware;
 import java.io.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -54,10 +55,11 @@ import java.util.TimerTask;
  * PayrollTab - Main UI component for payroll management
  * Provides comprehensive payroll calculation, display, and export functionality
  */
-public class PayrollTab extends BorderPane implements 
+public class PayrollTab extends BorderPane implements
         EmployeesTab.EmployeeDataChangeListener,
         LoadsTab.LoadDataChangeListener,
-        FuelImportTab.FuelDataChangeListener {
+        FuelImportTab.FuelDataChangeListener,
+        WindowAware {
     
     private static final Logger logger = LoggerFactory.getLogger(PayrollTab.class);
     
