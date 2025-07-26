@@ -4,6 +4,7 @@ import com.company.payroll.employees.EmployeesTab;
 import com.company.payroll.employees.Employee;
 import com.company.payroll.trailers.TrailersTab;
 import com.company.payroll.trailers.Trailer;
+import com.company.payroll.util.WindowAware;
 import javafx.scene.control.Tab;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,8 @@ import java.util.function.Consumer;
  * It can be further extended to listen for employee changes and propagate them to the LoadsPanel if needed.
  */
 public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeListener,
-                                            LoadsPanel.LoadDataChangeListener {
+                                            LoadsPanel.LoadDataChangeListener,
+                                            WindowAware {
     private static final Logger logger = LoggerFactory.getLogger(LoadsTab.class);
     private final LoadsPanel loadsPanel;
     private Consumer<List<Load>> syncCallback;

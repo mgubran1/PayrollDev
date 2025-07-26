@@ -38,8 +38,9 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import com.company.payroll.util.WindowAware;
 
-public class FuelImportTab extends BorderPane {
+public class FuelImportTab extends BorderPane implements WindowAware {
     private static final Logger logger = LoggerFactory.getLogger(FuelImportTab.class);
 
     private final FuelTransactionDAO dao = new FuelTransactionDAO();

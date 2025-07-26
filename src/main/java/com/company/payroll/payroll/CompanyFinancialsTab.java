@@ -18,6 +18,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.time.DayOfWeek;
 import com.company.payroll.expenses.CompanyExpenseDAO;
+import com.company.payroll.util.WindowAware;
 import com.company.payroll.maintenance.MaintenanceDAO;
 import com.company.payroll.expenses.CompanyExpense;
 import com.company.payroll.maintenance.MaintenanceRecord;
@@ -67,7 +68,7 @@ import org.slf4j.LoggerFactory;
  * - Maintenance cost analysis
  * - Visual charts and analytics
  */
-public class CompanyFinancialsTab extends BorderPane {
+public class CompanyFinancialsTab extends BorderPane implements WindowAware {
     
     // UI Components
     private final DatePicker startDatePicker = new DatePicker(LocalDate.now().withDayOfYear(1));

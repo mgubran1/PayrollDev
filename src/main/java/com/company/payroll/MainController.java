@@ -12,6 +12,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.Priority;
+import javafx.stage.Stage;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -46,12 +47,14 @@ import com.company.payroll.employees.Employee;
 import com.company.payroll.drivergrid.DriverGridTab;
 import com.company.payroll.drivergrid.DriverGridTabEnhanced;
 import com.company.payroll.payroll.CompanyFinancialsTab;
+import com.company.payroll.util.WindowAware;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 
 /**
  * Enhanced MainController that manages the main application TabPane and wires up all feature tabs.
@@ -79,6 +82,10 @@ public class MainController extends BorderPane {
     private TrailersTab trailersTabContent;
     private LoadsTab loadsTab;
     private DriverGridTab driverGridTab;
+
+    // Window awareness
+    private final List<WindowAware> windowAwareComponents = new ArrayList<>();
+    private Stage stage;
     
     public MainController() {
         logger.info("Initializing Enhanced MainController");
@@ -98,6 +105,7 @@ public class MainController extends BorderPane {
             // Employees tab (must be created first, for cross-tab event support)
             logger.debug("Creating Employees tab");
             employeesTabContent = new EmployeesTab();
+            registerWindowAware(employeesTabContent);
             Tab employeesTab = new Tab("Employees", employeesTabContent);
             employeesTab.setClosable(false);
             employeesTab.setGraphic(createEnhancedTabIcon("👥", "#3498db"));
@@ -106,6 +114,7 @@ public class MainController extends BorderPane {
             // Trucks tab
             logger.debug("Creating Trucks tab");
             trucksTabContent = new TrucksTab();
+            registerWindowAware(trucksTabContent);
             Tab trucksTab = new Tab("Trucks", trucksTabContent);
             trucksTab.setClosable(false);
             trucksTab.setGraphic(createEnhancedTabIcon("🚚", "#2c3e50"));
@@ -114,6 +123,7 @@ public class MainController extends BorderPane {
             // Trailers tab
             logger.debug("Creating Trailers tab");
             trailersTabContent = new TrailersTab();
+            registerWindowAware(trailersTabContent);
             Tab trailersTab = new Tab("Trailers", trailersTabContent);
             trailersTab.setClosable(false);
             trailersTab.setGraphic(createEnhancedTabIcon("🚛", "#1e3c72"));
@@ -122,6 +132,7 @@ public class MainController extends BorderPane {
             // Maintenance tab
             logger.debug("Creating Maintenance tab");
             MaintenanceTab maintenanceTab = new MaintenanceTab();
+            registerWindowAware(maintenanceTab);
             maintenanceTab.setText("Maintenance");
             maintenanceTab.setClosable(false);
             maintenanceTab.setGraphic(createEnhancedTabIcon("🔧", "#34495e"));
@@ -138,6 +149,7 @@ public class MainController extends BorderPane {
             // Company Expenses tab
             logger.debug("Creating Company Expenses tab");
             CompanyExpensesTab companyExpensesTab = new CompanyExpensesTab();
+            registerWindowAware(companyExpensesTab);
             companyExpensesTab.setText("Company Expenses");
             companyExpensesTab.setClosable(false);
             companyExpensesTab.setGraphic(createEnhancedTabIcon("💳", "#e74c3c"));
@@ -146,6 +158,7 @@ public class MainController extends BorderPane {
             // Loads tab (receives employee data AND trailer data)
             logger.debug("Creating Loads tab with employees and trailers integration");
             loadsTab = new LoadsTab(employeesTabContent, trailersTabContent);
+            registerWindowAware(loadsTab);
             // LoadsTab already extends Tab, so we add it directly
             loadsTab.setClosable(false);
             loadsTab.setGraphic(createEnhancedTabIcon("📦", "#f39c12"));
@@ -154,6 +167,7 @@ public class MainController extends BorderPane {
             // Driver Grid tab
             logger.debug("Creating Enhanced Driver Grid tab");
             driverGridTab = new DriverGridTabEnhanced();
+            registerWindowAware(driverGridTab);
             driverGridTab.setClosable(false);
             driverGridTab.setGraphic(createEnhancedTabIcon("🚗", "#16a085"));
             // Connect LoadsTab to DriverGridTab for cross-referencing
@@ -163,6 +177,7 @@ public class MainController extends BorderPane {
             // Wire up sync callback from Loads to MyTriumph
             logger.debug("Setting up Loads to MyTriumph sync callback");
             MyTriumphTab myTriumphTab = new MyTriumphTab();
+            registerWindowAware(myTriumphTab);
             myTriumphTab.setClosable(false);
             myTriumphTab.setGraphic(createEnhancedTabIcon("📊", "#9b59b6"));
             loadsTab.setSyncCallback(loads -> {
@@ -193,6 +208,7 @@ public class MainController extends BorderPane {
             // Fuel import tab
             logger.debug("Creating Fuel Import tab");
             FuelImportTab fuelImportTabContent = new FuelImportTab();
+            registerWindowAware(fuelImportTabContent);
             Tab fuelImportTab = new Tab("Fuel Import", fuelImportTabContent);
             fuelImportTab.setClosable(false);
             fuelImportTab.setGraphic(createEnhancedTabIcon("⛽", "#e67e22"));
@@ -207,6 +223,7 @@ public class MainController extends BorderPane {
             // Payroll tab (needs EmployeesTab for driver updates, and calculator, and LoadDAO for bonus on load)
             logger.debug("Creating Payroll tab");
             PayrollTab payrollTabContent = new PayrollTab(employeesTabContent, payrollCalculator, loadDAO, fuelDAO);
+            registerWindowAware(payrollTabContent);
             Tab payrollTab = new Tab("Payroll", payrollTabContent);
             payrollTab.setClosable(false);
             payrollTab.setGraphic(createEnhancedTabIcon("💰", "#27ae60"));
@@ -215,6 +232,7 @@ public class MainController extends BorderPane {
             // Revenue tab
             logger.debug("Creating Revenue tab");
             RevenueTab revenueTab = new RevenueTab();
+            registerWindowAware(revenueTab);
             revenueTab.setText("Revenue");
             revenueTab.setClosable(false);
             revenueTab.setGraphic(createEnhancedTabIcon("📈", "#3498db"));
@@ -223,6 +241,7 @@ public class MainController extends BorderPane {
             // Company Financials tab
             logger.debug("Creating Company Financials tab");
             CompanyFinancialsTab companyFinancialsTab = new CompanyFinancialsTab(payrollTabContent, companyExpensesTab.getCompanyExpenseDAO(), maintenanceTab.getMaintenanceDAO());
+            registerWindowAware(companyFinancialsTab);
             Tab financialsTab = new Tab("Company Financials", companyFinancialsTab);
             financialsTab.setClosable(false);
             financialsTab.setGraphic(createEnhancedTabIcon("🏦", "#1976D2"));
@@ -231,6 +250,7 @@ public class MainController extends BorderPane {
             // Driver Income tab - NOW WITH REQUIRED PARAMETERS
             logger.debug("Creating Driver Income tab");
             DriverIncomeTab driverIncomeTab = new DriverIncomeTab(employeeDAO, loadDAO, fuelDAO, payrollCalculator);
+            registerWindowAware(driverIncomeTab);
             driverIncomeTab.setText("Driver Income");
             driverIncomeTab.setClosable(false);
             driverIncomeTab.setGraphic(createEnhancedTabIcon("🚗", "#16a085"));
@@ -560,6 +580,43 @@ public class MainController extends BorderPane {
     public TabPane getTabPane() {
         logger.debug("getTabPane() called");
         return tabPane;
+    }
+
+    public void setStage(Stage stage) {
+        this.stage = stage;
+        if (stage != null) {
+            stage.widthProperty().addListener((obs, o, n) -> notifyWindowResize(n.doubleValue(), stage.getHeight()));
+            stage.heightProperty().addListener((obs, o, n) -> notifyWindowResize(stage.getWidth(), n.doubleValue()));
+            stage.maximizedProperty().addListener((obs, o, n) -> notifyWindowState(n, stage.isIconified()));
+            stage.iconifiedProperty().addListener((obs, o, n) -> notifyWindowState(stage.isMaximized(), n));
+            notifyWindowResize(stage.getWidth(), stage.getHeight());
+        }
+    }
+
+    private void registerWindowAware(Object obj) {
+        if (obj instanceof WindowAware) {
+            windowAwareComponents.add((WindowAware) obj);
+        }
+    }
+
+    private void notifyWindowResize(double width, double height) {
+        for (WindowAware w : windowAwareComponents) {
+            try {
+                w.updateWindowSize(width, height);
+            } catch (Exception e) {
+                logger.warn("Window resize notification failed: {}", e.getMessage());
+            }
+        }
+    }
+
+    private void notifyWindowState(boolean maximized, boolean minimized) {
+        for (WindowAware w : windowAwareComponents) {
+            try {
+                w.onWindowStateChanged(maximized, minimized);
+            } catch (Exception e) {
+                logger.warn("Window state change notification failed: {}", e.getMessage());
+            }
+        }
     }
 
     /**

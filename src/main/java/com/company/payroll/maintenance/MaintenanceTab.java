@@ -56,11 +56,12 @@ import org.apache.poi.ss.usermodel.Cell;
 import com.company.payroll.config.DocumentManagerConfig;
 import com.company.payroll.config.DocumentManagerSettingsDialog;
 import com.company.payroll.config.FilterConfig;
+import com.company.payroll.util.WindowAware;
 
 /**
  * Simplified MaintenanceTab for tracking fleet maintenance expenses
  */
-public class MaintenanceTab extends Tab {
+public class MaintenanceTab extends Tab implements WindowAware {
     private static final Logger logger = LoggerFactory.getLogger(MaintenanceTab.class);
     private static final NumberFormat CURRENCY_FORMAT = NumberFormat.getCurrencyInstance();
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MM/dd/yyyy");

@@ -48,7 +48,9 @@ import java.sql.SQLException;
 import com.company.payroll.employees.EmployeeDocumentManager;
 import com.company.payroll.config.DOTComplianceConfigDialog;
 
-public class EmployeesTab extends BorderPane {
+import com.company.payroll.util.WindowAware;
+
+public class EmployeesTab extends BorderPane implements WindowAware {
     private static final Logger logger = LoggerFactory.getLogger(EmployeesTab.class);
     
     private final ObservableList<Employee> employees = FXCollections.observableArrayList();

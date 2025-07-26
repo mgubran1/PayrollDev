@@ -23,6 +23,7 @@ import javafx.util.Callback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.company.payroll.payroll.ModernButtonStyles;
+import com.company.payroll.util.WindowAware;
 
 import java.io.File;
 import java.io.BufferedWriter;
@@ -45,7 +46,7 @@ import javafx.concurrent.Task;
  * Enhanced Trucks tab for managing fleet information with focus on document tracking
  * and expiration dates.
  */
-public class TrucksTab extends BorderPane {
+public class TrucksTab extends BorderPane implements WindowAware {
     private static final Logger logger = LoggerFactory.getLogger(TrucksTab.class);
     
     private final TruckDAO truckDAO = new TruckDAO();

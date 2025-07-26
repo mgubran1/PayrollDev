@@ -18,6 +18,7 @@ import javafx.util.Duration;
 import javafx.concurrent.Task;
 import javafx.application.Platform;
 import javafx.stage.FileChooser;
+import com.company.payroll.util.WindowAware;
 import javafx.geometry.Orientation;
 import javafx.scene.Node;
 import org.slf4j.Logger;
@@ -48,7 +49,7 @@ import com.company.payroll.payroll.ModernButtonStyles;
 /**
  * Enhanced Driver Income Tab with real-time data integration
  */
-public class DriverIncomeTab extends Tab {
+public class DriverIncomeTab extends Tab implements WindowAware {
     private static final Logger logger = LoggerFactory.getLogger(DriverIncomeTab.class);
     
     // UI Components

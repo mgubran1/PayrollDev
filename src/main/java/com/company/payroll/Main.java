@@ -52,6 +52,9 @@ public class Main extends Application {
             primaryStage.setMinWidth(1200);
             primaryStage.setMinHeight(700);
             primaryStage.setMaximized(true);
+
+            // Register stage with controller for window-aware features
+            mainController.setStage(primaryStage);
             
             // Try to load application icon
             try {

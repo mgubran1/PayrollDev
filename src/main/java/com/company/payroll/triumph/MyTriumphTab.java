@@ -37,8 +37,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import com.company.payroll.util.WindowAware;
 
-public class MyTriumphTab extends Tab {
+public class MyTriumphTab extends Tab implements WindowAware {
     private static final Logger logger = LoggerFactory.getLogger(MyTriumphTab.class);
     
     private final MyTriumphDAO triumphDAO = new MyTriumphDAO();

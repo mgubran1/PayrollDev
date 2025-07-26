@@ -57,8 +57,9 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import com.company.payroll.util.WindowAware;
 
-public class DriverGridTab extends Tab {
+public class DriverGridTab extends Tab implements WindowAware {
     private final BorderPane mainLayout = new BorderPane();
     private final VBox leftPanel = new VBox(15);
     private final GridPane weekGrid = new GridPane();
