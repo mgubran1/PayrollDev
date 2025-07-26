@@ -25,6 +25,8 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.input.*;
 import javafx.scene.layout.*;
+import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
 import javafx.geometry.Orientation;
 import javafx.scene.shape.Circle;
@@ -74,6 +76,8 @@ public class DriverGridTabEnhanced extends DriverGridTab {
     private final ObservableList<String> allCustomers = FXCollections.observableArrayList();
     private final Map<String, List<LoadConflict>> conflictMap = new HashMap<>();
     private LocalDate weekStart = LocalDate.now().with(DayOfWeek.SUNDAY);
+    private Employee selectedDriver;
+    private String selectedCustomer;
     
     // DAOs
     private final EmployeeDAO employeeDAO = new EmployeeDAO();
@@ -174,7 +178,8 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         weekControls.getChildren().addAll(prevWeekBtn, todayBtn, weekPicker, nextWeekBtn, new Separator(javafx.geometry.Orientation.VERTICAL), weekRangeLabel);
         
         // Filters inline with week controls
-        HBox filtersBox = new HBox(10);
+        FlowPane filtersBox = new FlowPane(Orientation.HORIZONTAL, 10, 5);
+        filtersBox.setPrefWrapLength(500);
         filtersBox.setAlignment(Pos.CENTER_LEFT);
         filtersBox.getStyleClass().add("driver-grid-search-section");
         searchField.setPromptText("Search by load #, driver, truck, customer...");
@@ -209,11 +214,11 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             showConflictsOnly, showUnassignedLoads, clearFiltersBtn
         );
         
-        // Combine week controls and filters into a single row
-        HBox weekAndFiltersBox = new HBox(30);
+        // Combine week controls and filters into a single row that can wrap on small windows
+        FlowPane weekAndFiltersBox = new FlowPane(Orientation.HORIZONTAL, 30, 10);
+        weekAndFiltersBox.setPrefWrapLength(600);
         weekAndFiltersBox.setAlignment(Pos.CENTER_LEFT);
         weekAndFiltersBox.getChildren().addAll(weekControls, filtersBox);
-        HBox.setHgrow(filtersBox, Priority.ALWAYS);
         
         // Right side: Action buttons and summary statistics
         VBox rightSide = new VBox(15);
@@ -298,7 +303,7 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         
         // Create scroll pane for main grid content only
         weekGridScrollPane.setContent(weekGrid);
-        weekGridScrollPane.setFitToWidth(true);
+        weekGridScrollPane.setFitToWidth(false);
         weekGridScrollPane.setFitToHeight(false);
         weekGridScrollPane.setPannable(true);
         weekGridScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
@@ -308,6 +313,7 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         weekGridScrollPane.setPrefHeight(600);
         weekGridScrollPane.setCache(true);
         weekGridScrollPane.setCacheHint(CacheHint.SPEED);
+        weekGridScrollPane.viewportBoundsProperty().addListener((obs, o, n) -> adjustDayColumnWidths());
         
         
         // Ensure scroll pane expands
@@ -315,9 +321,11 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         
         // Add scrollable content to container
         gridSystemContainer.getChildren().add(weekGridScrollPane);
-        
+
         // Set as center content
         mainLayout.setCenter(gridSystemContainer);
+
+        adjustDayColumnWidths();
     }
     
     private HBox createSummaryCards() {
@@ -398,6 +406,9 @@ public class DriverGridTabEnhanced extends DriverGridTab {
                 }
             }
         });
+
+        comboBox.setMinWidth(140);
+        comboBox.setMaxWidth(Double.MAX_VALUE);
     }
     
     private void setupEventHandlers() {
@@ -407,6 +418,9 @@ public class DriverGridTabEnhanced extends DriverGridTab {
                 refreshData();
             }
         });
+
+        // Adjust column widths when the window size changes
+        mainLayout.widthProperty().addListener((obs, oldV, newV) -> adjustDayColumnWidths());
         
         // Drag and drop setup will be added here
         setupDragAndDrop();
@@ -456,6 +470,9 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         
         // Also check at midnight for date changes
         scheduleTaskAtMidnight();
+
+        // Ensure column widths adjust if week changes
+        weekCheckTimeline.currentTimeProperty().addListener((obs, o, n) -> adjustDayColumnWidths());
     }
     
     private void scheduleTaskAtMidnight() {
@@ -631,13 +648,13 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             }
             
             // Driver filter
-            Employee selectedDriver = driverFilterBox.getValue();
+            selectedDriver = driverFilterBox.getValue();
             if (selectedDriver != null && !driver.equals(selectedDriver)) {
                 return false;
             }
             
             // Customer filter
-            String selectedCustomer = customerFilterBox.getValue();
+            selectedCustomer = customerFilterBox.getValue();
             if (selectedCustomer != null && !selectedCustomer.equals(load.getCustomer())) {
                 return false;
             }
@@ -742,6 +759,35 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             weekGrid.setCache(true);
             weekGrid.setCacheHint(CacheHint.SPEED);
         }
+
+        adjustDayColumnWidths();
+    }
+
+    private double dayCellWidth = 150;
+
+    private void adjustDayColumnWidths() {
+        double viewportWidth = weekGridScrollPane.getViewportBounds().getWidth();
+        if (viewportWidth == 0) {
+            return;
+        }
+        double available = viewportWidth - 200; // subtract driver column
+        double newWidth = Math.max(150, available / 7);
+        dayCellWidth = newWidth;
+        ObservableList<ColumnConstraints> cols = weekGrid.getColumnConstraints();
+        if (cols.size() == 8) {
+            for (int i = 1; i < cols.size(); i++) {
+                ColumnConstraints cc = cols.get(i);
+                cc.setPrefWidth(dayCellWidth);
+                cc.setMinWidth(dayCellWidth);
+            }
+        }
+        weekGrid.getChildren().forEach(n -> {
+            Integer col = GridPane.getColumnIndex(n);
+            if (col != null && col > 0 && n instanceof Region r) {
+                r.setMinWidth(dayCellWidth);
+                r.setPrefWidth(dayCellWidth);
+            }
+        });
     }
     
     private void buildWeekHeaderInGrid() {
@@ -782,6 +828,8 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             dayHeader.setPadding(new Insets(8, 5, 8, 5));
             dayHeader.setMinHeight(98);
             dayHeader.setPrefHeight(98);
+            dayHeader.setMinWidth(dayCellWidth);
+            dayHeader.setPrefWidth(dayCellWidth);
             
             boolean isToday = date.equals(LocalDate.now());
             boolean isWeekend = (i == 0 || i == 6);
@@ -845,9 +893,11 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         driverCell.setPadding(new Insets(15));
         driverCell.setStyle(
             "-fx-background-color: " + (rowIndex % 2 == 0 ? "white" : "#f8fafc") + "; " +
-            "-fx-border-color: #e2e8f0; -fx-border-width: 0 2 1 0; " +
-            "-fx-min-width: 200; -fx-pref-width: 200; -fx-max-width: 200;"
+            "-fx-border-color: #e2e8f0; -fx-border-width: 0 2 1 0; "
         );
+        driverCell.setMinWidth(200);
+        driverCell.setPrefWidth(200);
+        driverCell.setMaxWidth(200);
         driverCell.setMinHeight(100);
         driverCell.setPrefHeight(120);
         driverCell.setMaxHeight(150); // Allow some flexibility for multiple loads
@@ -889,9 +939,10 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         StackPane cell = new StackPane();
         cell.setStyle(
             "-fx-background-color: " + (rowIndex % 2 == 0 ? "white" : "#f8fafc") + "; " +
-            "-fx-border-color: #e2e8f0; -fx-border-width: 0 1 1 0; " +
-            "-fx-min-width: 150; -fx-pref-width: 150;"
+            "-fx-border-color: #e2e8f0; -fx-border-width: 0 1 1 0; "
         );
+        cell.setMinWidth(dayCellWidth);
+        cell.setPrefWidth(dayCellWidth);
         cell.setMinHeight(100);
         cell.setPrefHeight(120);
         cell.setMaxHeight(150); // Allow expansion for multiple loads
@@ -905,8 +956,7 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         cell.setOnMouseExited(e -> {
             cell.setStyle(
                 "-fx-background-color: " + (rowIndex % 2 == 0 ? "white" : "#f8fafc") + "; " +
-                "-fx-border-color: #e2e8f0; -fx-border-width: 0 1 1 0; " +
-                "-fx-min-width: 150; -fx-pref-width: 150;"
+                "-fx-border-color: #e2e8f0; -fx-border-width: 0 1 1 0; "
             );
         });
         
@@ -980,6 +1030,7 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         bar.setPadding(new Insets(4, 8, 4, 8));
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setMaxWidth(Double.MAX_VALUE);
+        bar.setPrefWidth(dayCellWidth - 10);
         
         String color = LoadStatusUtil.colorFor(load.getStatus());
         boolean hasConflict = conflictMap.containsKey(driver.getName()) &&
