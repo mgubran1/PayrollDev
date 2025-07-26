@@ -52,6 +52,7 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
@@ -244,14 +245,16 @@ public class DriverGridTab extends Tab implements WindowAware {
         weekGrid.setVgap(1);
         weekGrid.setStyle("-fx-background-color: #e5e7eb; -fx-border-color: #d1d5db; -fx-border-width: 2px; -fx-border-radius: 8;");
         weekGrid.setPadding(new Insets(2));
-        weekGridScrollPane.setFitToWidth(true);
+        weekGridScrollPane.setFitToWidth(false);
         weekGridScrollPane.setPannable(true);
+        weekGridScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         weekGridScrollPane.setPrefHeight(480);
         weekGridScrollPane.setStyle("-fx-background: #f8fafc; -fx-border-color: #d1d5db; -fx-border-radius: 8;");
         weekGridScrollPane.hvalueProperty().addListener((obs, oldV, newV) -> {
             double hVal = newV.doubleValue();
             weekHeaderRow.setTranslateX(-hVal * (weekGrid.getWidth() - weekGridScrollPane.getViewportBounds().getWidth()));
         });
+        weekGridScrollPane.viewportBoundsProperty().addListener((obs, o, n) -> adjustColumnWidths());
         leftPanel.getChildren().add(weekGridScrollPane);
         refreshBtn.setOnAction(e -> refresh());
         mainLayout.setLeft(leftPanel);
@@ -402,6 +405,30 @@ public class DriverGridTab extends Tab implements WindowAware {
             Employee driver = drivers.get(i);
             buildDriverRow(driver, i + 1, i);
         }
+
+        adjustColumnWidths();
+    }
+
+    private void adjustColumnWidths() {
+        double viewportWidth = weekGridScrollPane.getViewportBounds().getWidth();
+        if (viewportWidth == 0) return;
+        double available = viewportWidth - 180; // subtract driver column
+        double dayWidth = Math.max(140, available / 7);
+        ObservableList<ColumnConstraints> cols = weekGrid.getColumnConstraints();
+        if (cols.size() == 8) {
+            for (int i = 1; i < cols.size(); i++) {
+                ColumnConstraints cc = cols.get(i);
+                cc.setPrefWidth(dayWidth);
+                cc.setMinWidth(dayWidth);
+            }
+        }
+        weekGrid.getChildren().forEach(node -> {
+            Integer col = GridPane.getColumnIndex(node);
+            if (col != null && col > 0 && node instanceof Region region) {
+                region.setMinWidth(dayWidth);
+                region.setPrefWidth(dayWidth);
+            }
+        });
     }
 
     private void buildHeaderRow() {

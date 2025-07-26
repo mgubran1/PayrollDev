@@ -3,6 +3,7 @@ package com.company.payroll.drivergrid;
 import com.company.payroll.loads.Load;
 import java.util.EnumMap;
 import java.util.Map;
+import javafx.scene.paint.Color;
 
 /**
  * Utility for mapping {@link Load.Status} values to display attributes.
@@ -45,5 +46,13 @@ public final class LoadStatusUtil {
      */
     public static String iconFor(Load.Status status) {
         return STATUS_ICONS.getOrDefault(status, "");
+    }
+
+    /**
+     * Convenience method that returns a {@link Color} instance for the given status.
+     * This is useful when nodes need a {@link Color} object instead of a hex string.
+     */
+    public static Color fxColorFor(Load.Status status) {
+        return Color.web(colorFor(status));
     }
 }
