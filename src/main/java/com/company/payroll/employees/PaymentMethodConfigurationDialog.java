@@ -580,6 +580,88 @@ public class PaymentMethodConfigurationDialog extends Dialog<Boolean> {
         instructions.setWrapText(true);
         instructions.setTextFill(Color.DARKBLUE);
         
+        // Add a section to switch employees to this payment method
+        VBox switchSection = new VBox(5);
+        switchSection.setPadding(new Insets(10));
+        switchSection.setStyle("-fx-background-color: #f0f0f0; -fx-border-color: #cccccc; -fx-border-radius: 5;");
+        
+        Label switchLabel = new Label("Switch Employees to Per Mile Payment:");
+        switchLabel.setStyle("-fx-font-weight: bold;");
+        
+        ComboBox<Employee> employeeSwitchBox = new ComboBox<>();
+        employeeSwitchBox.setPromptText("Select employee to switch to per mile payment...");
+        employeeSwitchBox.setPrefWidth(400);
+        
+        // Populate with employees NOT currently using per mile
+        try {
+            List<Employee> nonPerMileEmployees = employeeDAO.getAll().stream()
+                .filter(emp -> emp.getStatus() == Employee.Status.ACTIVE)
+                .filter(emp -> {
+                    PaymentType type = emp.getPaymentType();
+                    if (historyDAO != null) {
+                        PaymentMethodHistory history = historyDAO.getEffectivePaymentMethod(
+                            emp.getId(), LocalDate.now());
+                        if (history != null) {
+                            type = history.getPaymentType();
+                        }
+                    }
+                    return type != PaymentType.PER_MILE;
+                })
+                .collect(Collectors.toList());
+            employeeSwitchBox.getItems().addAll(nonPerMileEmployees);
+        } catch (Exception e) {
+            logger.error("Error loading non-per mile employees", e);
+        }
+        
+        employeeSwitchBox.setConverter(new StringConverter<Employee>() {
+            @Override
+            public String toString(Employee emp) {
+                if (emp == null) return "";
+                return emp.getName() + " - " + emp.getTruckUnit() + " (Currently: " + emp.getPaymentMethodDescription() + ")";
+            }
+            
+            @Override
+            public Employee fromString(String string) {
+                return null;
+            }
+        });
+        
+        Button addToPerMileBtn = new Button("Add to Per Mile Table");
+        addToPerMileBtn.setOnAction(e -> {
+            Employee selected = employeeSwitchBox.getValue();
+            if (selected != null) {
+                // Create a new row for this employee
+                EmployeePaymentRow newRow = new EmployeePaymentRow(selected);
+                newRow.setSelected(true);
+                newRow.setPerMileRate(0.0); // Start with 0, user needs to set rate
+                
+                // Add listeners
+                newRow.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
+                    updateSaveButtonState();
+                });
+                newRow.validationStatusProperty().addListener((obs, oldStatus, newStatus) -> {
+                    updateSaveButtonState();
+                });
+                
+                // Add to the per mile table
+                perMileTable.getItems().add(newRow);
+                employees.add(newRow);
+                
+                // Remove from dropdown
+                employeeSwitchBox.getItems().remove(selected);
+                employeeSwitchBox.setValue(null);
+                
+                updateStatus("Added " + selected.getName() + " to per mile payment configuration");
+                updateSaveButtonState();
+            }
+        });
+        
+        HBox switchControls = new HBox(10);
+        switchControls.setAlignment(Pos.CENTER_LEFT);
+        switchControls.getChildren().addAll(employeeSwitchBox, addToPerMileBtn);
+        
+        switchSection.getChildren().addAll(switchLabel, switchControls);
+        
         // Create table
         perMileTable = new TableView<>();
         perMileTable.setEditable(true);
@@ -689,7 +771,7 @@ public class PaymentMethodConfigurationDialog extends Dialog<Boolean> {
         
         recommendedSection.getChildren().addAll(recommendedLabel, ratesGrid);
         
-        layout.getChildren().addAll(instructions, perMileTable, bulkEditSection, 
+        layout.getChildren().addAll(instructions, switchSection, new Separator(), perMileTable, bulkEditSection, 
                                   new Separator(), noticeSection, 
                                   new Separator(), recommendedSection);
         
