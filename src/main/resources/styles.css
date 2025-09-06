@@ -1,281 +1,8 @@
 /* ===== DRIVER GRID TAB SPECIFIC STYLES ===== */
+/* NOTE: All Driver Grid specific styles have been moved to driver-grid-responsive.css for better organization
+   and responsive design implementation. Please modify styles there instead of here. */
 
-/* Driver Grid Main Header */
-.driver-grid-main-header {
-    -fx-background-color: #ffffff;
-    -fx-padding: 20px;
-    -fx-border-color: #e5e7eb;
-    -fx-border-width: 0 0 1 0;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 3, 0, 0, 1);
-    -fx-alignment: CENTER_LEFT;
-}
-
-/* Driver Grid Left Side (Title and Navigation) */
-.driver-grid-left-side {
-    -fx-spacing: 15px;
-    -fx-alignment: center-left;
-}
-
-.driver-grid-title {
-    -fx-font-size: 24px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #1f2937;
-}
-
-/* Driver Grid Right Side (Action Buttons and Summary) */
-.driver-grid-right-side {
-    -fx-spacing: 15px;
-    -fx-alignment: TOP_RIGHT;
-    -fx-padding: 0 0 0 20px;
-}
-
-/* Action Buttons Container */
-.driver-grid-action-buttons {
-    -fx-spacing: 10px;
-    -fx-alignment: CENTER_RIGHT;
-    -fx-padding: 0;
-}
-
-/* Summary Statistics Container */
-.driver-grid-summary-container {
-    -fx-spacing: 15px;
-    -fx-alignment: CENTER_RIGHT;
-    -fx-padding: 0;
-}
-
-/* Summary Box Styling */
-.driver-grid-summary-box {
-    -fx-background-color: white;
-    -fx-background-radius: 8px;
-    -fx-border-color: #e5e7eb;
-    -fx-border-radius: 8px;
-    -fx-border-width: 1px;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 4, 0, 0, 2);
-    -fx-padding: 15px 20px;
-    -fx-min-width: 120px;
-    -fx-min-height: 80px;
-    -fx-alignment: center;
-}
-
-.driver-grid-summary-box:hover {
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 6, 0, 0, 3);
-    -fx-scale-x: 1.02;
-    -fx-scale-y: 1.02;
-}
-
-.driver-grid-summary-value {
-    -fx-font-size: 24px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #1f2937;
-}
-
-.driver-grid-summary-title {
-    -fx-font-size: 12px;
-    -fx-text-fill: #6b7280;
-    -fx-font-weight: 500;
-}
-
-/* Driver Grid Action Buttons */
-.driver-grid-action-button {
-    -fx-background-color: linear-gradient(to bottom, #3b82f6, #2563eb);
-    -fx-background-radius: 6px;
-    -fx-text-fill: white;
-    -fx-font-size: 12px;
-    -fx-font-weight: 600;
-    -fx-padding: 8px 16px;
-    -fx-cursor: hand;
-    -fx-min-height: 32px;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 3, 0, 0, 1);
-    -fx-border-width: 0;
-}
-
-.driver-grid-action-button:hover {
-    -fx-background-color: linear-gradient(to bottom, #2563eb, #1d4ed8);
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 5, 0, 0, 2);
-    -fx-scale-x: 1.02;
-    -fx-scale-y: 1.02;
-}
-
-.driver-grid-action-button:pressed {
-    -fx-background-color: linear-gradient(to bottom, #1d4ed8, #1e40af);
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 2, 0, 0, 1);
-    -fx-scale-x: 0.98;
-    -fx-scale-y: 0.98;
-}
-
-/* Driver Grid Search and Filter Section */
-.driver-grid-search-section {
-    -fx-background-color: #f9fafb;
-    -fx-padding: 15px 20px;
-    -fx-border-color: #e5e7eb;
-    -fx-border-width: 0 0 1 0;
-    -fx-spacing: 15px;
-    -fx-alignment: center-left;
-}
-
-.driver-grid-search-field {
-    -fx-background-color: white;
-    -fx-background-radius: 6px;
-    -fx-border-color: #d1d5db;
-    -fx-border-radius: 6px;
-    -fx-border-width: 1px;
-    -fx-padding: 8px 12px;
-    -fx-font-size: 13px;
-    -fx-min-width: 200px;
-}
-
-.driver-grid-search-field:focused {
-    -fx-border-color: #3b82f6;
-    -fx-border-width: 2px;
-    -fx-effect: dropshadow(gaussian, rgba(59, 130, 246, 0.2), 4, 0, 0, 0);
-}
-
-.driver-grid-filter-combo {
-    -fx-background-color: white;
-    -fx-background-radius: 6px;
-    -fx-border-color: #d1d5db;
-    -fx-border-radius: 6px;
-    -fx-border-width: 1px;
-    -fx-padding: 8px 12px;
-    -fx-font-size: 13px;
-    -fx-min-width: 150px;
-}
-
-.driver-grid-filter-combo:focused {
-    -fx-border-color: #3b82f6;
-    -fx-border-width: 2px;
-}
-
-.driver-grid-checkbox {
-    -fx-font-size: 13px;
-    -fx-text-fill: #374151;
-    -fx-spacing: 8px;
-}
-
-.driver-grid-checkbox .box {
-    -fx-background-color: white;
-    -fx-border-color: #d1d5db;
-    -fx-border-radius: 4px;
-    -fx-border-width: 1px;
-    -fx-padding: 3px;
-}
-
-.driver-grid-checkbox:selected .box {
-    -fx-background-color: #3b82f6;
-    -fx-border-color: #3b82f6;
-}
-
-.driver-grid-checkbox:selected .mark {
-    -fx-background-color: white;
-}
-
-/* Driver Grid Week Navigation */
-.driver-grid-week-nav {
-    -fx-spacing: 10px;
-    -fx-alignment: center-left;
-}
-
-.driver-grid-week-nav .button {
-    -fx-background-color: #f3f4f6;
-    -fx-background-radius: 6px;
-    -fx-text-fill: #374151;
-    -fx-font-size: 14px;
-    -fx-font-weight: 600;
-    -fx-padding: 8px 12px;
-    -fx-cursor: hand;
-    -fx-min-width: 40px;
-    -fx-min-height: 32px;
-    -fx-effect: none;
-    -fx-border-width: 0;
-}
-
-.driver-grid-week-nav .button:hover {
-    -fx-background-color: #e5e7eb;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 3, 0, 0, 1);
-}
-
-.driver-grid-week-nav .date-picker {
-    -fx-background-color: white;
-    -fx-background-radius: 6px;
-    -fx-border-color: #d1d5db;
-    -fx-border-radius: 6px;
-    -fx-border-width: 1px;
-    -fx-padding: 8px 12px;
-    -fx-font-size: 13px;
-    -fx-min-width: 120px;
-}
-
-.driver-grid-week-nav .date-picker:focused {
-    -fx-border-color: #3b82f6;
-    -fx-border-width: 2px;
-}
-
-/* Driver Grid Legend */
-.driver-grid-legend {
-    -fx-background-color: #f9fafb;
-    -fx-padding: 15px 20px;
-    -fx-border-color: #e5e7eb;
-    -fx-border-width: 0 0 1 0;
-    -fx-spacing: 20px;
-    -fx-alignment: center-left;
-}
-
-.driver-grid-legend-title {
-    -fx-font-size: 14px;
-    -fx-font-weight: 600;
-    -fx-text-fill: #374151;
-}
-
-.driver-grid-legend-item {
-    -fx-spacing: 8px;
-    -fx-alignment: center-left;
-}
-
-.driver-grid-legend-rect {
-    -fx-background-radius: 4px;
-    -fx-stroke: #d1d5db;
-    -fx-stroke-width: 1px;
-    -fx-pref-width: 16px;
-    -fx-pref-height: 16px;
-}
-
-.driver-grid-legend-label {
-    -fx-font-size: 12px;
-    -fx-text-fill: #374151;
-}
-
-/* Driver Grid Multi-stop Indicator */
-.driver-grid-multi-stop-indicator {
-    -fx-font-size: 10px;
-    -fx-text-fill: #6b7280;
-    -fx-padding: 5px 0 0 0;
-    -fx-font-style: italic;
-    -fx-alignment: center-right;
-}
-
-/* Driver Grid Auto-refresh Checkbox */
-.driver-grid-auto-refresh {
-    -fx-font-size: 12px;
-    -fx-text-fill: #374151;
-    -fx-spacing: 8px;
-}
-
-.driver-grid-auto-refresh .box {
-    -fx-background-color: white;
-    -fx-border-color: #d1d5db;
-    -fx-border-radius: 4px;
-    -fx-border-width: 1px;
-    -fx-padding: 3px;
-}
-
-.driver-grid-auto-refresh:selected .box {
-    -fx-background-color: #3b82f6;
-    -fx-border-color: #3b82f6;
-}
-
-.driver-grid-auto-refresh:selected .mark {
-    -fx-background-color: white;
-}
+/* styles.css continues below with non-driver-grid styles */
 
 /* ===== ROOT & GENERAL ===== */
 .root {
@@ -2083,4 +1810,308 @@
 .dialog-pane .text-field,
 .dialog-pane .text-area {
     -fx-text-fill: #000000;
+}
+
+/* ===== ENTERPRISE PERCENTAGE CONFIGURATION DIALOG STYLES ===== */
+
+/* Session Status Bar */
+.percentage-config-status-bar {
+    -fx-background-color: #E3F2FD;
+    -fx-background-radius: 5px;
+    -fx-padding: 8px 12px;
+    -fx-spacing: 15px;
+}
+
+.percentage-config-status-bar .label {
+    -fx-font-weight: bold;
+    -fx-text-fill: #1976D2;
+}
+
+/* Status Label with Animations */
+.percentage-config-status {
+    -fx-font-weight: bold;
+    -fx-text-fill: #2196F3;
+    -fx-font-size: 13px;
+}
+
+.percentage-config-status-success {
+    -fx-text-fill: #2E7D32;
+    -fx-font-weight: bold;
+}
+
+.percentage-config-status-error {
+    -fx-text-fill: #D32F2F;
+    -fx-font-weight: bold;
+}
+
+/* Percentage Table Enhancements */
+.percentage-config-table {
+    -fx-background-color: white;
+    -fx-border-color: #E0E0E0;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+}
+
+.percentage-config-table .column-header {
+    -fx-background-color: #F5F5F5;
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+}
+
+/* New Percentage Columns - Editable with Yellow Background */
+.percentage-config-table .new-percentage-column {
+    -fx-background-color: #FFFDE7;
+}
+
+.percentage-config-table .new-percentage-column .column-header {
+    -fx-background-color: #FFF9C4;
+    -fx-text-fill: #F57C00;
+    -fx-font-weight: bold;
+}
+
+/* Modified Cell Highlighting */
+.percentage-cell-modified {
+    -fx-background-color: #C8E6C9 !important;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1B5E20;
+    -fx-alignment: CENTER;
+}
+
+/* Current Values - Read Only */
+.percentage-cell-readonly {
+    -fx-background-color: #F5F5F5;
+    -fx-alignment: CENTER;
+    -fx-text-fill: #616161;
+}
+
+/* Bulk Update Section */
+.percentage-bulk-update {
+    -fx-background-color: white;
+    -fx-border-color: #E0E0E0;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-padding: 12px;
+}
+
+.percentage-bulk-field {
+    -fx-background-color: white;
+    -fx-border-color: #2196F3;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-padding: 6px 10px;
+    -fx-font-size: 13px;
+}
+
+.percentage-bulk-field:focused {
+    -fx-border-width: 2px;
+    -fx-border-color: #1976D2;
+    -fx-effect: dropshadow(gaussian, rgba(25, 118, 210, 0.3), 4, 0, 0, 0);
+}
+
+/* Apply Button with Professional Gradient */
+.percentage-apply-button {
+    -fx-background-color: linear-gradient(to bottom, #2196F3, #1976D2);
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-padding: 8px 16px;
+    -fx-background-radius: 4px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 3, 0, 0, 1);
+}
+
+.percentage-apply-button:hover {
+    -fx-background-color: linear-gradient(to bottom, #1976D2, #1565C0);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);
+}
+
+/* Validation Message */
+.percentage-validation-label {
+    -fx-text-fill: #D32F2F;
+    -fx-font-size: 11px;
+    -fx-font-style: italic;
+}
+
+/* Row Highlighting for Changes */
+.percentage-row-changed {
+    -fx-background-color: #E8F5E9;
+}
+
+.percentage-row-changed:hover {
+    -fx-background-color: #C8E6C9;
+}
+
+/* Audit Trail Indicators */
+.audit-indicator {
+    -fx-text-fill: #FF9800;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+/* Session ID Display */
+.session-id-label {
+    -fx-font-size: 10px;
+    -fx-text-fill: #666666;
+    -fx-font-family: monospace;
+}
+
+/* User Label */
+.user-label {
+    -fx-font-weight: bold;
+    -fx-text-fill: #1976D2;
+}
+
+/* Tooltip Styles for Percentage Cells */
+.percentage-tooltip {
+    -fx-background-color: #424242;
+    -fx-text-fill: white;
+    -fx-background-radius: 4px;
+    -fx-padding: 6px 10px;
+    -fx-font-size: 11px;
+}
+
+/* Animation Classes */
+@keyframes flash-success {
+    0% { -fx-background-color: transparent; }
+    50% { -fx-background-color: #C8E6C9; }
+    100% { -fx-background-color: transparent; }
+}
+
+@keyframes flash-error {
+    0% { -fx-background-color: transparent; }
+    50% { -fx-background-color: #FFCDD2; }
+    100% { -fx-background-color: transparent; }
+}
+
+/* Checkbox Styling */
+.percentage-select-checkbox {
+    -fx-padding: 4px;
+}
+
+.percentage-select-all {
+    -fx-font-weight: bold;
+    -fx-text-fill: #1976D2;
+}
+
+/* Instructions Label */
+.percentage-instructions {
+    -fx-font-weight: bold;
+    -fx-text-fill: #2C3E50;
+    -fx-font-size: 12px;
+    -fx-padding: 4px 8px;
+    -fx-background-color: #FFF9C4;
+    -fx-background-radius: 4px;
+}
+
+/* Preview Label */
+.percentage-preview {
+    -fx-text-fill: #1976D2;
+    -fx-font-size: 12px;
+    -fx-font-style: italic;
+}
+
+/* Dialog Buttons */
+.percentage-dialog-button {
+    -fx-min-width: 100px;
+    -fx-padding: 8px 16px;
+    -fx-font-weight: bold;
+}
+
+/* Separator Style */
+.percentage-separator {
+    -fx-background-color: #E0E0E0;
+    -fx-pref-height: 1px;
+    -fx-padding: 8px 0;
+}
+
+/* Notes Text Area */
+.percentage-notes-area {
+    -fx-background-color: white;
+    -fx-border-color: #E0E0E0;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-font-family: "Segoe UI", sans-serif;
+    -fx-font-size: 12px;
+}
+
+.percentage-notes-area:focused {
+    -fx-border-color: #2196F3;
+    -fx-border-width: 2px;
+}
+
+/* Quick Fill Preset Buttons */
+.percentage-preset-button {
+    -fx-background-color: #E0E0E0;
+    -fx-text-fill: #424242;
+    -fx-font-size: 11px;
+    -fx-padding: 4px 8px;
+    -fx-background-radius: 3px;
+    -fx-cursor: hand;
+}
+
+.percentage-preset-button:hover {
+    -fx-background-color: #BDBDBD;
+    -fx-text-fill: #212121;
+}
+
+/* Audit Log Viewer Styles */
+.audit-log-table {
+    -fx-background-color: white;
+    -fx-font-size: 11px;
+}
+
+.audit-log-table .column-header {
+    -fx-background-color: #37474F;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+/* Action Buttons in Table */
+.percentage-action-button {
+    -fx-font-size: 10px;
+    -fx-padding: 2px 5px;
+    -fx-background-radius: 3px;
+}
+
+.percentage-reset-button {
+    -fx-background-color: #FF9800;
+    -fx-text-fill: white;
+}
+
+.percentage-history-button {
+    -fx-background-color: #607D8B;
+    -fx-text-fill: white;
+}
+
+/* Undo/Redo Buttons */
+.percentage-undo-button {
+    -fx-background-color: #FFC107;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.percentage-redo-button {
+    -fx-background-color: #FF9800;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.percentage-reset-all-button {
+    -fx-background-color: #9E9E9E;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+/* Audit Trail Button */
+.percentage-audit-button {
+    -fx-background-color: #607D8B;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+/* Success Animation for Status Label */
+.status-success-animation {
+    -fx-text-fill: #2E7D32;
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
 }

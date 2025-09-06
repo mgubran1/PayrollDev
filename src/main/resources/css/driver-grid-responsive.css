@@ -1,0 +1,1066 @@
+/* Driver Grid Responsive CSS Styles */
+/* Updated with comprehensive responsive design patterns */
+
+/* Root Variables for consistent theming */
+.root {
+    /* Color Palette - Updated for WCAG AA compliance */
+    --primary-blue: #0C4A8B;
+    --primary-blue-dark: #073061;
+    --primary-blue-light: #E0F2FE;
+
+    --accent-teal: #0891B2;
+    --accent-teal-dark: #0E7490;
+    --accent-teal-light: #CFFAFE;
+
+    --weekend-purple: #6B46C1;
+    --weekend-purple-dark: #5B21B6;
+    --weekend-purple-light: #F3E8FF;
+    
+    --weekend-yellow: #EAB308;
+    --weekend-yellow-dark: #CA8A04;
+    --weekend-yellow-light: #FEF9C3;
+
+    /* Neutral Colors */
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+
+    /* Spacing Scale (8px base) */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-2xl: 48px;
+
+    /* Border Radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    
+    /* Transitions */
+    --transition-fast: 0.1s ease;
+    --transition-normal: 0.2s ease;
+    --transition-slow: 0.3s ease;
+    
+    /* Z-index layers */
+    --z-header: 100;
+    --z-dropdown: 200;
+    --z-tooltip: 300;
+    --z-modal: 400;
+}
+
+/* ========== MAIN LAYOUT ========== */
+
+/* Main Layout Container */
+.driver-grid-main-layout {
+    -fx-background-color: var(--gray-50);
+    -fx-padding: var(--space-md);
+}
+
+/* ========== RESPONSIVE HEADER ========== */
+
+/* Collapsible Header Container */
+.driver-grid-header-container {
+    -fx-background-color: white;
+    -fx-background-radius: var(--radius-lg);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 10, 0, 0, 2);
+    -fx-padding: var(--space-sm) var(--space-md);
+    -fx-spacing: var(--space-sm);
+    -fx-border-color: var(--gray-200);
+    -fx-border-width: 0 0 1 0;
+    -fx-border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* Collapsed header state */
+.driver-grid-header-collapsed {
+    -fx-max-height: 40px;
+    -fx-pref-height: 40px;
+    -fx-min-height: 40px;
+    -fx-alignment: center-left;
+}
+
+/* Expanded header state */
+.driver-grid-header-expanded {
+    -fx-padding: var(--space-md) var(--space-md);
+    -fx-alignment: top-left;
+}
+
+/* Toggle button for collapsing header */
+.driver-grid-collapse-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: var(--gray-600);
+    -fx-background-radius: var(--radius-sm);
+    -fx-padding: var(--space-xs);
+    -fx-min-width: 30px;
+    -fx-min-height: 30px;
+    -fx-cursor: hand;
+}
+
+.driver-grid-collapse-btn:hover {
+    -fx-background-color: var(--gray-100);
+    -fx-text-fill: var(--gray-800);
+}
+
+/* Compact view button */
+.driver-grid-compact-view-btn {
+    -fx-background-color: linear-gradient(to bottom, #4c1d95, #5b21b6);
+    -fx-background-radius: var(--radius-md);
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-padding: var(--space-sm) var(--space-md);
+    -fx-cursor: hand;
+    -fx-min-height: 28px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 3, 0, 0, 1);
+    -fx-border-width: 0;
+    -fx-min-width: 80px;
+}
+
+.driver-grid-compact-view-btn:hover {
+    -fx-background-color: linear-gradient(to bottom, #5b21b6, #6d28d9);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 5, 0, 0, 2);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+/* Header Section - optimized for space */
+.driver-grid-header {
+    -fx-background-color: white;
+    -fx-background-radius: var(--radius-md);
+    -fx-padding: var(--space-xs) var(--space-md);
+    -fx-spacing: var(--space-sm);
+}
+
+.driver-grid-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: var(--gray-900);
+    -fx-wrap-text: true;
+    -fx-min-width: 120px;
+}
+
+/* Optimized controls container */
+.driver-grid-controls-container {
+    -fx-spacing: var(--space-sm);
+    -fx-padding: var(--space-xs) 0;
+}
+
+/* Search and Filter Section - now using FlowPane for automatic wrapping */
+.driver-grid-search-section {
+    -fx-spacing: var(--space-sm);
+    -fx-padding: var(--space-xs) 0;
+    -fx-hgap: var(--space-sm);
+    -fx-vgap: var(--space-xs);
+    -fx-alignment: center-left;
+    -fx-pref-wrap-length: 1000px;
+}
+
+.driver-grid-search-field {
+    -fx-background-radius: var(--radius-md);
+    -fx-border-radius: var(--radius-md);
+    -fx-border-color: var(--gray-300);
+    -fx-border-width: 1px;
+    -fx-padding: var(--space-xs) var(--space-md);
+    -fx-font-size: 13px;
+    -fx-pref-height: 28px;
+    -fx-min-width: 100px;
+    -fx-pref-width: 180px;
+    -fx-max-width: 250px;
+}
+
+.driver-grid-search-field:focused {
+    -fx-border-color: var(--primary-blue);
+    -fx-border-width: 2px;
+    -fx-effect: dropshadow(gaussian, rgba(12, 74, 139, 0.15), 8, 0, 0, 0);
+}
+
+.driver-grid-filter-combo {
+    -fx-background-radius: var(--radius-md);
+    -fx-border-radius: var(--radius-md);
+    -fx-border-color: var(--gray-300);
+    -fx-border-width: 1px;
+    -fx-pref-height: 28px;
+    -fx-min-width: 90px;
+    -fx-pref-width: 120px;
+    -fx-max-width: 160px;
+    -fx-font-size: 12px;
+}
+
+.driver-grid-filter-combo:hover {
+    -fx-border-color: var(--gray-400);
+    -fx-cursor: hand;
+}
+
+.driver-grid-filter-combo:focused {
+    -fx-border-color: var(--primary-blue);
+    -fx-border-width: 2px;
+}
+
+/* Week Navigation - now using FlowPane for responsive wrapping */
+.driver-grid-week-nav {
+    -fx-spacing: var(--space-xs);
+    -fx-alignment: center;
+    -fx-hgap: var(--space-xs);
+    -fx-vgap: var(--space-xs);
+    -fx-pref-wrap-length: 500px; /* Wrap at 500px width */
+}
+
+.driver-grid-nav-button {
+    -fx-background-radius: var(--radius-md);
+    -fx-background-color: white;
+    -fx-border-color: var(--gray-300);
+    -fx-border-width: 1px;
+    -fx-border-radius: var(--radius-md);
+    -fx-padding: var(--space-xs) var(--space-sm);
+    -fx-font-size: 12px;
+    -fx-cursor: hand;
+    -fx-pref-height: 28px;
+    -fx-min-width: 36px;
+    -fx-max-width: 100px;
+    -fx-wrap-text: true;
+}
+
+.driver-grid-nav-button:hover {
+    -fx-background-color: var(--gray-50);
+    -fx-border-color: var(--gray-400);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 6, 0, 0, 1);
+}
+
+.driver-grid-nav-button:pressed {
+    -fx-background-color: var(--gray-100);
+    -fx-effect: none;
+}
+
+/* Week Range Label */
+.driver-grid-week-range {
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+    -fx-text-fill: var(--gray-700);
+    -fx-wrap-text: true;
+    -fx-min-width: 80px;
+    -fx-pref-width: 120px;
+    -fx-max-width: 160px;
+}
+
+/* ========== GRID CONTAINER ========== */
+
+.driver-grid-container {
+    -fx-background-color: white;
+    -fx-background-radius: var(--radius-lg);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 10, 0, 0, 2);
+    -fx-padding: var(--space-md);
+}
+
+/* Enhanced scroll pane for better scrolling experience */
+.driver-grid-scroll-pane {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-padding: 0;
+    -fx-fit-to-width: true;
+}
+
+.driver-grid-scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
+.driver-grid-scroll-pane .scroll-bar:vertical {
+    -fx-background-color: var(--gray-100);
+    -fx-background-radius: var(--radius-sm);
+    -fx-pref-width: 12px;
+}
+
+.driver-grid-scroll-pane .scroll-bar:vertical .thumb {
+    -fx-background-color: var(--gray-300);
+    -fx-background-radius: var(--radius-sm);
+}
+
+.driver-grid-scroll-pane .scroll-bar:vertical .thumb:hover {
+    -fx-background-color: var(--gray-400);
+}
+
+.driver-grid-scroll-pane .scroll-bar:horizontal {
+    -fx-background-color: var(--gray-100);
+    -fx-background-radius: var(--radius-sm);
+    -fx-pref-height: 12px;
+}
+
+.driver-grid-scroll-pane .scroll-bar:horizontal .thumb {
+    -fx-background-color: var(--gray-300);
+    -fx-background-radius: var(--radius-sm);
+}
+
+.driver-grid-scroll-pane .scroll-bar:horizontal .thumb:hover {
+    -fx-background-color: var(--gray-400);
+}
+
+/* ========== DAY HEADERS ========== */
+
+/* Day Headers with enhanced contrast */
+.driver-grid-day-header {
+    -fx-padding: var(--space-sm);
+    -fx-alignment: center;
+    -fx-background-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    -fx-min-height: 50px;
+    -fx-pref-height: 70px;
+    -fx-min-width: 80px;
+}
+
+.driver-grid-day-header-weekday {
+    -fx-background-color: #E0F2FE; /* Light blue for weekdays */
+    -fx-border-color: #B4E0FC;
+    -fx-border-width: 0 1px 1px 0;
+}
+
+.driver-grid-day-header-weekend {
+    -fx-background-color: #FEF9C3; /* Light yellow for weekends */
+    -fx-border-color: #FEF08A;
+    -fx-border-width: 0 1px 1px 0;
+}
+
+.driver-grid-day-header-today {
+    -fx-background-color: #CFFAFE; /* Light teal for today */
+    -fx-border-color: #A5F3FC;
+    -fx-border-width: 0 1px 2px 0;
+    -fx-effect: dropshadow(gaussian, rgba(8, 145, 178, 0.3), 8, 0, 0, 2);
+}
+
+.driver-grid-day-name {
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: #334155; /* Dark slate blue for better contrast */
+}
+
+.driver-grid-day-date {
+    -fx-font-size: 11px;
+    -fx-text-fill: #475569; /* Slate blue for better contrast */
+}
+
+/* ========== DRIVER CELL ========== */
+
+.driver-grid-driver-cell {
+    -fx-padding: var(--space-md);
+    -fx-border-color: var(--gray-200);
+    -fx-border-width: 0 1px 1px 0;
+    -fx-min-height: 80px;
+    -fx-pref-height: 100px;
+    -fx-min-width: 100px;
+    -fx-pref-width: 150px;
+    -fx-max-width: 250px;
+}
+
+.driver-grid-driver-cell:hover {
+    -fx-background-color: var(--gray-50);
+}
+
+.driver-grid-driver-name {
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+    -fx-text-fill: var(--gray-800);
+    -fx-cursor: hand;
+    -fx-wrap-text: true;
+    -fx-max-width: 230px;
+}
+
+.driver-grid-driver-name:hover {
+    -fx-text-fill: var(--primary-blue);
+    -fx-underline: true;
+}
+
+.driver-grid-truck-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: var(--gray-600);
+    -fx-wrap-text: true;
+}
+
+/* ========== LOAD BARS ========== */
+
+.driver-grid-load-bar {
+    -fx-background-radius: var(--radius-sm);
+    -fx-padding: 5px 8px;
+    -fx-spacing: 4px;
+    -fx-alignment: center-left;
+    -fx-min-height: 26px;
+    -fx-max-width: 100%;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 2, 0, 0, 1);
+}
+
+.driver-grid-load-bar:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 4, 0, 0, 2);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+.driver-grid-load-label {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: black;
+    -fx-wrap-text: true;
+    -fx-max-width: 300px;
+}
+
+/* Location styles for pickup/delivery information */
+.driver-grid-location-info {
+    -fx-font-size: 10px;
+    -fx-text-fill: black;
+    -fx-font-style: italic;
+}
+
+.driver-grid-load-time {
+    -fx-font-size: 10px;
+    -fx-text-fill: black;
+}
+
+.driver-grid-load-customer {
+    -fx-font-size: 10px;
+    -fx-text-fill: black;
+    -fx-wrap-text: true;
+}
+
+/* Multi-stop indicator */
+.driver-grid-multi-stop {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: black;
+}
+
+/* ========== DAY CELLS ========== */
+
+.driver-grid-day-cell {
+    -fx-border-color: var(--gray-200);
+    -fx-border-width: 0 1px 1px 0;
+    -fx-min-height: 80px;
+    -fx-pref-height: 100px;
+    -fx-min-width: 80px;
+    -fx-pref-width: 120px;
+    -fx-padding: var(--space-xs);
+}
+
+.driver-grid-day-cell:hover {
+    -fx-background-color: var(--gray-50);
+}
+
+/* Zebra striping for better row distinction */
+.driver-grid-row-even {
+    -fx-background-color: #ffffff;
+}
+
+.driver-grid-row-odd {
+    -fx-background-color: #f8f9fa;
+}
+
+/* Apply zebra striping to driver cells */
+.driver-grid-row-even .driver-grid-driver-cell {
+    -fx-background-color: #ffffff;
+}
+
+.driver-grid-row-odd .driver-grid-driver-cell {
+    -fx-background-color: #f8f9fa;
+}
+
+/* Apply zebra striping to day cells */
+.driver-grid-row-even .driver-grid-day-cell {
+    -fx-background-color: #ffffff;
+}
+
+.driver-grid-row-odd .driver-grid-day-cell {
+    -fx-background-color: #f8f9fa;
+}
+
+/* Ensure hover effects work with zebra striping */
+.driver-grid-day-cell:hover {
+    -fx-background-color: #f0f9ff !important;
+    -fx-cursor: hand;
+}
+
+/* Empty cell styling */
+.driver-grid-empty-cell {
+    -fx-background-color: #fafbfc;
+    -fx-border-color: #e5e7eb;
+    -fx-border-width: 1px;
+    -fx-border-style: dashed;
+}
+
+/* ========== SUMMARY CARDS ========== */
+
+/* Responsive summary cards using fluid layout */
+.driver-grid-summary-container {
+    -fx-spacing: var(--space-md);
+    -fx-padding: var(--space-md) 0;
+    -fx-hgap: var(--space-md);
+    -fx-vgap: var(--space-md);
+    -fx-alignment: center;
+    -fx-pref-wrap-length: 600px; /* Wrap at 600px width */
+}
+
+.driver-grid-summary-card {
+    -fx-background-color: white;
+    -fx-background-radius: var(--radius-md);
+    -fx-border-color: var(--gray-200);
+    -fx-border-width: 1px;
+    -fx-border-radius: var(--radius-md);
+    -fx-padding: var(--space-md);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.05), 4, 0, 0, 1);
+    -fx-min-width: 100px;
+    -fx-pref-width: 150px;
+    -fx-max-width: 200px;
+    -fx-min-height: 80px;
+    -fx-alignment: center;
+}
+
+.driver-grid-summary-card:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 8, 0, 0, 2);
+    -fx-border-color: var(--gray-300);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+.driver-grid-summary-icon {
+    -fx-font-size: 24px;
+    -fx-text-fill: var(--primary-blue);
+}
+
+.driver-grid-summary-title {
+    -fx-font-size: 12px;
+    -fx-text-fill: var(--gray-600);
+    -fx-wrap-text: true;
+    -fx-text-alignment: center;
+}
+
+.driver-grid-summary-value {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: var(--gray-900);
+}
+
+/* ========== RESPONSIVE BREAKPOINTS ========== */
+/* These classes will be applied programmatically based on window width */
+
+/* Mobile: < 768px - Single column, stacked layout */
+.driver-grid-mobile .driver-grid-title {
+    -fx-font-size: 20px;
+}
+
+.driver-grid-mobile .driver-grid-week-nav {
+    -fx-pref-wrap-length: 320px; /* Force wrap on mobile */
+}
+
+.driver-grid-mobile .driver-grid-search-section {
+    -fx-pref-wrap-length: 320px; /* Force wrap on mobile */
+}
+
+.driver-grid-mobile .driver-grid-search-field {
+    -fx-pref-width: 100%;
+    -fx-max-width: 280px;
+}
+
+.driver-grid-mobile .driver-grid-filter-combo {
+    -fx-pref-width: 100%;
+    -fx-max-width: 280px;
+}
+
+.driver-grid-mobile .driver-grid-summary-card {
+    -fx-min-width: 100%;
+    -fx-pref-width: 100%;
+    -fx-max-width: 280px;
+}
+
+.driver-grid-mobile .driver-grid-driver-cell {
+    -fx-min-width: 120px;
+    -fx-pref-width: 120px;
+}
+
+.driver-grid-mobile .driver-grid-day-cell {
+    -fx-min-width: 60px;
+    -fx-pref-width: 60px;
+}
+
+.driver-grid-mobile .driver-grid-day-header {
+    -fx-min-width: 60px;
+    -fx-pref-width: 60px;
+    -fx-min-height: 40px;
+    -fx-pref-height: 40px;
+}
+
+.driver-grid-mobile .driver-grid-day-name {
+    -fx-font-size: 11px;
+}
+
+.driver-grid-mobile .driver-grid-day-date {
+    -fx-font-size: 9px;
+}
+
+/* Tablet: 768px - 1024px - Condensed grid */
+.driver-grid-tablet .driver-grid-week-nav {
+    -fx-pref-wrap-length: 500px;
+}
+
+.driver-grid-tablet .driver-grid-search-section {
+    -fx-pref-wrap-length: 700px;
+}
+
+.driver-grid-tablet .driver-grid-driver-cell {
+    -fx-min-width: 120px;
+    -fx-pref-width: 140px;
+}
+
+.driver-grid-tablet .driver-grid-day-cell {
+    -fx-min-width: 90px;
+    -fx-pref-width: 90px;
+}
+
+.driver-grid-tablet .driver-grid-day-header {
+    -fx-min-width: 90px;
+    -fx-pref-width: 90px;
+}
+
+/* Desktop: 1024px - 1440px - Standard view */
+.driver-grid-desktop .driver-grid-driver-cell {
+    -fx-min-width: 150px;
+    -fx-pref-width: 180px;
+}
+
+.driver-grid-desktop .driver-grid-day-cell {
+    -fx-min-width: 100px;
+    -fx-pref-width: 120px;
+}
+
+.driver-grid-desktop .driver-grid-day-header {
+    -fx-min-width: 100px;
+    -fx-pref-width: 120px;
+}
+
+/* Wide: > 1440px - Enhanced spacing */
+.driver-grid-wide .driver-grid-driver-cell {
+    -fx-min-width: 180px;
+    -fx-pref-width: 200px;
+}
+
+.driver-grid-wide .driver-grid-day-cell {
+    -fx-min-width: 130px;
+    -fx-pref-width: 150px;
+}
+
+.driver-grid-wide .driver-grid-day-header {
+    -fx-min-width: 130px;
+    -fx-pref-width: 150px;
+}
+
+/* ========== UTILITY CLASSES ========== */
+
+.no-wrap {
+    -fx-wrap-text: false;
+}
+
+.truncate {
+    -fx-text-overrun: ellipsis;
+    -fx-wrap-text: false;
+}
+
+.full-width {
+    -fx-min-width: 100%;
+    -fx-pref-width: 100%;
+    -fx-max-width: 100%;
+}
+
+.flex-grow {
+    -fx-pref-width: infinity;
+}
+
+/* ========== ANIMATIONS AND TRANSITIONS ========== */
+@keyframes fadeIn {
+    from {
+        -fx-opacity: 0;
+    }
+
+    to {
+        -fx-opacity: 1;
+    }
+}
+
+@keyframes slideInFromLeft {
+    from {
+        -fx-translate-x: -20;
+        -fx-opacity: 0;
+    }
+
+    to {
+        -fx-translate-x: 0;
+        -fx-opacity: 1;
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        -fx-scale-x: 0.95;
+        -fx-scale-y: 0.95;
+        -fx-opacity: 0;
+    }
+
+    to {
+        -fx-scale-x: 1;
+        -fx-scale-y: 1;
+        -fx-opacity: 1;
+    }
+}
+
+/* Skeleton Loader for async data */
+.driver-grid-skeleton {
+    -fx-background-color: linear-gradient(to right,
+            var(--gray-200) 0%,
+            var(--gray-100) 50%,
+            var(--gray-200) 100%);
+    -fx-background-radius: var(--radius-sm);
+    -fx-min-height: 20px;
+}
+
+/* ========== PRINT STYLES ========== */
+.driver-grid-print-view {
+    -fx-background-color: white;
+}
+
+.driver-grid-print-view .driver-grid-action-buttons,
+.driver-grid-print-view .driver-grid-search-section,
+.driver-grid-print-view .driver-grid-auto-refresh {
+    -fx-visible: false;
+}
+
+.driver-grid-print-view .driver-grid-container {
+    -fx-effect: none;
+}
+
+.driver-grid-print-view .driver-grid-summary-card {
+    -fx-effect: none;
+    -fx-border-color: var(--gray-300);
+}
+
+/* Helper class to hide on print */
+.driver-grid-no-print {
+    -fx-visible: false;
+}
+
+/* ========== ACCESSIBILITY ENHANCEMENTS ========== */
+.driver-grid-focus-visible:focused {
+    -fx-border-color: var(--primary-blue);
+    -fx-border-width: 2px;
+    -fx-effect: dropshadow(gaussian, rgba(12, 74, 139, 0.25), 4, 0, 0, 0);
+}
+
+.driver-grid-keyboard-hint {
+    -fx-font-size: 10px;
+    -fx-text-fill: var(--gray-500);
+    -fx-padding: var(--space-xs) 0;
+}
+
+/* ========== DROP ZONE STYLES ========== */
+.driver-grid-drop-zone-active {
+    -fx-background-color: var(--accent-teal-light);
+    -fx-border-color: var(--accent-teal);
+    -fx-border-width: 2px;
+    -fx-border-style: dashed;
+    -fx-border-radius: var(--radius-sm);
+}
+
+/* ========== CONFLICT INDICATOR ========== */
+.driver-grid-conflict-indicator {
+    -fx-background-color: #B91C1C;
+    -fx-background-radius: 50%;
+    -fx-min-width: 12px;
+    -fx-min-height: 12px;
+    -fx-max-width: 12px;
+    -fx-max-height: 12px;
+}
+
+.driver-grid-conflict-badge {
+    -fx-background-color: #B91C1C;
+    -fx-text-fill: white;
+    -fx-background-radius: var(--radius-sm);
+    -fx-padding: 2px 6px;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+/* ========== CHECKBOX STYLING ========== */
+.driver-grid-checkbox {
+    -fx-font-size: 13px;
+    -fx-text-fill: var(--gray-700);
+    -fx-spacing: 8px;
+}
+
+.driver-grid-checkbox .box {
+    -fx-background-color: white;
+    -fx-border-color: var(--gray-400);
+    -fx-border-radius: 4px;
+    -fx-border-width: 1px;
+    -fx-padding: 3px;
+}
+
+.driver-grid-checkbox:selected .box {
+    -fx-background-color: var(--primary-blue);
+    -fx-border-color: var(--primary-blue);
+}
+
+.driver-grid-checkbox:selected .mark {
+    -fx-background-color: white;
+}
+
+/* ========== TOOLTIP ENHANCEMENTS ========== */
+.driver-grid-tooltip {
+    -fx-background-color: var(--gray-800);
+    -fx-text-fill: white;
+    -fx-padding: var(--space-sm) var(--space-md);
+    -fx-background-radius: var(--radius-sm);
+    -fx-font-size: 12px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 4, 0, 0, 2);
+}
+
+/* ========== LEGEND ========== */
+.driver-grid-legend {
+    -fx-padding: var(--space-sm) var(--space-md);
+    -fx-spacing: var(--space-sm);
+    -fx-hgap: var(--space-md);
+    -fx-vgap: var(--space-xs);
+    -fx-pref-wrap-length: 800px; /* Wrap at 800px width */
+}
+
+.driver-grid-legend-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: var(--gray-700);
+}
+
+.driver-grid-legend-item {
+    -fx-spacing: 8px;
+    -fx-alignment: center-left;
+}
+
+.driver-grid-legend-color {
+    -fx-min-width: 12px;
+    -fx-min-height: 12px;
+    -fx-max-width: 12px;
+    -fx-max-height: 12px;
+    -fx-background-radius: var(--radius-sm);
+}
+
+.driver-grid-legend-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: var(--gray-700);
+}
+
+/* ========== ACTION BUTTONS ========== */
+.driver-grid-action-button {
+    -fx-background-color: linear-gradient(to bottom, #0C4A8B, #073061);
+    -fx-background-radius: var(--radius-md);
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-padding: var(--space-xs) var(--space-sm);
+    -fx-cursor: hand;
+    -fx-min-height: 28px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 3, 0, 0, 1);
+    -fx-border-width: 0;
+    -fx-min-width: 70px;
+}
+
+.driver-grid-action-button:hover {
+    -fx-background-color: linear-gradient(to bottom, #073061, #052048);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 5, 0, 0, 2);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+.driver-grid-action-button:pressed {
+    -fx-background-color: linear-gradient(to bottom, #052048, #031633);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 2, 0, 0, 1);
+    -fx-scale-x: 0.98;
+    -fx-scale-y: 0.98;
+}
+
+/* Secondary action button */
+.driver-grid-action-button-secondary {
+    -fx-background-color: linear-gradient(to bottom, var(--gray-500), var(--gray-600));
+    -fx-background-radius: var(--radius-md);
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-padding: var(--space-xs) var(--space-sm);
+    -fx-cursor: hand;
+    -fx-min-height: 28px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 3, 0, 0, 1);
+    -fx-border-width: 0;
+    -fx-min-width: 70px;
+}
+
+.driver-grid-action-button-secondary:hover {
+    -fx-background-color: linear-gradient(to bottom, var(--gray-600), var(--gray-700));
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 5, 0, 0, 2);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+/* Compact dialog styles */
+.driver-grid-compact-dialog {
+    -fx-background-color: white;
+    -fx-background-radius: var(--radius-lg);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 20, 0, 0, 5);
+    -fx-padding: var(--space-md);
+    -fx-spacing: var(--space-md);
+}
+
+.driver-grid-compact-dialog-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: var(--gray-900);
+}
+
+.driver-grid-compact-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-padding: 0;
+    -fx-fit-to-width: true;
+    -fx-pref-height: 500px;
+}
+
+.driver-grid-compact-row {
+    -fx-background-color: white;
+    -fx-padding: var(--space-xs);
+    -fx-spacing: var(--space-xs);
+    -fx-border-color: var(--gray-200);
+    -fx-border-width: 0 0 1 0;
+}
+
+.driver-grid-compact-row:hover {
+    -fx-background-color: var(--gray-50);
+}
+
+/* ========== PROGRESS INDICATOR ========== */
+.driver-grid-loading-indicator {
+    -fx-progress-color: var(--primary-blue);
+}
+
+/* Grid lines for better visual separation */
+.driver-grid-week-grid {
+    -fx-grid-lines-visible: false; /* Disable default grid lines */
+    -fx-border-color: var(--gray-300);
+    -fx-border-width: 1px;
+    -fx-border-style: solid;
+    -fx-background-color: #ffffff;
+}
+
+/* Driver row divider - solid black line */
+.driver-grid-row-separator {
+    -fx-background-color: black;
+    -fx-pref-height: 1px;
+    -fx-min-height: 1px;
+    -fx-max-height: 1px;
+    -fx-pointer-events: none; /* Don't block mouse events */
+    -fx-opacity: 0.3; /* Make it less prominent */
+}
+
+/* Day column divider - vertical line */
+.driver-grid-day-divider {
+    -fx-border-color: #9ca3af;
+    -fx-border-width: 0 0 0 1px;
+    -fx-border-style: solid;
+    -fx-pointer-events: none; /* Don't block mouse events */
+    -fx-opacity: 0.3; /* Make it less prominent */
+}
+
+/* Make day cells have proper positioning for button overlays */
+.driver-grid-day-cell {
+    -fx-border-color: var(--gray-300);
+    -fx-border-width: 0 1px 1px 0;
+    -fx-border-style: solid;
+    -fx-background-color: transparent;
+    -fx-padding: 5px;
+    -fx-position: relative;
+    -fx-min-height: 80px;
+    -fx-cursor: hand;
+}
+
+/* Ensure load bars are properly styled and interactive */
+.driver-grid-load-bar {
+    -fx-background-radius: var(--radius-sm);
+    -fx-padding: 5px 8px;
+    -fx-spacing: 4px;
+    -fx-alignment: center-left;
+    -fx-min-height: 26px;
+    -fx-max-width: 100%;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 2, 0, 0, 1);
+}
+
+/* Load bar hover effect */
+.driver-grid-load-bar:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 4, 0, 0, 2);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+/* Driver cell with solid right border */
+.driver-grid-driver-cell {
+    -fx-border-color: black;
+    -fx-border-width: 0 1px 1px 0;
+    -fx-border-style: solid;
+    -fx-min-height: 80px;
+    -fx-padding: 10px;
+}
+
+/* Quick add button that appears on hover */
+.driver-grid-quick-add-button {
+    -fx-background-color: #0284c7;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 6px;
+    -fx-min-width: 24px;
+    -fx-min-height: 24px;
+    -fx-max-width: 24px;
+    -fx-max-height: 24px;
+    -fx-background-radius: 12px;
+    -fx-border-radius: 12px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 5, 0, 0, 1);
+    -fx-opacity: 0.9;
+}
+
+.driver-grid-quick-add-button:hover {
+    -fx-background-color: #0369a1;
+    -fx-opacity: 1.0;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.3), 8, 0, 0, 2);
+    -fx-scale-x: 1.1;
+    -fx-scale-y: 1.1;
+}
+
+.driver-grid-small-button {
+    -fx-background-color: #f1f5f9;
+    -fx-text-fill: #0284c7;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 2px 5px;
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+    -fx-border-color: #cbd5e1;
+    -fx-border-width: 1px;
+    -fx-cursor: hand;
+}
+
+.driver-grid-small-button:hover {
+    -fx-background-color: #e0f2fe;
+    -fx-border-color: #0284c7;
+}
