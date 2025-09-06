@@ -9,10 +9,10 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <javafx.version>24.0.1</javafx.version>
+        <javafx.version>21.0.4</javafx.version>
         <javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
-        <maven.compiler.source>24</maven.compiler.source>
-        <maven.compiler.target>24</maven.compiler.target>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
     </properties>
 
     <repositories>
@@ -354,7 +354,7 @@
                                             <version>3.6.0</version>
                                         </requireMavenVersion>
                                         <requireJavaVersion>
-                                            <version>24</version>
+                                            <version>21</version>
                                         </requireJavaVersion>
                                         <bannedDependencies>
                                             <excludes>
