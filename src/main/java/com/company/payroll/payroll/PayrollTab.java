@@ -3,8 +3,8 @@ package com.company.payroll.payroll;
 import com.company.payroll.employees.Employee;
 import com.company.payroll.employees.EmployeesTab;
 import com.company.payroll.employees.PercentageConfigurationDialog;
-import com.company.payroll.employees.EmployeePercentageHistory;
-import com.company.payroll.employees.EmployeePercentageHistoryDAO;
+// Old percentage history imports removed - using PaymentMethodHistory instead
+import com.company.payroll.employees.PaymentMethodConfigurationDialog;
 import com.company.payroll.fuel.FuelTransaction;
 import com.company.payroll.fuel.FuelTransactionDAO;
 import com.company.payroll.fuel.FuelImportTab;
@@ -98,6 +98,7 @@ public class PayrollTab extends BorderPane implements
     private Button payrollHistoryBtn;
     private Button mergeDocsBtn;
     private Button configPercentagesBtn;
+    private Button configPaymentMethodsBtn;
     
     // Data collections
     private final ObservableList<Employee> allDrivers = FXCollections.observableArrayList();
@@ -376,8 +377,10 @@ public class PayrollTab extends BorderPane implements
         lockWeekBtn = createActionButton("🔒 Lock Week", false);
         mergeDocsBtn = createActionButton("📎 Merge Docs", false);
         configPercentagesBtn = createActionButton("⚙️ Config %", false);
+        configPaymentMethodsBtn = createActionButton("💰 Payment Methods", false);
         
-        actionControls.getChildren().addAll(refreshBtn, calcBtn, lockWeekBtn, mergeDocsBtn, configPercentagesBtn);
+        actionControls.getChildren().addAll(refreshBtn, calcBtn, lockWeekBtn, mergeDocsBtn, configPaymentMethodsBtn);
+        // Note: configPercentagesBtn is deprecated - use configPaymentMethodsBtn instead
         actionSection.getChildren().addAll(actionLabel, actionControls);
         
         navBar.getChildren().addAll(weekSection, mainSep, driverSection, actionSep, actionSection);
@@ -651,6 +654,7 @@ public class PayrollTab extends BorderPane implements
         calcBtn.setOnAction(e -> calculateAndDisplayPayroll());
         lockWeekBtn.setOnAction(e -> toggleWeekLock());
         configPercentagesBtn.setOnAction(e -> showConfigPercentagesDialog());
+        configPaymentMethodsBtn.setOnAction(e -> showPaymentMethodConfigurationDialog());
         
         // Quick action buttons using QuickActions
         printPreviewBtn.setOnAction(e -> quickActions.showPrintPreview(driverBox.getValue(), weekStartPicker.getValue(), summaryRows));
@@ -688,49 +692,41 @@ public class PayrollTab extends BorderPane implements
         }
     }
 
+    // Deprecated: Old percentage configuration dialog - redirects to new payment method configuration
     private void showConfigPercentagesDialog() {
-        logger.info("showConfigPercentagesDialog called");
-        try (java.sql.Connection connection = java.sql.DriverManager.getConnection("jdbc:sqlite:payroll.db")) {
-            logger.debug("Database connection established");
-            // Create and show the dialog
-            PercentageConfigurationDialog dialog = new PercentageConfigurationDialog(connection);
-            Optional<List<EmployeePercentageHistory>> result = dialog.showAndWait();
+        logger.info("showConfigPercentagesDialog called - redirecting to payment method configuration");
+        showPaymentMethodConfigurationDialog();
+    }
+    
+    /**
+     * Shows the payment method configuration dialog
+     */
+    private void showPaymentMethodConfigurationDialog() {
+        logger.info("showPaymentMethodConfigurationDialog called");
+        try {
+            PaymentMethodConfigurationDialog dialog = new PaymentMethodConfigurationDialog();
+            Optional<Boolean> result = dialog.showAndWait();
             
-            if (result.isPresent() && !result.get().isEmpty()) {
-                // Save the percentage history entries
-                EmployeePercentageHistoryDAO percentageDAO = new EmployeePercentageHistoryDAO(connection);
-                
-                for (EmployeePercentageHistory history : result.get()) {
-                    // Close any existing open-ended percentages for this employee
-                    percentageDAO.closeCurrentPercentages(history.getEmployeeId(), history.getEffectiveDate());
-                    
-                    // Create the new percentage history entry
-                    percentageDAO.createPercentageHistory(history);
-                }
+            if (result.isPresent() && result.get()) {
+                // Configuration saved successfully, refresh payroll display
+                logger.info("Payment method configuration updated successfully");
                 
                 // Show success message
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                alert.setTitle("Success");
-                alert.setHeaderText("Percentage Configuration Updated");
-                alert.setContentText(String.format("Successfully updated percentages for %d driver(s).\n" +
-                    "The new rates will be effective from %s.", 
-                    result.get().size(), 
-                    result.get().get(0).getEffectiveDate()));
+                alert.setTitle("Payment Methods Updated");
+                alert.setHeaderText(null);
+                alert.setContentText("Payment method configuration has been updated successfully. " +
+                                   "The changes will be reflected in the next payroll calculation.");
                 alert.showAndWait();
                 
-                // Refresh the display if the effective date is in the current week
-                LocalDate currentWeekStart = weekStartPicker.getValue();
-                LocalDate currentWeekEnd = weekEndPicker.getValue();
-                LocalDate effectiveDate = result.get().get(0).getEffectiveDate();
-                
-                if (effectiveDate != null && !effectiveDate.isAfter(currentWeekEnd)) {
-                    refreshAll();
+                // Refresh if we have calculated payroll
+                if (!summaryRows.isEmpty()) {
+                    calculateAndDisplayPayroll();
                 }
             }
         } catch (Exception e) {
-            logger.error("Error showing percentage configuration dialog", e);
-            e.printStackTrace(); // Print full stack trace
-            showError("Configuration Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            logger.error("Error showing payment method configuration dialog", e);
+            showError("Failed to open payment method configuration: " + e.getMessage());
         }
     }
 
@@ -1092,21 +1088,21 @@ public class PayrollTab extends BorderPane implements
             summaryTable.updateEffectiveDate(start);
         }
         
-        // Check if any driver has configured percentages for next week
-        boolean hasConfiguredPercentages = false;
+        // Check if any driver has configured payment methods for next week
+        boolean hasConfiguredPaymentMethods = false;
         if (summaryTable != null) {
             for (PayrollCalculator.PayrollRow row : rows) {
-                if (summaryTable.getConfiguredPercentages().containsKey(row.driverId)) {
-                    hasConfiguredPercentages = true;
+                if (summaryTable.getConfiguredPaymentMethods().containsKey(row.driverId)) {
+                    hasConfiguredPaymentMethods = true;
                     break;
                 }
             }
         }
         
-        // Show notification if percentages were configured
-        if (hasConfiguredPercentages) {
+        // Show notification if payment methods were configured
+        if (hasConfiguredPaymentMethods) {
             Platform.runLater(() -> {
-                showInfo("⚙️ Percentages were Configured - Some drivers have new percentage rates configured for the upcoming period.");
+                showInfo("💰 Payment Methods Configured - Some drivers have new payment methods configured for the upcoming period.");
             });
         }
 

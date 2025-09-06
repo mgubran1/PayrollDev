@@ -19,6 +19,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
+import com.company.payroll.employees.PaymentType;
 
 /**
  * Professional PDF exporter for payroll data with enhanced formatting and error handling.
@@ -203,6 +205,9 @@ public class PDFExporter {
                 // Draw summary statistics
                 yPosition = drawSummaryStatistics(contentStream, yPosition, contentWidth, totals, payrollRows.size());
                 
+                // Draw payment method summary if available
+                yPosition = drawPaymentMethodSummary(contentStream, yPosition, contentWidth, payrollRows);
+                
                 // Draw employee details table header
                 yPosition -= SECTION_SPACING;
                 contentStream.setNonStrokingColor(COLOR_PRIMARY[0], COLOR_PRIMARY[1], COLOR_PRIMARY[2]);
@@ -336,18 +341,51 @@ public class PDFExporter {
         stream.setNonStrokingColor(0, 0, 0);
         stream.setFont(fontNormal, FONT_SIZE_NORMAL);
         
-        String[][] earnings = {
-            {"Gross Pay:", String.format("$%,.2f", data.gross)},
-            {"Load Count:", String.valueOf(data.loadCount)},
-            {"Service Fee:", String.format("($%,.2f)", Math.abs(data.serviceFee))},
-            {"Company Pay:", String.format("$%,.2f", data.companyPay)},
-            {"Driver Pay:", String.format("$%,.2f", data.driverPay)}
-        };
+        // Base earnings info
+        drawAmountRow(stream, yPosition, "Gross Pay:", String.format("$%,.2f", data.gross));
+        yPosition -= LINE_HEIGHT;
         
-        for (String[] row : earnings) {
-            drawAmountRow(stream, yPosition, row[0], row[1]);
-            yPosition -= LINE_HEIGHT;
+        drawAmountRow(stream, yPosition, "Load Count:", String.valueOf(data.loadCount));
+        yPosition -= LINE_HEIGHT;
+        
+        // Payment method breakdown if available
+        if (data.getPaymentMethodCounts() != null && !data.getPaymentMethodCounts().isEmpty()) {
+            stream.setFont(fontItalic, FONT_SIZE_SMALL);
+            stream.setNonStrokingColor(COLOR_SECONDARY[0], COLOR_SECONDARY[1], COLOR_SECONDARY[2]);
+            
+            for (Map.Entry<PaymentType, Integer> entry : data.getPaymentMethodCounts().entrySet()) {
+                PaymentType type = entry.getKey();
+                Integer count = entry.getValue();
+                BigDecimal amount = data.getPaymentMethodTotals().get(type);
+                
+                String methodText = String.format("  %s: %d loads", type.getDescription(), count);
+                String amountText = String.format("$%,.2f", amount != null ? amount : BigDecimal.ZERO);
+                
+                drawAmountRow(stream, yPosition, methodText, amountText);
+                yPosition -= LINE_HEIGHT * 0.8f;
+            }
+            
+            // Total miles if per-mile payments exist
+            if (data.getPaymentMethodCounts().containsKey(PaymentType.PER_MILE) && data.getTotalMiles() > 0) {
+                String milesText = String.format("  Total Miles: %.1f", data.getTotalMiles());
+                drawAmountRow(stream, yPosition, milesText, "");
+                yPosition -= LINE_HEIGHT * 0.8f;
+            }
+            
+            stream.setFont(fontNormal, FONT_SIZE_NORMAL);
+            stream.setNonStrokingColor(0, 0, 0);
+            yPosition -= LINE_HEIGHT * 0.5f;
         }
+        
+        drawAmountRow(stream, yPosition, "Service Fee:", String.format("($%,.2f)", Math.abs(data.serviceFee)));
+        yPosition -= LINE_HEIGHT;
+        
+        drawAmountRow(stream, yPosition, "Company Pay:", String.format("$%,.2f", data.companyPay));
+        yPosition -= LINE_HEIGHT;
+        
+        drawAmountRow(stream, yPosition, "Driver Pay:", String.format("$%,.2f", data.driverPay));
+        yPosition -= LINE_HEIGHT;
+        
         
         return yPosition - SECTION_SPACING;
     }
@@ -730,5 +768,96 @@ public class PDFExporter {
                Math.abs(totals.getOrDefault("advanceRepayments", 0.0)) +
                Math.abs(totals.getOrDefault("escrowDeposits", 0.0)) +
                Math.abs(totals.getOrDefault("otherDeductions", 0.0));
+    }
+    
+    /**
+     * Draw payment method summary section in the summary report
+     */
+    private float drawPaymentMethodSummary(PDPageContentStream stream, float yPosition, 
+                                         float contentWidth, List<PayrollCalculator.PayrollRow> payrollRows) throws IOException {
+        // Calculate aggregate payment method data
+        Map<PaymentType, Integer> totalMethodCounts = new HashMap<>();
+        Map<PaymentType, BigDecimal> totalMethodAmounts = new HashMap<>();
+        double totalMilesAllDrivers = 0.0;
+        
+        for (PayrollCalculator.PayrollRow row : payrollRows) {
+            if (row.getPaymentMethodCounts() != null) {
+                for (Map.Entry<PaymentType, Integer> entry : row.getPaymentMethodCounts().entrySet()) {
+                    totalMethodCounts.merge(entry.getKey(), entry.getValue(), Integer::sum);
+                }
+            }
+            
+            if (row.getPaymentMethodTotals() != null) {
+                for (Map.Entry<PaymentType, BigDecimal> entry : row.getPaymentMethodTotals().entrySet()) {
+                    totalMethodAmounts.merge(entry.getKey(), entry.getValue(), BigDecimal::add);
+                }
+            }
+            
+            totalMilesAllDrivers += row.getTotalMiles();
+        }
+        
+        // Only draw section if there's payment method data
+        if (totalMethodCounts.isEmpty()) {
+            return yPosition;
+        }
+        
+        yPosition -= SECTION_SPACING;
+        
+        // Payment method summary box
+        float boxHeight = 80 + (totalMethodCounts.size() * LINE_HEIGHT);
+        stream.setNonStrokingColor(COLOR_LIGHT_GRAY[0], COLOR_LIGHT_GRAY[1], COLOR_LIGHT_GRAY[2]);
+        stream.addRect(MARGIN_LEFT, yPosition - boxHeight, contentWidth, boxHeight);
+        stream.fill();
+        
+        // Title
+        stream.setNonStrokingColor(COLOR_PRIMARY[0], COLOR_PRIMARY[1], COLOR_PRIMARY[2]);
+        stream.beginText();
+        stream.setFont(fontBold, FONT_SIZE_HEADER);
+        stream.newLineAtOffset(MARGIN_LEFT + 10, yPosition - 20);
+        stream.showText("PAYMENT METHOD BREAKDOWN");
+        stream.endText();
+        
+        yPosition -= 40;
+        
+        // Payment method details
+        stream.setNonStrokingColor(0, 0, 0);
+        stream.setFont(fontNormal, FONT_SIZE_NORMAL);
+        
+        for (Map.Entry<PaymentType, Integer> entry : totalMethodCounts.entrySet()) {
+            PaymentType type = entry.getKey();
+            Integer count = entry.getValue();
+            BigDecimal amount = totalMethodAmounts.getOrDefault(type, BigDecimal.ZERO);
+            
+            String methodText = String.format("%s:", type.getDescription());
+            String detailText = String.format("%d loads - $%,.2f", count, amount);
+            
+            stream.beginText();
+            stream.newLineAtOffset(MARGIN_LEFT + 20, yPosition);
+            stream.showText(methodText);
+            stream.endText();
+            
+            stream.beginText();
+            stream.newLineAtOffset(MARGIN_LEFT + 200, yPosition);
+            stream.showText(detailText);
+            stream.endText();
+            
+            yPosition -= LINE_HEIGHT;
+        }
+        
+        // Total miles if per-mile payments exist
+        if (totalMethodCounts.containsKey(PaymentType.PER_MILE) && totalMilesAllDrivers > 0) {
+            yPosition -= 5;
+            stream.setFont(fontItalic, FONT_SIZE_SMALL);
+            stream.setNonStrokingColor(COLOR_SECONDARY[0], COLOR_SECONDARY[1], COLOR_SECONDARY[2]);
+            
+            stream.beginText();
+            stream.newLineAtOffset(MARGIN_LEFT + 20, yPosition);
+            stream.showText(String.format("Total Miles Driven: %.1f miles", totalMilesAllDrivers));
+            stream.endText();
+            
+            yPosition -= LINE_HEIGHT;
+        }
+        
+        return yPosition - 20;
     }
 }

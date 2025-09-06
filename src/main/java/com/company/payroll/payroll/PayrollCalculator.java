@@ -2,8 +2,11 @@ package com.company.payroll.payroll;
 
 import com.company.payroll.employees.Employee;
 import com.company.payroll.employees.EmployeeDAO;
-import com.company.payroll.employees.EmployeePercentageHistory;
-import com.company.payroll.employees.EmployeePercentageHistoryDAO;
+// Old percentage history imports removed - using PaymentMethodHistory instead
+import com.company.payroll.employees.PaymentType;
+import com.company.payroll.employees.PaymentMethodHistory;
+import com.company.payroll.employees.PaymentMethodHistoryDAO;
+import com.company.payroll.calculators.PaymentMethodCalculator;
 import com.company.payroll.fuel.FuelTransaction;
 import com.company.payroll.fuel.FuelTransactionDAO;
 import com.company.payroll.loads.Load;
@@ -39,7 +42,9 @@ public class PayrollCalculator {
     private final EmployeeDAO employeeDAO;
     private final LoadDAO loadDAO;
     private final FuelTransactionDAO fuelDAO;
-    private final EmployeePercentageHistoryDAO percentageHistoryDAO;
+    // Old percentageHistoryDAO removed - using PaymentMethodHistoryDAO instead
+    private final PaymentMethodHistoryDAO paymentMethodHistoryDAO;
+    private final PaymentMethodCalculator paymentMethodCalculator;
     private final PayrollRecurring payrollRecurring;
     private final PayrollAdvances payrollAdvances;
     private final PayrollOtherAdjustments payrollOtherAdjustments;
@@ -52,13 +57,14 @@ public class PayrollCalculator {
         this.employeeDAO = employeeDAO;
         this.loadDAO = loadDAO;
         this.fuelDAO = fuelDAO;
-        // Initialize percentage history DAO with same connection as employeeDAO
-        this.percentageHistoryDAO = new EmployeePercentageHistoryDAO(employeeDAO.getConnection());
+        // Initialize payment method history DAO with same connection as employeeDAO
+        this.paymentMethodHistoryDAO = new PaymentMethodHistoryDAO(employeeDAO.getConnection());
+        this.paymentMethodCalculator = new PaymentMethodCalculator(employeeDAO.getConnection());
         this.payrollRecurring = new PayrollRecurring();
         this.payrollAdvances = PayrollAdvances.getInstance();
         this.payrollOtherAdjustments = PayrollOtherAdjustments.getInstance();
         this.payrollEscrow = PayrollEscrow.getInstance();
-        logger.info("PayrollCalculator initialized with all components including percentage history");
+        logger.info("PayrollCalculator initialized with all components including payment method support");
     }
 
     /**
@@ -105,32 +111,64 @@ public class PayrollCalculator {
             logger.debug("Driver {} - Load status breakdown: {}", driver.getName(), statusCounts);
         }
         
-        // Get effective percentages for this payroll period
-        EmployeePercentageHistory effectivePercentages = null;
+        // Check if driver uses payment methods
+        PaymentMethodHistory currentPaymentMethod = paymentMethodCalculator.getEffectivePaymentMethod(driver, end);
+        boolean usesPaymentMethods = currentPaymentMethod != null && 
+                                   currentPaymentMethod.getPaymentType() != PaymentType.PERCENTAGE;
+        
+        // Get default percentages from driver (will be overridden if payment method history exists)
         double driverPercent = driver.getDriverPercent();
         double companyPercent = driver.getCompanyPercent();
         double serviceFeePercent = driver.getServiceFeePercent();
         
-        try {
-            effectivePercentages = percentageHistoryDAO.getEffectivePercentages(driver.getId(), end);
-            if (effectivePercentages != null) {
-                driverPercent = effectivePercentages.getDriverPercent();
-                companyPercent = effectivePercentages.getCompanyPercent();
-                serviceFeePercent = effectivePercentages.getServiceFeePercent();
-                logger.info("Using date-effective percentages for driver {} on {}: Driver={}%, Company={}%, ServiceFee={}%",
-                    driver.getName(), end, driverPercent, companyPercent, serviceFeePercent);
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to get effective percentages for driver {}, using current values: {}",
-                driver.getName(), e.getMessage());
+        // If current payment method is percentage-based, use those values for display
+        if (currentPaymentMethod != null && currentPaymentMethod.getPaymentType() == PaymentType.PERCENTAGE) {
+            driverPercent = currentPaymentMethod.getDriverPercent();
+            companyPercent = currentPaymentMethod.getCompanyPercent();
+            serviceFeePercent = currentPaymentMethod.getServiceFeePercent();
+            logger.info("Using payment method percentages for driver {} on {}: Driver={}%, Company={}%, ServiceFee={}%",
+                driver.getName(), end, driverPercent, companyPercent, serviceFeePercent);
         }
-
-        // Calculate gross pay using BigDecimal
-        BigDecimal grossBD = loads.stream()
-            .map(load -> BigDecimal.valueOf(load.getGrossAmount()))
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        // Calculate gross pay and driver payments based on payment method
+        BigDecimal grossBD = BigDecimal.ZERO;
+        BigDecimal totalDriverPaymentBD = BigDecimal.ZERO;
+        Map<PaymentType, Integer> paymentMethodCounts = new HashMap<>();
+        Map<PaymentType, BigDecimal> paymentMethodTotals = new HashMap<>();
+        
+        // Process each load based on its payment method
+        for (Load load : loads) {
+            grossBD = grossBD.add(BigDecimal.valueOf(load.getGrossAmount()));
+            
+            // Calculate driver payment for this load
+            PaymentMethodCalculator.PaymentCalculationResult loadPayment = 
+                paymentMethodCalculator.calculateLoadPayment(load);
+            
+            if (loadPayment.isValid()) {
+                BigDecimal loadDriverPay = BigDecimal.valueOf(loadPayment.getDriverPayment());
+                totalDriverPaymentBD = totalDriverPaymentBD.add(loadDriverPay);
+                
+                // Track payment method usage
+                PaymentType paymentType = loadPayment.getPaymentType();
+                paymentMethodCounts.merge(paymentType, 1, Integer::sum);
+                paymentMethodTotals.merge(paymentType, loadDriverPay, BigDecimal::add);
+                
+                logger.debug("Load {} - Payment: {} - Driver Pay: ${}", 
+                    load.getLoadNumber(), paymentType, loadDriverPay);
+            } else {
+                logger.warn("Failed to calculate payment for load {}: {}", 
+                    load.getLoadNumber(), loadPayment.getFirstError());
+                // Fall back to percentage calculation
+                BigDecimal fallbackPay = BigDecimal.valueOf(load.getGrossAmount())
+                    .multiply(BigDecimal.valueOf(driverPercent))
+                    .divide(HUNDRED, 2, RoundingMode.HALF_UP);
+                totalDriverPaymentBD = totalDriverPaymentBD.add(fallbackPay);
+            }
+        }
+        
         double gross = grossBD.doubleValue();
-        logger.debug("Driver {} - Gross from {} loads: ${}", driver.getName(), loads.size(), gross);
+        logger.info("Driver {} - Gross from {} loads: ${}, Payment methods: {}", 
+            driver.getName(), loads.size(), gross, paymentMethodCounts);
 
         // Calculate fuel costs from fuel transactions
         BigDecimal fuelTransactionsBD = fuels.stream()
@@ -182,8 +220,20 @@ public class PayrollCalculator {
         BigDecimal companyPayBD = grossAfterSFBD.multiply(companyPctBD).divide(HUNDRED, 2, RoundingMode.HALF_UP);
         double companyPayAmt = companyPayBD.doubleValue();
 
-        BigDecimal driverPctBD = BigDecimal.valueOf(driverPercent);
-        BigDecimal driverPayBD = grossAfterSFBD.multiply(driverPctBD).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+        // Use payment method calculations if available, otherwise fall back to percentage
+        BigDecimal driverPayBD;
+        if (usesPaymentMethods && totalDriverPaymentBD.compareTo(BigDecimal.ZERO) > 0) {
+            // Use the calculated driver payment from payment methods
+            driverPayBD = totalDriverPaymentBD;
+            logger.info("Driver {} - Using payment method calculations: ${}", 
+                driver.getName(), driverPayBD);
+        } else {
+            // Fall back to percentage-based calculation
+            BigDecimal driverPctBD = BigDecimal.valueOf(driverPercent);
+            driverPayBD = grossAfterSFBD.multiply(driverPctBD).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+            logger.debug("Driver {} - Using percentage calculation: {}% = ${}", 
+                driver.getName(), driverPercent, driverPayBD);
+        }
         double driverPayAmt = driverPayBD.doubleValue();
 
         double grossAfterFuel = grossAfterSF - fuel;
@@ -260,6 +310,15 @@ public class PayrollCalculator {
         logger.info("Driver {} - Summary: Gross=${}, Driver Share=${}, Fuel=${}, Other Deductions=${}, Reimbursements=${}, Final Driver Pay=${}", 
             driver.getName(), gross, driverPayAmt, fuel, totalDeductions, totalReimbursements, finalDriverPay);
 
+        // Calculate total miles for per-mile payments
+        double totalMilesCalculated = 0.0;
+        if (paymentMethodCounts.containsKey(PaymentType.PER_MILE)) {
+            totalMilesCalculated = loads.stream()
+                .filter(load -> load.getPaymentMethodUsed() == PaymentType.PER_MILE)
+                .mapToDouble(Load::getCalculatedMiles)
+                .sum();
+        }
+        
         // Create payroll row - CORRECTED: Driver Pay now represents final take-home pay
         return new PayrollRow(
             driver.getId(),
@@ -285,7 +344,10 @@ public class PayrollCalculator {
             fuels,
             companyPercent,
             driverPercent,
-            serviceFeePercent
+            serviceFeePercent,
+            paymentMethodCounts,
+            paymentMethodTotals,
+            totalMilesCalculated
         );
     }
     
@@ -496,17 +558,40 @@ public class PayrollCalculator {
         public final double driverPercent;
         public final double serviceFeePercent;
         
+        // Payment method details
+        public final Map<PaymentType, Integer> paymentMethodCounts;
+        public final Map<PaymentType, BigDecimal> paymentMethodTotals;
+        public final String paymentMethodSummary;
+        public final double totalMiles;
+        
         // Also add numLoads as an alias for backward compatibility
         public int getNumLoads() {
             return loadCount;
         }
 
+        // Backward compatible constructor
         public PayrollRow(int driverId, String driverName, String truckUnit, int loadCount, double gross, double serviceFee, 
                           double grossAfterServiceFee, double companyPay, double driverPay, double driverGrossShare, double fuel, 
                           double grossAfterFuel, double recurringFees, double advancesGiven, 
                           double advanceRepayments, double escrowDeposits, double otherDeductions, 
                           double reimbursements, double netPay, List<Load> loads, List<FuelTransaction> fuels,
                           double companyPercent, double driverPercent, double serviceFeePercent) {
+            this(driverId, driverName, truckUnit, loadCount, gross, serviceFee, grossAfterServiceFee,
+                 companyPay, driverPay, driverGrossShare, fuel, grossAfterFuel, recurringFees,
+                 advancesGiven, advanceRepayments, escrowDeposits, otherDeductions, reimbursements,
+                 netPay, loads, fuels, companyPercent, driverPercent, serviceFeePercent,
+                 null, null, 0.0);
+        }
+        
+        // Full constructor with payment method support
+        public PayrollRow(int driverId, String driverName, String truckUnit, int loadCount, double gross, double serviceFee, 
+                          double grossAfterServiceFee, double companyPay, double driverPay, double driverGrossShare, double fuel, 
+                          double grossAfterFuel, double recurringFees, double advancesGiven, 
+                          double advanceRepayments, double escrowDeposits, double otherDeductions, 
+                          double reimbursements, double netPay, List<Load> loads, List<FuelTransaction> fuels,
+                          double companyPercent, double driverPercent, double serviceFeePercent,
+                          Map<PaymentType, Integer> paymentMethodCounts, Map<PaymentType, BigDecimal> paymentMethodTotals,
+                          double totalMiles) {
             this.driverId = driverId;  // Store driver ID
             this.driverName = driverName;
             this.truckUnit = truckUnit;
@@ -531,6 +616,41 @@ public class PayrollCalculator {
             this.companyPercent = companyPercent;
             this.driverPercent = driverPercent;
             this.serviceFeePercent = serviceFeePercent;
+            
+            // Payment method details
+            this.paymentMethodCounts = paymentMethodCounts != null ? 
+                Collections.unmodifiableMap(new HashMap<>(paymentMethodCounts)) : Collections.emptyMap();
+            this.paymentMethodTotals = paymentMethodTotals != null ?
+                Collections.unmodifiableMap(new HashMap<>(paymentMethodTotals)) : Collections.emptyMap();
+            this.totalMiles = totalMiles;
+            
+            // Build payment method summary
+            StringBuilder summary = new StringBuilder();
+            if (!this.paymentMethodCounts.isEmpty()) {
+                for (Map.Entry<PaymentType, Integer> entry : this.paymentMethodCounts.entrySet()) {
+                    if (summary.length() > 0) summary.append(", ");
+                    summary.append(entry.getKey().getDisplayName())
+                          .append(": ")
+                          .append(entry.getValue())
+                          .append(" loads");
+                }
+            } else {
+                summary.append("Percentage: ").append(loadCount).append(" loads");
+            }
+            this.paymentMethodSummary = summary.toString();
+        }
+        
+        // Getter methods for payment method fields
+        public Map<PaymentType, Integer> getPaymentMethodCounts() {
+            return paymentMethodCounts;
+        }
+        
+        public Map<PaymentType, BigDecimal> getPaymentMethodTotals() {
+            return paymentMethodTotals;
+        }
+        
+        public double getTotalMiles() {
+            return totalMiles;
         }
         
         /**

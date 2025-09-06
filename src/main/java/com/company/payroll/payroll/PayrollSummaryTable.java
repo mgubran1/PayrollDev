@@ -19,8 +19,9 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.util.Callback;
 
-import com.company.payroll.employees.EmployeePercentageHistory;
-import com.company.payroll.employees.EmployeePercentageHistoryDAO;
+import com.company.payroll.employees.PaymentMethodHistory;
+import com.company.payroll.employees.PaymentMethodHistoryDAO;
+import com.company.payroll.employees.PaymentType;
 import java.sql.Connection;
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -52,8 +53,8 @@ public class PayrollSummaryTable extends VBox {
     private ComboBox<String> filterCombo;
     private Label statsLabel;
     private final ContextMenu contextMenu;
-    private final Map<Integer, EmployeePercentageHistory> configuredPercentages = new HashMap<>();
-    private EmployeePercentageHistoryDAO percentageHistoryDAO;
+    private final Map<Integer, PaymentMethodHistory> configuredPaymentMethods = new HashMap<>();
+    private PaymentMethodHistoryDAO paymentMethodHistoryDAO;
     private LocalDate effectiveDate;
     private java.util.function.Predicate<PayrollCalculator.PayrollRow> paidChecker = r -> false;
     
@@ -73,10 +74,10 @@ public class PayrollSummaryTable extends VBox {
             this.paidChecker = paidChecker;
         }
         
-        // Initialize percentage history DAO if connection provided
+        // Initialize payment method history DAO if connection provided
         if (connection != null && effectiveDate != null) {
-            this.percentageHistoryDAO = new EmployeePercentageHistoryDAO(connection);
-            loadConfiguredPercentages(payrollRows);
+            this.paymentMethodHistoryDAO = new PaymentMethodHistoryDAO(connection);
+            loadConfiguredPaymentMethods(payrollRows);
         }
         
         // Create filtered list wrapper
@@ -117,22 +118,22 @@ public class PayrollSummaryTable extends VBox {
         updateStatistics();
     }
     
-    private void loadConfiguredPercentages(ObservableList<PayrollCalculator.PayrollRow> payrollRows) {
-        if (percentageHistoryDAO == null || effectiveDate == null) return;
+    private void loadConfiguredPaymentMethods(ObservableList<PayrollCalculator.PayrollRow> payrollRows) {
+        if (paymentMethodHistoryDAO == null || effectiveDate == null) return;
         
         try {
-            // Load configured percentages for each driver
+            // Load configured payment methods for each driver
             for (PayrollCalculator.PayrollRow row : payrollRows) {
-                EmployeePercentageHistory history = percentageHistoryDAO.getEffectivePercentages(
+                PaymentMethodHistory history = paymentMethodHistoryDAO.getEffectivePaymentMethod(
                     row.driverId, effectiveDate.plusDays(7)); // Check for next week's configuration
                 if (history != null && !history.getEffectiveDate().isBefore(effectiveDate.plusDays(1))) {
                     // This is a future configuration
-                    configuredPercentages.put(row.driverId, history);
+                    configuredPaymentMethods.put(row.driverId, history);
                 }
             }
         } catch (Exception e) {
             // Log error but don't fail table creation
-            System.err.println("Error loading configured percentages: " + e.getMessage());
+            System.err.println("Error loading configured payment methods: " + e.getMessage());
         }
     }
     
@@ -505,17 +506,28 @@ public class PayrollSummaryTable extends VBox {
             }
         });
 
-        // Configured Percentages column (will show new percentages if configured)
-        TableColumn<PayrollCalculator.PayrollRow, String> configuredPercentagesCol = new TableColumn<>("Config %");
+        // Configured Payment Method column (will show new payment method if configured)
+        TableColumn<PayrollCalculator.PayrollRow, String> configuredPercentagesCol = new TableColumn<>("Config");
         configuredPercentagesCol.setCellValueFactory(p -> {
-            EmployeePercentageHistory configHistory = configuredPercentages.get(p.getValue().driverId);
+            PaymentMethodHistory configHistory = configuredPaymentMethods.get(p.getValue().driverId);
             if (configHistory != null) {
-                return new SimpleStringProperty(
-                    String.format("D:%.0f%% C:%.0f%% S:%.0f%%", 
-                        configHistory.getDriverPercent(),
-                        configHistory.getCompanyPercent(),
-                        configHistory.getServiceFeePercent())
-                );
+                switch (configHistory.getPaymentType()) {
+                    case PERCENTAGE:
+                        return new SimpleStringProperty(
+                            String.format("D:%.0f%% C:%.0f%% S:%.0f%%", 
+                                configHistory.getDriverPercent(),
+                                configHistory.getCompanyPercent(),
+                                configHistory.getServiceFeePercent())
+                        );
+                    case FLAT_RATE:
+                        return new SimpleStringProperty(
+                            String.format("Flat: $%.2f", configHistory.getFlatRateAmount())
+                        );
+                    case PER_MILE:
+                        return new SimpleStringProperty(
+                            String.format("Mile: $%.2f", configHistory.getPerMileRate())
+                        );
+                }
             }
             return new SimpleStringProperty("");
         });
@@ -1074,18 +1086,18 @@ public class PayrollSummaryTable extends VBox {
      */
     public void updateEffectiveDate(LocalDate newDate) {
         this.effectiveDate = newDate;
-        if (percentageHistoryDAO != null && newDate != null) {
-            configuredPercentages.clear();
-            loadConfiguredPercentages(table.getItems());
+        if (paymentMethodHistoryDAO != null && newDate != null) {
+            configuredPaymentMethods.clear();
+            loadConfiguredPaymentMethods(table.getItems());
             table.refresh();
         }
     }
     
     /**
-     * Get the configured percentages map
+     * Get the configured payment methods map
      */
-    public Map<Integer, EmployeePercentageHistory> getConfiguredPercentages() {
-        return configuredPercentages;
+    public Map<Integer, PaymentMethodHistory> getConfiguredPaymentMethods() {
+        return configuredPaymentMethods;
     }
 
     /**
