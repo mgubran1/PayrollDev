@@ -1,6 +1,7 @@
 package com.company.payroll.payroll;
 
 import com.company.payroll.employees.Employee;
+import com.company.payroll.database.DatabaseConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +36,7 @@ public class PayrollRecurring {
                 description TEXT
             );
         """;
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
             logger.debug("Recurring deductions table ready");
@@ -50,7 +51,7 @@ public class PayrollRecurring {
         ensureTable();
         List<RecurringDeduction> list = new ArrayList<>();
         String sql = "SELECT * FROM recurring_deductions WHERE driver_id=? AND week_start=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, driverId);
             ps.setDate(2, java.sql.Date.valueOf(weekStart));
@@ -79,7 +80,7 @@ public class PayrollRecurring {
         // Delete old for this driver+week, then insert new
         String deleteSql = "DELETE FROM recurring_deductions WHERE driver_id=? AND week_start=?";
         String insertSql = "INSERT INTO recurring_deductions (driver_id, week_start, type, amount, description) VALUES (?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             conn.setAutoCommit(false);
             try (PreparedStatement del = conn.prepareStatement(deleteSql)) {
                 del.setInt(1, driverId);
@@ -112,7 +113,7 @@ public class PayrollRecurring {
         logger.info("Removing recurring deduction with id {}", id);
         ensureTable();
         String sql = "DELETE FROM recurring_deductions WHERE id=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, id);
             int rows = ps.executeUpdate();
@@ -134,7 +135,7 @@ public class PayrollRecurring {
         logger.debug("Calculating total deductions for driver {} week {}", driverId, weekStart);
         ensureTable();
         String sql = "SELECT SUM(amount) FROM recurring_deductions WHERE driver_id=? AND week_start=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, driverId);
             ps.setDate(2, java.sql.Date.valueOf(weekStart));

@@ -325,8 +325,8 @@ public class ExcelExporter {
         // Headers
         Row headerRow = sheet.createRow(rowNum++);
         String[] headers = {"Driver", "Employee ID", "Truck/Unit", "Loads", "Gross Pay", 
-                          "Service Fee", "Gross After Fee", "Company Pay", "Driver Pay",
-                          "Fuel", "Gross After Fuel", "Recurring Fees", "Advances Given",
+                          "Service Fee", "Gross After Fee", "Company Pay", "Driver Pay (Final Take-Home)",
+                          "Driver Gross Share", "Fuel", "Gross After Fuel", "Recurring Fees", "Advances Given",
                           "Advance Repayments", "Escrow", "Other Deductions", "Reimbursements", "NET PAY"};
         
         for (int i = 0; i < headers.length; i++) {
@@ -360,7 +360,8 @@ public class ExcelExporter {
             createCurrencyCell(dataRow, col++, row.serviceFee, currencyStyle);
             createCurrencyCell(dataRow, col++, row.grossAfterServiceFee, currencyStyle);
             createCurrencyCell(dataRow, col++, row.companyPay, currencyStyle);
-            createCurrencyCell(dataRow, col++, row.driverPay, currencyStyle);
+            createCurrencyCell(dataRow, col++, row.driverPay, currencyStyle);  // Final take-home pay
+            createCurrencyCell(dataRow, col++, row.driverGrossShare, currencyStyle);  // Driver's gross share
             createCurrencyCell(dataRow, col++, row.fuel, currencyStyle);
             createCurrencyCell(dataRow, col++, row.grossAfterFuel, currencyStyle);
             createCurrencyCell(dataRow, col++, row.recurringFees, currencyStyle);
@@ -608,7 +609,8 @@ public class ExcelExporter {
 			
 			createPayStubLine(sheet, rowNum++, "Gross Pay:", row.gross, currencyStyle);
 			createPayStubLine(sheet, rowNum++, "Service Fee:", -row.serviceFee, currencyStyle);
-			createPayStubLine(sheet, rowNum++, "Driver Pay:", row.driverPay, currencyStyle);
+			createPayStubLine(sheet, rowNum++, "Driver Gross Share:", row.driverGrossShare, currencyStyle);
+			createPayStubLine(sheet, rowNum++, "Driver Pay (Final):", row.driverPay, currencyStyle);
 			
 			rowNum++; // Empty row
 			

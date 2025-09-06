@@ -150,8 +150,12 @@ public class PayrollTab extends BorderPane implements
 
     private static final String CONFIG_FILE = "payroll_config.properties";
     private static final String COMPANY_NAME_KEY = "company.name";
+    
+    // Store reference for cleanup
+    private final EmployeesTab employeesTab;
 
     public PayrollTab(EmployeesTab employeesTab, PayrollCalculator calculator, LoadDAO loadDAO, FuelTransactionDAO fuelDAO) {
+        this.employeesTab = employeesTab;
         this.calculator = calculator;
         this.loadDAO = loadDAO;
         this.fuelDAO = fuelDAO;
@@ -207,10 +211,7 @@ public class PayrollTab extends BorderPane implements
         
         // Cleanup on close
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            executorService.shutdown();
-            if (autoCalculateTimer != null) {
-                autoCalculateTimer.cancel();
-            }
+            cleanup();
         }));
     }
 	
@@ -848,6 +849,44 @@ public class PayrollTab extends BorderPane implements
         todayBtn.setDisable(!enabled);
         refreshBtn.setDisable(!enabled);
         calcBtn.setDisable(!enabled);
+    }
+    
+    /**
+     * Proper cleanup method to prevent memory leaks
+     */
+    public void cleanup() {
+        logger.info("Cleaning up PayrollTab resources");
+        
+        // Remove listener from employeesTab to prevent memory leak
+        if (employeesTab != null) {
+            employeesTab.removeEmployeeDataChangeListener(this);
+        }
+        
+        // Shutdown executor service
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.shutdown();
+            try {
+                if (!executorService.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    executorService.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                executorService.shutdownNow();
+            }
+        }
+        
+        // Cancel timer
+        if (autoCalculateTimer != null) {
+            autoCalculateTimer.cancel();
+            autoCalculateTimer = null;
+        }
+        
+        // Cancel current task
+        if (currentCalculationTask != null && !currentCalculationTask.isDone()) {
+            currentCalculationTask.cancel(true);
+        }
+        
+        logger.info("PayrollTab cleanup completed");
     }
 
     private void toggleWeekLock() {

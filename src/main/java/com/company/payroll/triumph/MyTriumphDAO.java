@@ -1,6 +1,7 @@
 package com.company.payroll.triumph;
 
 import com.company.payroll.exception.DataAccessException;
+import com.company.payroll.database.DatabaseConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +16,7 @@ public class MyTriumphDAO {
 
     public MyTriumphDAO() {
         logger.debug("Initializing MyTriumphDAO");
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // First, check if columns exist and add if needed
             DatabaseMetaData meta = conn.getMetaData();
             ResultSet rs = meta.getColumns(null, null, "mytriumph_audit", "source");
@@ -56,7 +57,7 @@ public class MyTriumphDAO {
     public List<MyTriumphRecord> getAll() {
         logger.debug("Fetching all Invoice audit records");
         List<MyTriumphRecord> records = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM mytriumph_audit ORDER BY invoice_date DESC";
             ResultSet rs = conn.createStatement().executeQuery(sql);
             while (rs.next()) {
@@ -74,7 +75,7 @@ public class MyTriumphDAO {
         logger.info("Adding MyTriumph record - PO: {}, Invoice: {}, Amount: ${}", 
             rec.getPo(), rec.getInvoiceNumber(), rec.getInvAmt());
         String sql = "INSERT OR IGNORE INTO mytriumph_audit (dtr_name, invoice_number, invoice_date, po, inv_amt, source, matched) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, rec.getDtrName());
             ps.setString(2, rec.getInvoiceNumber());
@@ -107,7 +108,7 @@ public class MyTriumphDAO {
     public void update(MyTriumphRecord rec) {
         logger.info("Updating MyTriumph record - ID: {}, PO: {}", rec.getId(), rec.getPo());
         String sql = "UPDATE mytriumph_audit SET dtr_name=?, invoice_number=?, invoice_date=?, po=?, inv_amt=?, source=?, matched=? WHERE id=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, rec.getDtrName());
             ps.setString(2, rec.getInvoiceNumber());
@@ -135,7 +136,7 @@ public class MyTriumphDAO {
     public void delete(int id) {
         logger.info("Deleting MyTriumph record with ID: {}", id);
         String sql = "DELETE FROM mytriumph_audit WHERE id=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, id);
             int rowsAffected = ps.executeUpdate();
@@ -153,7 +154,7 @@ public class MyTriumphDAO {
     public boolean existsByInvoiceAndPo(String invoiceNumber, String po) {
         logger.debug("Checking existence by invoice {} and PO {}", invoiceNumber, po);
         String sql = "SELECT 1 FROM mytriumph_audit WHERE invoice_number=? AND po=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, invoiceNumber);
             ps.setString(2, po);
@@ -170,7 +171,7 @@ public class MyTriumphDAO {
     public boolean existsByPO(String po) {
         logger.debug("Checking existence by PO: {}", po);
         String sql = "SELECT 1 FROM mytriumph_audit WHERE po=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, po);
             ResultSet rs = ps.executeQuery();
@@ -186,7 +187,7 @@ public class MyTriumphDAO {
     public MyTriumphRecord getByPO(String po) {
         logger.debug("Getting record by PO: {}", po);
         String sql = "SELECT * FROM mytriumph_audit WHERE po=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, po);
             ResultSet rs = ps.executeQuery();
@@ -205,7 +206,7 @@ public class MyTriumphDAO {
     public void updateByPO(String po, MyTriumphRecord updates) {
         logger.info("Updating record by PO: {} with invoice: {}", po, updates.getInvoiceNumber());
         String sql = "UPDATE mytriumph_audit SET dtr_name=?, invoice_number=?, invoice_date=?, inv_amt=?, source='IMPORT', matched=1 WHERE po=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, updates.getDtrName());
             ps.setString(2, updates.getInvoiceNumber());
@@ -230,7 +231,7 @@ public class MyTriumphDAO {
     public void markAsMatched(String po) {
         logger.info("Marking PO {} as matched", po);
         String sql = "UPDATE mytriumph_audit SET matched=1 WHERE po=? AND source='LOAD'";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, po);
             int rowsAffected = ps.executeUpdate();

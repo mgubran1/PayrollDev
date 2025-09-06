@@ -243,16 +243,24 @@ public class PayrollCalculator {
         
         double escrowDeposits = escrowDepositBD.doubleValue();
 
-        // Calculate final net pay
-        double totalDeductions = Math.abs(fuel) + Math.abs(recurringFees) + Math.abs(advanceRepayments) 
+        // Calculate final net pay - CORRECTED LOGIC
+        // Start with driver's share of gross after service fee and fuel
+        double driverGrossAfterFuel = driverPayAmt - Math.abs(fuel);
+        
+        // Calculate total deductions (excluding fuel since it's already subtracted from driver's share)
+        double totalDeductions = Math.abs(recurringFees) + Math.abs(advanceRepayments) 
                               + Math.abs(escrowDeposits) + Math.abs(otherDeductions);
-        double net = grossAfterFuel - Math.abs(recurringFees) - Math.abs(advanceRepayments) 
-                   - Math.abs(escrowDeposits) - Math.abs(otherDeductions) + totalReimbursements;
+        
+        // Final NET PAY = Driver's gross after fuel - all other deductions + reimbursements
+        double net = driverGrossAfterFuel - totalDeductions + totalReimbursements;
+        
+        // Update the driverPayAmt to represent the final take-home pay (NET PAY)
+        double finalDriverPay = net;
 
-        logger.info("Driver {} - Summary: Gross=${}, Fuel=${}, Deductions=${}, Reimbursements=${}, Net=${}", 
-            driver.getName(), gross, fuel, totalDeductions, totalReimbursements, net);
+        logger.info("Driver {} - Summary: Gross=${}, Driver Share=${}, Fuel=${}, Other Deductions=${}, Reimbursements=${}, Final Driver Pay=${}", 
+            driver.getName(), gross, driverPayAmt, fuel, totalDeductions, totalReimbursements, finalDriverPay);
 
-        // Create payroll row - UPDATED to include driver ID
+        // Create payroll row - CORRECTED: Driver Pay now represents final take-home pay
         return new PayrollRow(
             driver.getId(),
             driver.getName(),
@@ -262,7 +270,8 @@ public class PayrollCalculator {
             Math.abs(serviceFeeAmt),
             grossAfterSF,
             companyPayAmt,
-            driverPayAmt,
+            finalDriverPay,  // Driver Pay = final take-home pay (NET PAY)
+            driverPayAmt,    // Driver Gross Share = original percentage-based share
             Math.abs(fuel),
             grossAfterFuel,
             Math.abs(recurringFees),
@@ -271,7 +280,7 @@ public class PayrollCalculator {
             Math.abs(escrowDeposits),
             Math.abs(otherDeductions),
             totalReimbursements,
-            net,
+            finalDriverPay,  // NET PAY = same as Driver Pay (final take-home amount)
             loads,
             fuels,
             companyPercent,
@@ -378,12 +387,27 @@ public class PayrollCalculator {
             driver.getId(),  // Added driver ID
             driver.getName() + " (ERROR: " + errorMessage + ")",
             driver.getTruckUnit() != null ? driver.getTruckUnit() : "",
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            Collections.emptyList(),
-            Collections.emptyList(),
-            0.0,
-            0.0,
-            0.0
+            0, // loadCount
+            0.0, // gross
+            0.0, // serviceFee
+            0.0, // grossAfterServiceFee
+            0.0, // companyPay
+            0.0, // driverPay (final)
+            0.0, // driverGrossShare
+            0.0, // fuel
+            0.0, // grossAfterFuel
+            0.0, // recurringFees
+            0.0, // advancesGiven
+            0.0, // advanceRepayments
+            0.0, // escrowDeposits
+            0.0, // otherDeductions
+            0.0, // reimbursements
+            0.0, // netPay
+            Collections.emptyList(), // loads
+            Collections.emptyList(), // fuels
+            0.0, // companyPercent
+            0.0, // driverPercent
+            0.0  // serviceFeePercent
         );
     }
 
@@ -455,7 +479,8 @@ public class PayrollCalculator {
         public final double serviceFee;
         public final double grossAfterServiceFee;
         public final double companyPay;
-        public final double driverPay;
+        public final double driverPay;  // NOW represents final take-home pay (NET PAY)
+        public final double driverGrossShare;  // NEW: Driver's share before final deductions
         public final double fuel;
         public final double grossAfterFuel;
         public final double recurringFees;
@@ -464,7 +489,7 @@ public class PayrollCalculator {
         public final double escrowDeposits;
         public final double otherDeductions;
         public final double reimbursements;
-        public final double netPay;
+        public final double netPay;  // Same as driverPay (final take-home amount)
         public final List<Load> loads;
         public final List<FuelTransaction> fuels;
         public final double companyPercent;
@@ -477,7 +502,7 @@ public class PayrollCalculator {
         }
 
         public PayrollRow(int driverId, String driverName, String truckUnit, int loadCount, double gross, double serviceFee, 
-                          double grossAfterServiceFee, double companyPay, double driverPay, double fuel, 
+                          double grossAfterServiceFee, double companyPay, double driverPay, double driverGrossShare, double fuel, 
                           double grossAfterFuel, double recurringFees, double advancesGiven, 
                           double advanceRepayments, double escrowDeposits, double otherDeductions, 
                           double reimbursements, double netPay, List<Load> loads, List<FuelTransaction> fuels,
@@ -490,7 +515,8 @@ public class PayrollCalculator {
             this.serviceFee = serviceFee;
             this.grossAfterServiceFee = grossAfterServiceFee;
             this.companyPay = companyPay;
-            this.driverPay = driverPay;
+            this.driverPay = driverPay;  // Final take-home pay
+            this.driverGrossShare = driverGrossShare;  // Driver's share before final deductions
             this.fuel = fuel;
             this.grossAfterFuel = grossAfterFuel;
             this.recurringFees = recurringFees;
@@ -499,7 +525,7 @@ public class PayrollCalculator {
             this.escrowDeposits = escrowDeposits;
             this.otherDeductions = otherDeductions;
             this.reimbursements = reimbursements;
-            this.netPay = netPay;
+            this.netPay = netPay;  // Same as driverPay
             this.loads = Collections.unmodifiableList(new ArrayList<>(loads));
             this.fuels = Collections.unmodifiableList(new ArrayList<>(fuels));
             this.companyPercent = companyPercent;
@@ -511,7 +537,7 @@ public class PayrollCalculator {
          * Export to CSV format with proper escaping
          */
         public String toCSVRow() {
-            return String.format("%s,%s,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+            return String.format("%s,%s,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
                     escapeCSV(driverName), 
                     escapeCSV(truckUnit), 
                     loadCount, 
@@ -519,7 +545,8 @@ public class PayrollCalculator {
                     serviceFee, 
                     grossAfterServiceFee,
                     companyPay, 
-                    driverPay, 
+                    driverPay,  // Final take-home pay
+                    driverGrossShare,  // Driver's gross share before final deductions
                     fuel, 
                     grossAfterFuel,
                     recurringFees, 
@@ -535,7 +562,7 @@ public class PayrollCalculator {
          * Export to TSV format
          */
         public String toTSVRow() {
-            return String.format("%s\t%s\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f",
+            return String.format("%s\t%s\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f",
                     driverName, 
                     truckUnit, 
                     loadCount, 
@@ -543,7 +570,8 @@ public class PayrollCalculator {
                     serviceFee, 
                     grossAfterServiceFee,
                     companyPay, 
-                    driverPay, 
+                    driverPay,  // Final take-home pay
+                    driverGrossShare,  // Driver's gross share before final deductions
                     fuel, 
                     grossAfterFuel,
                     recurringFees, 
@@ -621,8 +649,8 @@ public class PayrollCalculator {
         
         @Override
         public String toString() {
-            return String.format("PayrollRow[driverId=%d, driver=%s, truck=%s, loads=%d, gross=%.2f, net=%.2f]",
-                    driverId, driverName, truckUnit, loadCount, gross, netPay);
+            return String.format("PayrollRow[driverId=%d, driver=%s, truck=%s, loads=%d, gross=%.2f, driverPay=%.2f, net=%.2f]",
+                    driverId, driverName, truckUnit, loadCount, gross, driverPay, netPay);
         }
     }
     

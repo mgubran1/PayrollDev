@@ -1,6 +1,7 @@
 package com.company.payroll.trailers;
 
-import com.company.exception.DataAccessException;
+import com.company.payroll.exception.DataAccessException;
+import com.company.payroll.database.DatabaseConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +27,7 @@ public class TrailerDAO {
     
     private void initializeDatabase() {
         logger.info("Initializing Trailer database");
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              Statement stmt = conn.createStatement()) {
              
             // Create trailers table with correct column order
@@ -133,7 +134,7 @@ public class TrailerDAO {
                      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
              
             setTrailerParameters(pstmt, trailer);
@@ -179,7 +180,7 @@ public class TrailerDAO {
             WHERE id = ?
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             setTrailerParameters(pstmt, trailer);
@@ -202,7 +203,7 @@ public class TrailerDAO {
     public void delete(int id) {
         String sql = "DELETE FROM trailers WHERE id = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setInt(1, id);
@@ -225,7 +226,7 @@ public class TrailerDAO {
     public Trailer findById(int id) {
         String sql = "SELECT * FROM trailers WHERE id = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setInt(1, id);
@@ -246,7 +247,7 @@ public class TrailerDAO {
     public Trailer findByTrailerNumber(String trailerNumber) {
         String sql = "SELECT * FROM trailers WHERE trailer_number = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setString(1, trailerNumber);
@@ -267,7 +268,7 @@ public class TrailerDAO {
     public List<Trailer> findAll() {
         String sql = "SELECT * FROM trailers ORDER BY trailer_number";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
              
@@ -287,7 +288,7 @@ public class TrailerDAO {
     public List<Trailer> findByStatus(TrailerStatus status) {
         String sql = "SELECT * FROM trailers WHERE status = ? ORDER BY trailer_number";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setString(1, status.name());
@@ -308,7 +309,7 @@ public class TrailerDAO {
     public List<Trailer> findByAssignedDriver(String driverName) {
         String sql = "SELECT * FROM trailers WHERE assigned_driver = ? ORDER BY trailer_number";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setString(1, driverName);
@@ -329,7 +330,7 @@ public class TrailerDAO {
     public List<Trailer> findByAssignedTruck(String truckNumber) {
         String sql = "SELECT * FROM trailers WHERE assigned_truck = ? ORDER BY trailer_number";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setString(1, truckNumber);
@@ -350,7 +351,7 @@ public class TrailerDAO {
     public List<Trailer> findAvailable() {
         String sql = "SELECT * FROM trailers WHERE is_assigned = 0 AND status = ? ORDER BY trailer_number";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setString(1, TrailerStatus.ACTIVE.name());
@@ -376,7 +377,7 @@ public class TrailerDAO {
             ORDER BY next_inspection_due_date
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setString(1, cutoffDate.toString());
@@ -402,7 +403,7 @@ public class TrailerDAO {
             ORDER BY next_service_due_date
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setString(1, cutoffDate.toString());
@@ -428,7 +429,7 @@ public class TrailerDAO {
             ORDER BY registration_expiry_date
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setString(1, cutoffDate.toString());
@@ -459,7 +460,7 @@ public class TrailerDAO {
             ORDER BY trailer_number
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             String pattern = "%" + searchTerm + "%";
@@ -486,7 +487,7 @@ public class TrailerDAO {
     public int getTrailersCount() {
         String sql = "SELECT COUNT(*) FROM trailers";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
              
@@ -504,7 +505,7 @@ public class TrailerDAO {
     public int getAvailableTrailersCount() {
         String sql = "SELECT COUNT(*) FROM trailers WHERE is_assigned = 0 AND status = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
              
             pstmt.setString(1, TrailerStatus.ACTIVE.name());
@@ -530,7 +531,7 @@ public class TrailerDAO {
         logger.info("Processing {} trailers for import", trailers.size());
         List<Trailer> resultTrailers = new ArrayList<>();
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             conn.setAutoCommit(false);
             
             try {

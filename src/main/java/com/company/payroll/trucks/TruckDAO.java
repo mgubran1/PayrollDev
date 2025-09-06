@@ -1,6 +1,7 @@
 package com.company.payroll.trucks;
 
-import com.company.exception.DataAccessException;
+import com.company.payroll.exception.DataAccessException;
+import com.company.payroll.database.DatabaseConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +42,7 @@ public class TruckDAO {
                 assigned BOOLEAN DEFAULT 0
             )
         """;
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
             
@@ -76,7 +77,7 @@ public class TruckDAO {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
 
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
             setParams(ps, truck);
@@ -104,7 +105,7 @@ public class TruckDAO {
             WHERE id = ?
         """;
 
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             setParams(ps, truck);
             ps.setInt(16, truck.getId());
@@ -118,7 +119,7 @@ public class TruckDAO {
 
     public void delete(int id) {
         String sql = "DELETE FROM trucks WHERE id = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
             ps.executeUpdate();
@@ -132,7 +133,7 @@ public class TruckDAO {
 
     public List<Truck> findAll() {
         String sql = "SELECT * FROM trucks ORDER BY truck_number";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             List<Truck> list = new ArrayList<>();
@@ -155,7 +156,7 @@ public class TruckDAO {
         logger.info("Processing {} trucks for import", trucks.size());
         List<Truck> resultTrucks = new ArrayList<>();
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             conn.setAutoCommit(false);
             
             try {
@@ -261,7 +262,7 @@ public class TruckDAO {
         if (truckNumber == null || truckNumber.trim().isEmpty()) return null;
         
         String sql = "SELECT * FROM trucks WHERE LOWER(truck_number) = LOWER(?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, truckNumber.trim());
             ResultSet rs = ps.executeQuery();

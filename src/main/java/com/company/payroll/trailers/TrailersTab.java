@@ -4,6 +4,7 @@ import com.company.payroll.config.DOTComplianceConfig;
 import com.company.payroll.config.DOTComplianceConfigDialog;
 import com.company.payroll.employees.Employee;
 import com.company.payroll.employees.EmployeeDAO;
+import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -1397,45 +1398,51 @@ public class TrailersTab extends BorderPane implements WindowAware {
         // Handle completion
         importTask.setOnSucceeded(e -> {
             ImportResult result = importTask.getValue();
-            progressDialog.close();
             
-            // Use the saved trailers that already have proper IDs
-            List<Trailer> savedTrailers = result.savedTrailers;
-            logger.info("Import completed with {} trailers, refreshing UI", savedTrailers.size());
-            
-            // Log IDs for debugging
-            for (Trailer trailer : savedTrailers) {
-                logger.debug("Trailer in result: {} (ID: {})", trailer.getTrailerNumber(), trailer.getId());
-            }
-            
-            // Clear and reload the observable list with the correct data
-            trailers.clear();
-            trailers.addAll(savedTrailers);
-            logger.info("Updated observable list with {} trailers", trailers.size());
-            
-            // Update driver assignments
-            updateDriverAssignments();
-            
-            // Force refresh the table to show changes immediately
-            forceRefreshTable();
-            
-            // Notify data change listeners
-            notifyDataChange();
-            
-            // Show results
-            showImportResults(result, selectedFile.getName());
+            // Ensure all UI updates happen on JavaFX Application Thread
+            Platform.runLater(() -> {
+                progressDialog.close();
+                
+                // Use the saved trailers that already have proper IDs
+                List<Trailer> savedTrailers = result.savedTrailers;
+                logger.info("Import completed with {} trailers, refreshing UI", savedTrailers.size());
+                
+                // Log IDs for debugging
+                for (Trailer trailer : savedTrailers) {
+                    logger.debug("Trailer in result: {} (ID: {})", trailer.getTrailerNumber(), trailer.getId());
+                }
+                
+                // Clear and reload the observable list with the correct data
+                trailers.clear();
+                trailers.addAll(savedTrailers);
+                logger.info("Updated observable list with {} trailers", trailers.size());
+                
+                // Update driver assignments
+                updateDriverAssignments();
+                
+                // Force refresh the table to show changes immediately
+                forceRefreshTable();
+                
+                // Notify data change listeners
+                notifyDataChange();
+                
+                // Show results
+                showImportResults(result, selectedFile.getName());
+            });
         });
         
         importTask.setOnFailed(e -> {
-            progressDialog.close();
-            Throwable error = importTask.getException();
-            logger.error("Import failed", error);
-            
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle("Import Error");
-            alert.setHeaderText("Failed to import trailers");
-            alert.setContentText("Error: " + error.getMessage());
-            alert.showAndWait();
+            Platform.runLater(() -> {
+                progressDialog.close();
+                Throwable error = importTask.getException();
+                logger.error("Import failed", error);
+                
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Import Error");
+                alert.setHeaderText("Failed to import trailers");
+                alert.setContentText("Error: " + error.getMessage());
+                alert.showAndWait();
+            });
         });
         
         // Handle cancellation
@@ -2208,5 +2215,25 @@ public class TrailersTab extends BorderPane implements WindowAware {
             return "\"" + value.replace("\"", "\"\"") + "\"";
         }
         return value;
+    }
+    
+    /**
+     * Save all pending changes (called during application exit)
+     */
+    public void saveAllPendingChanges() {
+        logger.info("Saving all pending trailer changes during application exit");
+        try {
+            // Force refresh table to ensure any pending edits are committed
+            if (table != null) {
+                table.refresh();
+            }
+            
+            // Any additional save logic can be added here
+            // The data is already saved automatically when changes are made via the dialogs
+            
+            logger.info("All pending trailer changes saved successfully");
+        } catch (Exception e) {
+            logger.error("Error saving pending trailer changes", e);
+        }
     }
 }

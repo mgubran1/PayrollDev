@@ -642,7 +642,8 @@ public class QuickActions {
             {"Service Fee:", String.format("($%,.2f)", Math.abs(row.serviceFee))},
             {"Gross After Service Fee:", String.format("$%,.2f", row.grossAfterServiceFee)},
             {"Company Pay:", String.format("$%,.2f", row.companyPay)},
-            {"Driver Pay:", String.format("$%,.2f", row.driverPay)}
+            {"Driver Gross Share:", String.format("$%,.2f", row.driverGrossShare)},
+            {"Driver Pay (Final Take-Home):", String.format("$%,.2f", row.driverPay)}
         };
         
         for (String[] item : earnings) {
@@ -1952,19 +1953,29 @@ public class QuickActions {
     }
     
     private File convertImageToPDF(File imageFile) throws IOException {
-        PDDocument document = new PDDocument();
-        BufferedImage image = ImageIO.read(imageFile);
-        float width = image.getWidth();
-        float height = image.getHeight();
-        PDPage page = new PDPage(new PDRectangle(width, height));
-        document.addPage(page);
-        PDImageXObject pdImage = PDImageXObject.createFromFileByContent(imageFile, document);
-        try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
-            contentStream.drawImage(pdImage, 0, 0);
+        PDDocument document = null;
+        try {
+            document = new PDDocument();
+            BufferedImage image = ImageIO.read(imageFile);
+            float width = image.getWidth();
+            float height = image.getHeight();
+            PDPage page = new PDPage(new PDRectangle(width, height));
+            document.addPage(page);
+            PDImageXObject pdImage = PDImageXObject.createFromFileByContent(imageFile, document);
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                contentStream.drawImage(pdImage, 0, 0);
+            }
+            File pdfFile = File.createTempFile("image", ".pdf");
+            document.save(pdfFile);
+            return pdfFile;
+        } finally {
+            if (document != null) {
+                try {
+                    document.close();
+                } catch (IOException e) {
+                    logger.error("Error closing PDF document during image conversion", e);
+                }
+            }
         }
-        File pdfFile = File.createTempFile("image", ".pdf");
-        document.save(pdfFile);
-        document.close();
-        return pdfFile;
     }
 }

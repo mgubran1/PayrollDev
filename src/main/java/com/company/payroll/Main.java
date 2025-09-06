@@ -71,8 +71,10 @@ public class Main extends Application {
             primaryStage.setOnShown(e -> logger.info("Application window shown"));
             primaryStage.setOnCloseRequest(e -> {
                 logger.info("Application close requested");
+                // Consume the event to handle custom shutdown process
+                e.consume();
                 if (mainController != null) {
-                    mainController.shutdown();
+                    mainController.handleApplicationExit(primaryStage);
                 }
             });
             primaryStage.setOnHidden(e -> logger.info("Application window hidden"));

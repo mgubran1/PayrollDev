@@ -902,7 +902,26 @@ public class MyTriumphTab extends Tab implements WindowAware {
                     String inv = invField.getText().trim();
                     java.time.LocalDate date = datePicker.getValue();
                     String po = poField.getText().trim();
-                    double amt = Double.parseDouble(amtField.getText().trim());
+                    // Safe amount parsing with validation
+                    double amt = 0.0;
+                    String amountText = amtField.getText().trim();
+                    if (!amountText.isEmpty()) {
+                        try {
+                            String cleanAmount = amountText.replaceAll("[$,€£¥\\s]", "");
+                            amt = Double.parseDouble(cleanAmount);
+                            if (amt < 0) {
+                                throw new NumberFormatException("Amount cannot be negative");
+                            }
+                        } catch (NumberFormatException e) {
+                            logger.error("Invalid amount format: {}", amountText);
+                            Alert alert = new Alert(Alert.AlertType.ERROR);
+                            alert.setTitle("Invalid Amount");
+                            alert.setHeaderText("Invalid Amount Format");
+                            alert.setContentText("Please enter a valid amount: '" + amountText + "'");
+                            alert.showAndWait();
+                            return null;
+                        }
+                    }
                     String source = sourceBox.getValue();
                     boolean matched = matchedCheck.isSelected();
                     

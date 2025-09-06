@@ -1,6 +1,7 @@
 package com.company.payroll.maintenance;
 
-import com.company.exception.DataAccessException;
+import com.company.payroll.exception.DataAccessException;
+import com.company.payroll.database.DatabaseConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +24,7 @@ public class MaintenanceDAO {
     }
     
     private void initializeDatabase() {
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              Statement stmt = conn.createStatement()) {
             
             // Create maintenance_records table
@@ -143,7 +144,7 @@ public class MaintenanceDAO {
                      ?, ?, ?, ?, ?, ?, ?)
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             
             setParameters(pstmt, record);
@@ -187,7 +188,7 @@ public class MaintenanceDAO {
             WHERE id = ?
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             setUpdateParameters(pstmt, record);
@@ -210,7 +211,7 @@ public class MaintenanceDAO {
     public void delete(int id) throws DataAccessException {
         String sql = "DELETE FROM maintenance_records WHERE id = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setInt(1, id);
@@ -231,7 +232,7 @@ public class MaintenanceDAO {
     public MaintenanceRecord findById(int id) throws DataAccessException {
         String sql = "SELECT * FROM maintenance_records WHERE id = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setInt(1, id);
@@ -258,7 +259,7 @@ public class MaintenanceDAO {
     public List<MaintenanceRecord> findByVehicle(String vehicle) throws DataAccessException {
         String sql = "SELECT * FROM maintenance_records WHERE vehicle = ? ORDER BY service_date DESC";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setString(1, vehicle);
@@ -273,7 +274,7 @@ public class MaintenanceDAO {
     public List<MaintenanceRecord> findByDateRange(LocalDate startDate, LocalDate endDate) throws DataAccessException {
         String sql = "SELECT * FROM maintenance_records WHERE service_date BETWEEN ? AND ? ORDER BY service_date DESC";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setDate(1, Date.valueOf(startDate));
@@ -289,7 +290,7 @@ public class MaintenanceDAO {
     public List<MaintenanceRecord> findByStatus(String status) throws DataAccessException {
         String sql = "SELECT * FROM maintenance_records WHERE status = ? ORDER BY service_date DESC";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setString(1, status);
@@ -309,7 +310,7 @@ public class MaintenanceDAO {
             ORDER BY service_date DESC
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             String searchPattern = "%" + searchTerm + "%";
@@ -329,7 +330,7 @@ public class MaintenanceDAO {
     public double getAverageCostByServiceType(String serviceType) throws DataAccessException {
         String sql = "SELECT AVG(cost) as avg_cost FROM maintenance_records WHERE service_type = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setString(1, serviceType);
@@ -351,7 +352,7 @@ public class MaintenanceDAO {
     public int getMaintenanceCountByVehicle(String vehicle) throws DataAccessException {
         String sql = "SELECT COUNT(*) as count FROM maintenance_records WHERE vehicle = ?";
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setString(1, vehicle);
@@ -571,7 +572,7 @@ public class MaintenanceDAO {
     }
     
     private List<MaintenanceRecord> executeQuery(String sql) throws DataAccessException {
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             

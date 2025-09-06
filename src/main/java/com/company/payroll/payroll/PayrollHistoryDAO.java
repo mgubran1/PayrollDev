@@ -1,6 +1,7 @@
 package com.company.payroll.payroll;
 
 import com.company.payroll.exception.DataAccessException;
+import com.company.payroll.database.DatabaseConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,7 +31,7 @@ public class PayrollHistoryDAO {
         if (connection != null && !connection.isClosed()) {
             return connection;
         }
-        return DriverManager.getConnection(DB_URL);
+        return DatabaseConfig.getConnection();
     }
     
     /**

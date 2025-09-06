@@ -604,8 +604,17 @@ public class PayrollOtherAdjustments implements Serializable {
                 oos.writeObject(this);
             }
             
-            // Atomic rename
-            tempFile.renameTo(mainFile);
+            // Atomic rename with error checking
+            if (!tempFile.renameTo(mainFile)) {
+                // If rename fails, try copy and delete as fallback
+                try {
+                    Files.move(tempFile.toPath(), mainFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (IOException moveException) {
+                    // Final fallback: copy then delete
+                    Files.copy(tempFile.toPath(), mainFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    tempFile.delete();
+                }
+            }
             dataModified = false;
             
             logger.debug("Adjustments data saved successfully");

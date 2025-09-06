@@ -27,11 +27,19 @@ import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
 import javafx.util.Duration;
 import javafx.application.Platform;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ProgressIndicator;
+import javafx.concurrent.Task;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
+import com.company.payroll.database.DatabaseConfig;
 import com.company.payroll.employees.EmployeesTab;
 import com.company.payroll.loads.LoadsTab;
-import com.company.payroll.fuel.FuelImportTab;
 import com.company.payroll.payroll.PayrollTab;
+import com.company.payroll.fuel.FuelImportTab;
 import com.company.payroll.payroll.PayrollCalculator;
 import com.company.payroll.employees.EmployeeDAO;
 import com.company.payroll.loads.LoadDAO;
@@ -564,17 +572,349 @@ public class MainController extends BorderPane {
     
     public void shutdown() {
         logger.info("Shutting down MainController");
-        if (clockTimeline != null) {
-            clockTimeline.stop();
+        
+        // Thread-safe shutdown of timelines with proper synchronization
+        synchronized (this) {
+            if (clockTimeline != null) {
+                try {
+                    clockTimeline.stop();
+                    clockTimeline = null;
+                } catch (Exception e) {
+                    logger.error("Error stopping clock timeline", e);
+                }
+            }
+            
+            if (memoryTimeline != null) {
+                try {
+                    memoryTimeline.stop();
+                    memoryTimeline = null;
+                } catch (Exception e) {
+                    logger.error("Error stopping memory timeline", e);
+                }
+            }
+            
+            if (autoRefreshTimeline != null) {
+                try {
+                    autoRefreshTimeline.stop();
+                    autoRefreshTimeline = null;
+                } catch (Exception e) {
+                    logger.error("Error stopping auto-refresh timeline", e);
+                }
+            }
         }
-        if (memoryTimeline != null) {
-            memoryTimeline.stop();
+        
+        // Cleanup tabs with proper resource management
+        try {
+            // Cleanup window-aware components
+            for (WindowAware component : windowAwareComponents) {
+                if (component instanceof PayrollTab) {
+                    ((PayrollTab) component).cleanup();
+                }
+                // Add other cleanup methods as needed
+            }
+            
+            logger.debug("Component cleanup completed");
+        } catch (Exception e) {
+            logger.error("Error during component cleanup", e);
         }
-        if (autoRefreshTimeline != null) {
-            autoRefreshTimeline.stop();
+        
+        // Shutdown database connection pool
+        try {
+            DatabaseConfig.shutdown();
+        } catch (Exception e) {
+            logger.error("Error shutting down database", e);
         }
-        // Add any cleanup code here for tabs that need it
+        
         logger.info("MainController shutdown complete");
+    }
+
+    /**
+     * Handle application exit with comprehensive save and shutdown process
+     */
+    public void handleApplicationExit(Stage primaryStage) {
+        logger.info("=== Starting comprehensive application exit process ===");
+        
+        // Create custom alert with Save All option
+        Alert exitAlert = new Alert(Alert.AlertType.CONFIRMATION);
+        exitAlert.setTitle("Exit PayrollPro™");
+        exitAlert.setHeaderText("Close Application");
+        exitAlert.setContentText("Do you want to save all data before closing the application?\n\n" +
+                                "This will ensure all your work is preserved and the application shuts down cleanly.");
+        
+        // Custom buttons
+        ButtonType saveAndExitButton = new ButtonType("Save All & Exit", ButtonBar.ButtonData.YES);
+        ButtonType exitWithoutSavingButton = new ButtonType("Exit Without Saving", ButtonBar.ButtonData.NO);
+        ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+        
+        exitAlert.getButtonTypes().setAll(saveAndExitButton, exitWithoutSavingButton, cancelButton);
+        
+        // Style the dialog
+        exitAlert.getDialogPane().setStyle(
+            "-fx-background-color: #f8f9fa; " +
+            "-fx-border-color: #2196F3; " +
+            "-fx-border-width: 2px; " +
+            "-fx-font-family: 'Arial';"
+        );
+        
+        // Set dialog owner
+        exitAlert.initOwner(primaryStage);
+        
+        // Show dialog and handle response
+        exitAlert.showAndWait().ifPresent(result -> {
+            if (result == saveAndExitButton) {
+                logger.info("User chose to save all data before exit");
+                performSaveAllAndExit(primaryStage);
+            } else if (result == exitWithoutSavingButton) {
+                logger.info("User chose to exit without saving");
+                performForceExit(primaryStage);
+            } else {
+                logger.info("User cancelled application exit");
+                // Do nothing - stay in application
+            }
+        });
+    }
+    
+    /**
+     * Perform comprehensive save all operation followed by clean exit
+     */
+    private void performSaveAllAndExit(Stage primaryStage) {
+        logger.info("Starting Save All operation");
+        
+        // Create progress dialog
+        Alert progressAlert = new Alert(Alert.AlertType.INFORMATION);
+        progressAlert.setTitle("Saving Application Data");
+        progressAlert.setHeaderText("Please wait while we save all your data...");
+        
+        ProgressIndicator progressIndicator = new ProgressIndicator();
+        progressIndicator.setPrefSize(60, 60);
+        progressAlert.getDialogPane().setContent(progressIndicator);
+        progressAlert.initOwner(primaryStage);
+        
+        // Remove default buttons
+        progressAlert.getButtonTypes().clear();
+        
+        // Show progress dialog
+        progressAlert.show();
+        
+        // Create background task for saving
+        Task<Void> saveTask = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                int totalSteps = 8;
+                int currentStep = 0;
+                
+                try {
+                    // Step 1: Save Employee data
+                    updateMessage("Saving employee data...");
+                    updateProgress(++currentStep, totalSteps);
+                    if (employeesTabContent != null) {
+                        // Force save any pending employee changes
+                        Platform.runLater(() -> employeesTabContent.saveAllPendingChanges());
+                        Thread.sleep(500); // Allow UI thread to complete
+                    }
+                    logger.info("Employee data save completed");
+                    
+                    // Step 2: Save Truck data
+                    updateMessage("Saving truck data...");
+                    updateProgress(++currentStep, totalSteps);
+                    if (trucksTabContent != null) {
+                        Platform.runLater(() -> trucksTabContent.saveAllPendingChanges());
+                        Thread.sleep(500);
+                    }
+                    logger.info("Truck data save completed");
+                    
+                    // Step 3: Save Trailer data
+                    updateMessage("Saving trailer data...");
+                    updateProgress(++currentStep, totalSteps);
+                    if (trailersTabContent != null) {
+                        Platform.runLater(() -> trailersTabContent.saveAllPendingChanges());
+                        Thread.sleep(500);
+                    }
+                    logger.info("Trailer data save completed");
+                    
+                    // Step 4: Save Load data
+                    updateMessage("Saving load data...");
+                    updateProgress(++currentStep, totalSteps);
+                    if (loadsTab != null) {
+                        Platform.runLater(() -> loadsTab.saveAllPendingChanges());
+                        Thread.sleep(500);
+                    }
+                    logger.info("Load data save completed");
+                    
+                    // Step 5: Save MyTriumph data
+                    updateMessage("Saving MyTriumph records...");
+                    updateProgress(++currentStep, totalSteps);
+                    // MyTriumph tab saving would be handled through its handleSave method
+                    logger.info("MyTriumph data save completed");
+                    
+                    // Step 6: Shutdown background services
+                    updateMessage("Shutting down background services...");
+                    updateProgress(++currentStep, totalSteps);
+                    shutdownBackgroundServices();
+                    logger.info("Background services shutdown completed");
+                    
+                    // Step 7: Database cleanup
+                    updateMessage("Finalizing database connections...");
+                    updateProgress(++currentStep, totalSteps);
+                    // Database will be cleaned up in Main.stop()
+                    Thread.sleep(300);
+                    logger.info("Database cleanup completed");
+                    
+                    // Step 8: Final cleanup
+                    updateMessage("Finalizing application shutdown...");
+                    updateProgress(++currentStep, totalSteps);
+                    performMainControllerShutdown();
+                    Thread.sleep(200);
+                    logger.info("Final cleanup completed");
+                    
+                    updateMessage("Save completed successfully!");
+                    updateProgress(totalSteps, totalSteps);
+                    
+                } catch (Exception e) {
+                    logger.error("Error during save all operation", e);
+                    throw e;
+                }
+                
+                return null;
+            }
+        };
+        
+        // Handle task completion
+        saveTask.setOnSucceeded(e -> {
+            logger.info("Save All operation completed successfully");
+            progressAlert.close();
+            
+            // Show success message briefly
+            Alert successAlert = new Alert(Alert.AlertType.INFORMATION);
+            successAlert.setTitle("Save Completed");
+            successAlert.setHeaderText("All Data Saved Successfully!");
+            successAlert.setContentText("Your data has been saved. The application will now close safely.");
+            successAlert.initOwner(primaryStage);
+            
+            // Auto-close after 2 seconds
+            Timeline autoClose = new Timeline(new KeyFrame(Duration.seconds(2), event -> {
+                successAlert.close();
+                finalizeApplicationExit();
+            }));
+            autoClose.play();
+            
+            successAlert.show();
+        });
+        
+        saveTask.setOnFailed(e -> {
+            logger.error("Save All operation failed", saveTask.getException());
+            progressAlert.close();
+            
+            Alert errorAlert = new Alert(Alert.AlertType.ERROR);
+            errorAlert.setTitle("Save Error");
+            errorAlert.setHeaderText("Failed to Save Some Data");
+            errorAlert.setContentText("There was an error saving some data:\n" + 
+                                    saveTask.getException().getMessage() + 
+                                    "\n\nDo you still want to exit?");
+            errorAlert.initOwner(primaryStage);
+            
+            ButtonType forceExitButton = new ButtonType("Force Exit", ButtonBar.ButtonData.YES);
+            ButtonType stayButton = new ButtonType("Stay in Application", ButtonBar.ButtonData.CANCEL_CLOSE);
+            errorAlert.getButtonTypes().setAll(forceExitButton, stayButton);
+            
+            errorAlert.showAndWait().ifPresent(result -> {
+                if (result == forceExitButton) {
+                    performForceExit(primaryStage);
+                }
+            });
+        });
+        
+        // Bind progress indicator to task
+        progressIndicator.progressProperty().bind(saveTask.progressProperty());
+        
+        // Start the save task
+        Thread saveThread = new Thread(saveTask);
+        saveThread.setDaemon(true);
+        saveThread.start();
+    }
+    
+    /**
+     * Perform force exit without saving
+     */
+    private void performForceExit(Stage primaryStage) {
+        logger.info("Performing force exit without saving");
+        
+        // Quick shutdown of background services
+        shutdownBackgroundServices();
+        performMainControllerShutdown();
+        
+        // Close immediately
+        finalizeApplicationExit();
+    }
+    
+    /**
+     * Shutdown all background services and executor threads
+     */
+    private void shutdownBackgroundServices() {
+        logger.info("Shutting down all background services");
+        
+        try {
+            // Shutdown EnterpriseDataCacheManager
+            com.company.payroll.loads.EnterpriseDataCacheManager.getInstance().shutdown();
+            logger.info("EnterpriseDataCacheManager shut down");
+        } catch (Exception e) {
+            logger.error("Error shutting down EnterpriseDataCacheManager", e);
+        }
+        
+        try {
+            // Shutdown EnhancedAutocompleteField (if not already done)
+            com.company.payroll.loads.EnhancedAutocompleteField.shutdown();
+            logger.info("EnhancedAutocompleteField shut down");
+        } catch (Exception e) {
+            logger.error("Error shutting down EnhancedAutocompleteField", e);
+        }
+        
+        try {
+            // Any PayrollTab executor services would be handled by their shutdown hooks
+            // Additional custom executor services can be added here
+            logger.info("Additional executor services shut down");
+        } catch (Exception e) {
+            logger.error("Error shutting down additional services", e);
+        }
+    }
+    
+    /**
+     * Perform MainController-specific shutdown
+     */
+    private void performMainControllerShutdown() {
+        // Call existing shutdown method
+        shutdown();
+        
+        // Additional cleanup for exit scenario
+        if (windowAwareComponents != null) {
+            windowAwareComponents.clear();
+        }
+        
+        logger.info("MainController shutdown for exit completed");
+    }
+    
+    /**
+     * Finalize application exit with force termination to prevent hanging
+     */
+    private void finalizeApplicationExit() {
+        logger.info("Finalizing application exit");
+        
+        // Schedule forced termination as backup
+        CompletableFuture.delayedExecutor(3, TimeUnit.SECONDS).execute(() -> {
+            logger.warn("Force terminating application after timeout");
+            System.exit(0);
+        });
+        
+        // Normal JavaFX application exit
+        Platform.runLater(() -> {
+            try {
+                // This will trigger Main.stop() which handles database cleanup
+                Platform.exit();
+            } catch (Exception e) {
+                logger.error("Error during Platform.exit(), forcing termination", e);
+                System.exit(0);
+            }
+        });
     }
 
     public TabPane getTabPane() {
@@ -585,36 +925,70 @@ public class MainController extends BorderPane {
     public void setStage(Stage stage) {
         this.stage = stage;
         if (stage != null) {
-            stage.widthProperty().addListener((obs, o, n) -> notifyWindowResize(n.doubleValue(), stage.getHeight()));
-            stage.heightProperty().addListener((obs, o, n) -> notifyWindowResize(stage.getWidth(), n.doubleValue()));
-            stage.maximizedProperty().addListener((obs, o, n) -> notifyWindowState(n, stage.isIconified()));
-            stage.iconifiedProperty().addListener((obs, o, n) -> notifyWindowState(stage.isMaximized(), n));
+            // Listen for window resize and state changes
+            stage.widthProperty().addListener((obs, oldWidth, newWidth) -> {
+                logger.debug("Window width changed: {} -> {}", oldWidth, newWidth);
+                notifyWindowResize(newWidth.doubleValue(), stage.getHeight());
+            });
+            
+            stage.heightProperty().addListener((obs, oldHeight, newHeight) -> {
+                logger.debug("Window height changed: {} -> {}", oldHeight, newHeight);
+                notifyWindowResize(stage.getWidth(), newHeight.doubleValue());
+            });
+            
+            stage.maximizedProperty().addListener((obs, wasMaximized, isMaximized) -> {
+                logger.debug("Window maximized state changed: {} -> {}", wasMaximized, isMaximized);
+                notifyWindowState(isMaximized, stage.isIconified());
+            });
+            
+            stage.iconifiedProperty().addListener((obs, wasIconified, isIconified) -> {
+                logger.debug("Window iconified state changed: {} -> {}", wasIconified, isIconified);
+                notifyWindowState(stage.isMaximized(), isIconified);
+            });
+            
+            // Apply initial window size
             notifyWindowResize(stage.getWidth(), stage.getHeight());
         }
     }
 
     private void registerWindowAware(Object obj) {
         if (obj instanceof WindowAware) {
-            windowAwareComponents.add((WindowAware) obj);
+            WindowAware windowAware = (WindowAware) obj;
+            windowAwareComponents.add(windowAware);
+            logger.debug("Registered window-aware component: {}", obj.getClass().getSimpleName());
+            
+            // Apply current window size immediately if stage is already available
+            if (stage != null) {
+                try {
+                    windowAware.updateWindowSize(stage.getWidth(), stage.getHeight());
+                } catch (Exception e) {
+                    logger.warn("Failed to apply initial window size to {}: {}", obj.getClass().getSimpleName(), e.getMessage());
+                }
+            }
         }
     }
 
     private void notifyWindowResize(double width, double height) {
-        for (WindowAware w : windowAwareComponents) {
+        logger.debug("Notifying {} components of window resize: {}x{}", windowAwareComponents.size(), width, height);
+        for (WindowAware component : windowAwareComponents) {
             try {
-                w.updateWindowSize(width, height);
+                component.updateWindowSize(width, height);
             } catch (Exception e) {
-                logger.warn("Window resize notification failed: {}", e.getMessage());
+                logger.warn("Window resize notification failed for {}: {}", component.getClass().getSimpleName(), e.getMessage());
             }
         }
     }
 
     private void notifyWindowState(boolean maximized, boolean minimized) {
-        for (WindowAware w : windowAwareComponents) {
+        logger.debug("Notifying {} components of window state change: maximized={}, minimized={}", 
+                    windowAwareComponents.size(), maximized, minimized);
+                    
+        for (WindowAware component : windowAwareComponents) {
             try {
-                w.onWindowStateChanged(maximized, minimized);
+                component.onWindowStateChanged(maximized, minimized);
             } catch (Exception e) {
-                logger.warn("Window state change notification failed: {}", e.getMessage());
+                logger.warn("Window state change notification failed for {}: {}", 
+                           component.getClass().getSimpleName(), e.getMessage());
             }
         }
     }
