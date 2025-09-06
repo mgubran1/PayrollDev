@@ -3332,4 +3332,333 @@ public class LoadDAO {
         
         logger.info("Database search indexes created successfully");
     }
+    
+    // ===== CLEAR ALL DATA METHODS =====
+    
+    /**
+     * Clears all customer data from the database.
+     * This will delete all customers, which will cascade to customer_locations and customer_address_book.
+     * @return the number of customers deleted
+     */
+    public int clearAllCustomers() {
+        logger.warn("CLEARING ALL CUSTOMER DATA - This is a destructive operation!");
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            // Start transaction for data integrity
+            conn.setAutoCommit(false);
+            
+            try {
+                // Get count of customers before deletion for logging
+                String countSql = "SELECT COUNT(*) FROM customers";
+                PreparedStatement countPs = conn.prepareStatement(countSql);
+                ResultSet rs = countPs.executeQuery();
+                rs.next(); // Move to first row for count
+                
+                // Delete all customers (CASCADE will handle related data)
+                String deleteSql = "DELETE FROM customers";
+                PreparedStatement deletePs = conn.prepareStatement(deleteSql);
+                int deletedCount = deletePs.executeUpdate();
+                
+                // Commit transaction
+                conn.commit();
+                
+                logger.warn("Successfully cleared all customer data. {} customers deleted.", deletedCount);
+                return deletedCount;
+                
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            logger.error("Error clearing all customer data", e);
+            throw new DataAccessException("Error clearing all customer data", e);
+        }
+    }
+    
+    /**
+     * Clears all billing entities from the database.
+     * @return the number of billing entities deleted
+     */
+    public int clearAllBillingEntities() {
+        logger.warn("CLEARING ALL BILLING ENTITIES DATA - This is a destructive operation!");
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            // Start transaction for data integrity
+            conn.setAutoCommit(false);
+            
+            try {
+                // Get count before deletion for logging
+                String countSql = "SELECT COUNT(*) FROM billing_entities";
+                PreparedStatement countPs = conn.prepareStatement(countSql);
+                ResultSet rs = countPs.executeQuery();
+                rs.next(); // Move to first row for count
+                
+                // Delete all billing entities
+                String deleteSql = "DELETE FROM billing_entities";
+                PreparedStatement deletePs = conn.prepareStatement(deleteSql);
+                int deletedCount = deletePs.executeUpdate();
+                
+                // Commit transaction
+                conn.commit();
+                
+                logger.warn("Successfully cleared all billing entities. {} billing entities deleted.", deletedCount);
+                return deletedCount;
+                
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            logger.error("Error clearing all billing entities", e);
+            throw new DataAccessException("Error clearing all billing entities", e);
+        }
+    }
+    
+    /**
+     * Clears all customer address book data from the database.
+     * This will delete all addresses from customer_address_book and sync to customer_locations.
+     * @return the number of addresses deleted
+     */
+    public int clearAllCustomerAddresses() {
+        logger.warn("CLEARING ALL CUSTOMER ADDRESS BOOK DATA - This is a destructive operation!");
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            // Start transaction for data integrity
+            conn.setAutoCommit(false);
+            
+            try {
+                // Get count before deletion for logging
+                String countSql = "SELECT COUNT(*) FROM customer_address_book";
+                PreparedStatement countPs = conn.prepareStatement(countSql);
+                ResultSet rs = countPs.executeQuery();
+                rs.next(); // Move to first row for count
+                
+                // Delete all customer addresses
+                String deleteAddressSql = "DELETE FROM customer_address_book";
+                PreparedStatement deleteAddressPs = conn.prepareStatement(deleteAddressSql);
+                int deletedAddressCount = deleteAddressPs.executeUpdate();
+                
+                // Also clear customer_locations that were synced from address book
+                String deleteLocationsSql = "DELETE FROM customer_locations";
+                PreparedStatement deleteLocationsPs = conn.prepareStatement(deleteLocationsSql);
+                int deletedLocationsCount = deleteLocationsPs.executeUpdate();
+                
+                // Commit transaction
+                conn.commit();
+                
+                logger.warn("Successfully cleared all customer address data. {} addresses and {} locations deleted.", 
+                           deletedAddressCount, deletedLocationsCount);
+                return deletedAddressCount;
+                
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            logger.error("Error clearing all customer addresses", e);
+            throw new DataAccessException("Error clearing all customer addresses", e);
+        }
+    }
+    
+    /**
+     * Clears ALL customer settings data including customers, billing entities, and address book.
+     * This is the master clear operation that removes all customer-related data.
+     * @return a summary string of what was deleted
+     */
+    public String clearAllCustomerSettings() {
+        logger.warn("CLEARING ALL CUSTOMER SETTINGS DATA - This is a complete wipe of customer data!");
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            // Start transaction for data integrity
+            conn.setAutoCommit(false);
+            
+            try {
+                // Get counts before deletion
+                String customerCountSql = "SELECT COUNT(*) FROM customers";
+                PreparedStatement customerCountPs = conn.prepareStatement(customerCountSql);
+                ResultSet customerRs = customerCountPs.executeQuery();
+                int customerCount = customerRs.next() ? customerRs.getInt(1) : 0;
+                
+                String billingCountSql = "SELECT COUNT(*) FROM billing_entities";
+                PreparedStatement billingCountPs = conn.prepareStatement(billingCountSql);
+                ResultSet billingRs = billingCountPs.executeQuery();
+                int billingCount = billingRs.next() ? billingRs.getInt(1) : 0;
+                
+                String addressCountSql = "SELECT COUNT(*) FROM customer_address_book";
+                PreparedStatement addressCountPs = conn.prepareStatement(addressCountSql);
+                ResultSet addressRs = addressCountPs.executeQuery();
+                int addressCount = addressRs.next() ? addressRs.getInt(1) : 0;
+                
+                // Clear all data
+                // Order matters: address book first, then customers (cascade), then billing entities
+                conn.createStatement().executeUpdate("DELETE FROM customer_address_book");
+                conn.createStatement().executeUpdate("DELETE FROM customer_locations");
+                conn.createStatement().executeUpdate("DELETE FROM customers");
+                conn.createStatement().executeUpdate("DELETE FROM billing_entities");
+                
+                // Commit transaction
+                conn.commit();
+                
+                String summary = String.format("Cleared all customer settings: %d customers, %d billing entities, %d addresses", 
+                                               customerCount, billingCount, addressCount);
+                logger.warn(summary);
+                return summary;
+                
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            logger.error("Error clearing all customer settings", e);
+            throw new DataAccessException("Error clearing all customer settings", e);
+        }
+    }
+    
+    /**
+     * Bulk delete customers by name list
+     * @param customerNames List of customer names to delete
+     * @return the number of customers successfully deleted
+     */
+    public int bulkDeleteCustomers(List<String> customerNames) {
+        if (customerNames == null || customerNames.isEmpty()) {
+            return 0;
+        }
+        
+        logger.info("Bulk deleting {} customers", customerNames.size());
+        int deletedCount = 0;
+        
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            conn.setAutoCommit(false);
+            
+            try {
+                String sql = "DELETE FROM customers WHERE name = ?";
+                PreparedStatement ps = conn.prepareStatement(sql);
+                
+                for (String customerName : customerNames) {
+                    if (customerName != null && !customerName.trim().isEmpty()) {
+                        ps.setString(1, customerName.trim());
+                        int rowsAffected = ps.executeUpdate();
+                        if (rowsAffected > 0) {
+                            deletedCount++;
+                            logger.debug("Deleted customer: {}", customerName);
+                        }
+                    }
+                }
+                
+                conn.commit();
+                logger.info("Bulk delete completed. {} customers deleted.", deletedCount);
+                
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            logger.error("Error in bulk delete customers", e);
+            throw new DataAccessException("Error in bulk delete customers", e);
+        }
+        
+        return deletedCount;
+    }
+    
+    /**
+     * Bulk delete billing entities by name list
+     * @param billingEntityNames List of billing entity names to delete
+     * @return the number of billing entities successfully deleted
+     */
+    public int bulkDeleteBillingEntities(List<String> billingEntityNames) {
+        if (billingEntityNames == null || billingEntityNames.isEmpty()) {
+            return 0;
+        }
+        
+        logger.info("Bulk deleting {} billing entities", billingEntityNames.size());
+        int deletedCount = 0;
+        
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            conn.setAutoCommit(false);
+            
+            try {
+                String sql = "DELETE FROM billing_entities WHERE name = ?";
+                PreparedStatement ps = conn.prepareStatement(sql);
+                
+                for (String billingEntityName : billingEntityNames) {
+                    if (billingEntityName != null && !billingEntityName.trim().isEmpty()) {
+                        ps.setString(1, billingEntityName.trim());
+                        int rowsAffected = ps.executeUpdate();
+                        if (rowsAffected > 0) {
+                            deletedCount++;
+                            logger.debug("Deleted billing entity: {}", billingEntityName);
+                        }
+                    }
+                }
+                
+                conn.commit();
+                logger.info("Bulk delete completed. {} billing entities deleted.", deletedCount);
+                
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            logger.error("Error in bulk delete billing entities", e);
+            throw new DataAccessException("Error in bulk delete billing entities", e);
+        }
+        
+        return deletedCount;
+    }
+    
+    /**
+     * Bulk delete customer addresses by ID list
+     * @param addressIds List of address IDs to delete
+     * @return the number of addresses successfully deleted
+     */
+    public int bulkDeleteCustomerAddresses(List<Integer> addressIds) {
+        if (addressIds == null || addressIds.isEmpty()) {
+            return 0;
+        }
+        
+        logger.info("Bulk deleting {} customer addresses", addressIds.size());
+        int deletedCount = 0;
+        
+        try (Connection conn = DatabaseConfig.getConnection()) {
+            conn.setAutoCommit(false);
+            
+            try {
+                String sql = "DELETE FROM customer_address_book WHERE id = ?";
+                PreparedStatement ps = conn.prepareStatement(sql);
+                
+                for (Integer addressId : addressIds) {
+                    if (addressId != null && addressId > 0) {
+                        ps.setInt(1, addressId);
+                        int rowsAffected = ps.executeUpdate();
+                        if (rowsAffected > 0) {
+                            deletedCount++;
+                            logger.debug("Deleted customer address ID: {}", addressId);
+                        }
+                    }
+                }
+                
+                conn.commit();
+                logger.info("Bulk delete completed. {} customer addresses deleted.", deletedCount);
+                
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            logger.error("Error in bulk delete customer addresses", e);
+            throw new DataAccessException("Error in bulk delete customer addresses", e);
+        }
+        
+        return deletedCount;
+    }
 }

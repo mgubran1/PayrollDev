@@ -405,8 +405,10 @@ public class LoadConfirmationPreviewDialog {
                 loc.getCustomer() != null ? loc.getCustomer() : "",
                 formatLocationAddress(loc));
             
-            if (loc.getTime() != null) {
-                info += " @ " + loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a"));
+            // Include both date and time for additional locations
+            String dateTimeInfo = formatLocationDateTime(loc.getDate(), loc.getTime());
+            if (!dateTimeInfo.isEmpty()) {
+                info += " @ " + dateTimeInfo;
             }
             
             Label locLabel = new Label(info);
@@ -633,15 +635,35 @@ public class LoadConfirmationPreviewDialog {
         return result;
     }
     
+    private String formatLocationDateTime(LocalDate date, LocalTime time) {
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("h:mm a");
+        
+        String result = "";
+        if (date != null) {
+            result = date.format(dateFormatter);
+        }
+        if (time != null) {
+            if (!result.isEmpty()) {
+                result += " @ ";
+            }
+            result += time.format(timeFormatter);
+        }
+        
+        return result;
+    }
+    
     private void handlePrintPdf() {
+        PDDocument document = null;
         try {
             // Generate PDF in memory
-            PDDocument document = generator.generateLoadConfirmation(load);
+            document = generator.generateLoadConfirmation(load);
             
             // Create temporary file with proper extension
             File tempFile = File.createTempFile("LoadConfirmation_" + load.getLoadNumber() + "_", ".pdf");
             document.save(tempFile);
-            document.close();
+            
+            // Don't close here - we'll close in finally block
             
             // Verify the file was created successfully
             if (!tempFile.exists() || tempFile.length() == 0) {
@@ -695,9 +717,15 @@ public class LoadConfirmationPreviewDialog {
             } else {
                 // Final fallback: Save to desktop and inform user
                 File desktopFile = new File(System.getProperty("user.home") + "/Desktop/LoadConfirmation_" + load.getLoadNumber() + ".pdf");
-                document = generator.generateLoadConfirmation(load);
-                document.save(desktopFile);
-                document.close();
+                PDDocument fallbackDoc = null;
+                try {
+                    fallbackDoc = generator.generateLoadConfirmation(load);
+                    fallbackDoc.save(desktopFile);
+                } finally {
+                    if (fallbackDoc != null) {
+                        fallbackDoc.close();
+                    }
+                }
                 
                 Alert fallbackAlert = new Alert(Alert.AlertType.INFORMATION);
                 fallbackAlert.setTitle("PDF Saved");
@@ -710,7 +738,7 @@ public class LoadConfirmationPreviewDialog {
             new Thread(() -> {
                 try {
                     Thread.sleep(15000); // Wait 15 seconds to ensure printing is complete
-                    if (tempFile.exists()) {
+                    if (tempFile != null && tempFile.exists()) {
                         tempFile.delete();
                     }
                 } catch (InterruptedException e) {
@@ -725,6 +753,15 @@ public class LoadConfirmationPreviewDialog {
             alert.setHeaderText("Failed to generate PDF");
             alert.setContentText("Error: " + e.getMessage());
             alert.showAndWait();
+        } finally {
+            // Ensure document is always closed
+            if (document != null) {
+                try {
+                    document.close();
+                } catch (IOException e) {
+                    logger.error("Error closing PDF document", e);
+                }
+            }
         }
     }
     

@@ -466,11 +466,12 @@ public class CustomerAutocompleteField extends HBox {
                 onCustomerSelected.accept(customerName);
             }
             
-            // Show success notification
-            showNotification("Customer \"" + customerName + "\" added successfully!");
+            // Log success instead of blocking notification dialog
+            logger.info("Customer '{}' added successfully", customerName);
         } catch (Exception e) {
             logger.error("Error adding customer", e);
-            showNotification("Error adding customer: " + e.getMessage());
+            // Log error instead of blocking notification dialog
+            logger.error("Failed to add customer: {}", e.getMessage());
         }
     }
     
@@ -479,14 +480,8 @@ public class CustomerAutocompleteField extends HBox {
         logger.info("Show addresses for customer: {}", customerName);
     }
     
-    private void showNotification(String message) {
-        // Simple notification - in production, use a proper notification system
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Customer Management");
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
-    }
+    // REMOVED: showNotification method that was causing UI freezes with blocking Alert dialogs
+    // All notifications now use logging instead of blocking popups for better performance
     
     // Public API
     public void setCustomerProvider(BiFunction<String, Boolean, CompletableFuture<List<CustomerInfo>>> provider) {

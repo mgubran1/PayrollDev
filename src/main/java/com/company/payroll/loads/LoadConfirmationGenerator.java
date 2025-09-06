@@ -326,8 +326,10 @@ public class LoadConfirmationGenerator {
                     loc.getCustomer() != null ? loc.getCustomer() : "",
                     formatLocationAddress(loc));
                 
-                if (loc.getTime() != null) {
-                    info += " @ " + loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a"));
+                // Include both date and time for additional pickup locations
+                String dateTimeInfo = formatLocationDateTime(loc.getDate(), loc.getTime());
+                if (!dateTimeInfo.isEmpty()) {
+                    info += " @ " + dateTimeInfo;
                 }
                 
                 contentStream.setFont(normalFont, 9);
@@ -401,8 +403,10 @@ public class LoadConfirmationGenerator {
                     loc.getCustomer() != null ? loc.getCustomer() : "",
                     formatLocationAddress(loc));
                 
-                if (loc.getTime() != null) {
-                    info += " @ " + loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a"));
+                // Include both date and time for additional drop locations
+                String dateTimeInfo = formatLocationDateTime(loc.getDate(), loc.getTime());
+                if (!dateTimeInfo.isEmpty()) {
+                    info += " @ " + dateTimeInfo;
                 }
                 
                 contentStream.setFont(normalFont, 9);
@@ -740,14 +744,14 @@ public class LoadConfirmationGenerator {
             for (int i = 0; i < additionalPickups.size(); i++) {
                 LoadLocation loc = additionalPickups.get(i);
                 
-                // Format: Customer - Address - Time
+                // Format: Customer - Address - Date/Time
                 String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
                     loc.getCustomer() : "";
                 String address = formatLocationAddress(loc);
-                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
+                String dateTime = formatLocationDateTime(loc.getDate(), loc.getTime());
                 
                 String locationLine = String.format("%d. %s - %s - %s", 
-                    i + 1, customer, address, time);
+                    i + 1, customer, address, dateTime);
                 
                 contentStream.setFont(normalFont, 10);
                 contentStream.beginText();
@@ -810,14 +814,14 @@ public class LoadConfirmationGenerator {
             for (int i = 0; i < additionalDrops.size(); i++) {
                 LoadLocation loc = additionalDrops.get(i);
                 
-                // Format: Customer - Address - Time
+                // Format: Customer - Address - Date/Time
                 String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
                     loc.getCustomer() : "";
                 String address = formatLocationAddress(loc);
-                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
+                String dateTime = formatLocationDateTime(loc.getDate(), loc.getTime());
                 
                 String locationLine = String.format("%d. %s - %s - %s", 
-                    i + 1, customer, address, time);
+                    i + 1, customer, address, dateTime);
                 
                 contentStream.setFont(normalFont, 10);
                 contentStream.beginText();
@@ -974,6 +978,24 @@ public class LoadConfirmationGenerator {
         return result;
     }
     
+    private String formatLocationDateTime(LocalDate date, LocalTime time) {
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("h:mm a");
+        
+        String result = "";
+        if (date != null) {
+            result = date.format(dateFormatter);
+        }
+        if (time != null) {
+            if (!result.isEmpty()) {
+                result += " @ ";
+            }
+            result += time.format(timeFormatter);
+        }
+        
+        return result;
+    }
+    
     private List<String> wrapText(String text, float maxWidth, PDType1Font font, int fontSize) throws IOException {
         List<String> lines = new ArrayList<>();
         String[] words = text.split(" ");
@@ -1071,10 +1093,10 @@ public class LoadConfirmationGenerator {
                 String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
                     loc.getCustomer() : "";
                 String address = formatLocationAddress(loc);
-                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
+                String dateTime = formatLocationDateTime(loc.getDate(), loc.getTime());
                 
                 String locationLine = String.format("%d. %s - %s - %s", 
-                    i + 1, customer, address, time);
+                    i + 1, customer, address, dateTime);
                 
                 contentStream.setFont(normalFont, 7); // Reduced font size
                 contentStream.beginText();
@@ -1137,10 +1159,10 @@ public class LoadConfirmationGenerator {
                 String customer = loc.getCustomer() != null && !loc.getCustomer().isEmpty() ? 
                     loc.getCustomer() : "";
                 String address = formatLocationAddress(loc);
-                String time = loc.getTime() != null ? loc.getTime().format(DateTimeFormatter.ofPattern("h:mm a")) : "";
+                String dateTime = formatLocationDateTime(loc.getDate(), loc.getTime());
                 
                 String locationLine = String.format("%d. %s - %s - %s", 
-                    i + 1, customer, address, time);
+                    i + 1, customer, address, dateTime);
                 
                 contentStream.setFont(normalFont, 7); // Reduced font size
                 contentStream.beginText();

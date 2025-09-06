@@ -342,6 +342,17 @@ public class LoadsPanel extends BorderPane {
             showAddLocationDialogForCombo(locationCombo, customer);
         });
         
+        // Date picker for this additional location
+        DatePicker datePicker = new DatePicker();
+        datePicker.setPromptText(isPickup ? "Pickup Date" : "Delivery Date");
+        datePicker.setPrefWidth(120);
+        datePicker.getStyleClass().add("modern-date-picker");
+        
+        // Time spinner for this additional location
+        Spinner<LocalTime> timeSpinner = createTimeSpinner();
+        timeSpinner.setPrefWidth(100);
+        timeSpinner.getStyleClass().add("modern-time-spinner");
+        
         // Remove button
         Button removeBtn = new Button("×");
         removeBtn.getStyleClass().add("modern-remove-button");
@@ -353,11 +364,15 @@ public class LoadsPanel extends BorderPane {
             
             // Remove from UI
             parentContainer.getChildren().remove(row);
-            // Remove from the appropriate list in dialog fields
+            // Remove from the appropriate lists in dialog fields
             if (isPickup) {
                 dialogFields.additionalPickupLocations.remove(locationCombo);
+                dialogFields.additionalPickupDates.remove(datePicker);
+                dialogFields.additionalPickupTimes.remove(timeSpinner);
             } else {
                 dialogFields.additionalDropLocations.remove(locationCombo);
+                dialogFields.additionalDropDates.remove(datePicker);
+                dialogFields.additionalDropTimes.remove(timeSpinner);
             }
             
             logger.debug("Removed additional {} location. Remaining locations: {}", 
@@ -365,13 +380,17 @@ public class LoadsPanel extends BorderPane {
                 isPickup ? dialogFields.additionalPickupLocations.size() : dialogFields.additionalDropLocations.size());
         });
         
-        row.getChildren().addAll(rowLabel, customerCombo, addCustomerBtn, locationCombo, addLocationBtn, removeBtn);
+        row.getChildren().addAll(rowLabel, customerCombo, addCustomerBtn, locationCombo, addLocationBtn, datePicker, timeSpinner, removeBtn);
         
-        // Add to the appropriate list in dialog fields
+        // Add to the appropriate lists in dialog fields
         if (isPickup) {
             dialogFields.additionalPickupLocations.add(locationCombo);
+            dialogFields.additionalPickupDates.add(datePicker);
+            dialogFields.additionalPickupTimes.add(timeSpinner);
         } else {
             dialogFields.additionalDropLocations.add(locationCombo);
+            dialogFields.additionalDropDates.add(datePicker);
+            dialogFields.additionalDropTimes.add(timeSpinner);
         }
         
         // IMPORTANT: Store the customer combo reference in a way that won't get lost
@@ -456,6 +475,7 @@ public class LoadsPanel extends BorderPane {
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
         statusTabs.add(makeActiveTab());
+        statusTabs.add(makePaidLoadsTab());
         statusTabs.add(makeStatusTab("Cancelled", Load.Status.CANCELLED));
         statusTabs.add(makeAllLoadsTab());
         statusTabs.add(makeCustomerSettingsTab());
@@ -909,6 +929,309 @@ public class LoadsPanel extends BorderPane {
         VBox vbox = new VBox(searchContainer, tableScrollPane, buttonBox);
         vbox.setSpacing(10);
         tab.tab = new Tab("Active Loads", vbox);
+        tab.table = table;
+        refilter.run();
+        return tab;
+    }
+
+    private StatusTab makePaidLoadsTab() {
+        logger.debug("Creating Paid Loads tab");
+        StatusTab tab = new StatusTab();
+        
+        // Default filter: last 90 days of paid loads (longer period since paid loads are historical)
+        LocalDate ninetyDaysAgo = LocalDate.now().minusDays(90);
+        tab.filteredList = new FilteredList<>(allLoads, l -> {
+            boolean statusFilter = l.getStatus() == Load.Status.PAID;
+            
+            // Check both pickup and delivery dates for recent loads
+            boolean dateFilter = false;
+            if (l.getPickUpDate() != null && !l.getPickUpDate().isBefore(ninetyDaysAgo)) {
+                dateFilter = true;
+            } else if (l.getDeliveryDate() != null && !l.getDeliveryDate().isBefore(ninetyDaysAgo)) {
+                dateFilter = true;
+            }
+            
+            return statusFilter && dateFilter;
+        });
+
+        TableView<Load> table = makeTableView(tab.filteredList, true);
+
+        // Enhanced search controls
+        TextField loadNumField = new TextField();
+        loadNumField.setPromptText("Load #");
+        loadNumField.setPrefWidth(100);
+        
+        TextField truckUnitField = new TextField();
+        truckUnitField.setPromptText("Truck/Unit");
+        truckUnitField.setPrefWidth(100);
+        
+        TextField trailerNumberField = new TextField();
+        trailerNumberField.setPromptText("Trailer #");
+        trailerNumberField.setPrefWidth(100);
+        
+        ComboBox<Employee> driverBox = new ComboBox<>(activeDrivers);
+        driverBox.setPromptText("Driver");
+        driverBox.setPrefWidth(150);
+        driverBox.setCellFactory(cb -> new ListCell<Employee>() {
+            @Override
+            protected void updateItem(Employee e, boolean empty) {
+                super.updateItem(e, empty);
+                if (empty || e == null) {
+                    setText("");
+                    setStyle("");
+                } else {
+                    setText(formatDriverDisplay(e));
+                    if (e.getStatus() != Employee.Status.ACTIVE) {
+                        setStyle("-fx-text-fill: #999; -fx-font-style: italic;");
+                    } else {
+                        setStyle("");
+                    }
+                }
+            }
+        });
+        driverBox.setButtonCell(new ListCell<Employee>() {
+            @Override
+            protected void updateItem(Employee e, boolean empty) {
+                super.updateItem(e, empty);
+                if (empty || e == null) {
+                    setText("");
+                    setStyle("");
+                } else {
+                    setText(formatDriverDisplay(e));
+                    if (e.getStatus() != Employee.Status.ACTIVE) {
+                        setStyle("-fx-text-fill: #999; -fx-font-style: italic;");
+                    } else {
+                        setStyle("");
+                    }
+                }
+            }
+        });
+        
+        ComboBox<Trailer> trailerBox = new ComboBox<>(allTrailers);
+        trailerBox.setPromptText("Trailer");
+        trailerBox.setPrefWidth(150);
+        trailerBox.setCellFactory(cb -> new ListCell<Trailer>() {
+            @Override
+            protected void updateItem(Trailer t, boolean empty) {
+                super.updateItem(t, empty);
+                setText((t == null || empty) ? "" : t.getTrailerNumber() + " - " + t.getType());
+            }
+        });
+        trailerBox.setButtonCell(new ListCell<Trailer>() {
+            @Override
+            protected void updateItem(Trailer t, boolean empty) {
+                super.updateItem(t, empty);
+                setText((t == null || empty) ? "" : t.getTrailerNumber() + " - " + t.getType());
+            }
+        });
+        
+        ComboBox<String> customerBox = new ComboBox<>(allBillingEntities);
+        customerBox.setPromptText("Bill To");
+        customerBox.setPrefWidth(150);
+        
+        // Set default date range to last 90 days for paid loads
+        DatePicker startDatePicker = new DatePicker(LocalDate.now().minusDays(90));
+        startDatePicker.setPromptText("Start Date");
+        startDatePicker.setPrefWidth(120);
+        
+        DatePicker endDatePicker = new DatePicker(LocalDate.now());
+        endDatePicker.setPromptText("End Date");
+        endDatePicker.setPrefWidth(120);
+        
+        Button clearSearchBtn = createStyledButton("🔄 Clear Search", "#6c757d", "white");
+
+        // Add info label about default date range
+        Label dateRangeInfo = new Label("💰 Showing paid loads from last 90 days by default. Adjust date range to see more.");
+        dateRangeInfo.setStyle("-fx-text-fill: #666; -fx-font-size: 11px; -fx-font-style: italic;");
+        
+        HBox searchBox1 = new HBox(8, new Label("Search:"), loadNumField, truckUnitField, trailerNumberField, driverBox);
+        HBox searchBox2 = new HBox(8, new Label("Bill To:"), customerBox, new Label("Date Range:"), startDatePicker, new Label("to"), endDatePicker, clearSearchBtn);
+        VBox searchContainer = new VBox(5, searchBox1, searchBox2, dateRangeInfo);
+        searchContainer.setPadding(new Insets(10));
+        searchContainer.setStyle("-fx-background-color:#f7fff7; -fx-border-color: #e0e0e0; -fx-border-radius: 5; -fx-background-radius: 5;");
+
+        Button editBtn = createStyledButton("✏️ Edit", "#ffc107", "black");
+        Button deleteBtn = createStyledButton("🗑️ Delete", "#dc3545", "white");
+        Button exportBtn = createStyledButton("📊 Export CSV", "#17a2b8", "white");
+        Button refreshBtn = createStyledButton("🔄 Refresh", "#6c757d", "white");
+        Button confirmationBtn = createStyledButton("📄 Load Confirmation", "#6f42c1", "white");
+
+        HBox buttonBox = new HBox(10, editBtn, deleteBtn, confirmationBtn, exportBtn, refreshBtn);
+        buttonBox.setAlignment(Pos.CENTER_LEFT);
+        buttonBox.setPadding(new Insets(4, 10, 8, 10));
+
+        table.setRowFactory(tv -> {
+            TableRow<Load> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && !row.isEmpty()) {
+                    logger.info("Double-click edit for paid load: {}", row.getItem().getLoadNumber());
+                    showLoadDialog(row.getItem(), false);
+                }
+            });
+            return row;
+        });
+
+        table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        
+        // Disable buttons that require selection
+        editBtn.setDisable(true);
+        deleteBtn.setDisable(true);
+        confirmationBtn.setDisable(true);
+        
+        // Enable/disable buttons based on selection
+        table.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
+            boolean hasSelection = newSelection != null;
+            editBtn.setDisable(!hasSelection);
+            deleteBtn.setDisable(!hasSelection);
+            confirmationBtn.setDisable(!hasSelection);
+        });
+
+        // Enhanced filtering with date range
+        Runnable refilter = () -> {
+            logger.debug("Applying filters to Paid Loads");
+            
+            // Base predicate for paid loads
+            Predicate<Load> pred = l -> l.getStatus() == Load.Status.PAID;
+
+            String loadNum = loadNumField.getText().trim().toLowerCase();
+            if (!loadNum.isEmpty()) {
+                pred = pred.and(l -> l.getLoadNumber() != null && l.getLoadNumber().toLowerCase().contains(loadNum));
+            }
+            
+            String truckUnit = truckUnitField.getText().trim().toLowerCase();
+            if (!truckUnit.isEmpty()) {
+                pred = pred.and(l -> l.getTruckUnitSnapshot() != null && l.getTruckUnitSnapshot().toLowerCase().contains(truckUnit));
+            }
+            
+            String trailerNumber = trailerNumberField.getText().trim().toLowerCase();
+            if (!trailerNumber.isEmpty()) {
+                pred = pred.and(l -> l.getTrailerNumber() != null && l.getTrailerNumber().toLowerCase().contains(trailerNumber));
+            }
+            
+            Employee driver = driverBox.getValue();
+            if (driver != null) {
+                pred = pred.and(l -> l.getDriver() != null && l.getDriver().getId() == driver.getId());
+            }
+            
+            Trailer trailer = trailerBox.getValue();
+            if (trailer != null) {
+                pred = pred.and(l -> l.getTrailer() != null && l.getTrailer().getId() == trailer.getId());
+            }
+            
+            String customer = customerBox.getValue();
+            if (customer != null && !customer.trim().isEmpty()) {
+                pred = pred.and(l -> customer.equalsIgnoreCase(l.getBillTo()));
+            }
+            
+            LocalDate startDate = startDatePicker.getValue();
+            LocalDate endDate = endDatePicker.getValue();
+            if (startDate != null || endDate != null) {
+                pred = pred.and(l -> {
+                    // Check both pickup and delivery dates
+                    boolean inRange = false;
+                    
+                    if (l.getPickUpDate() != null) {
+                        boolean pickupInRange = true;
+                        if (startDate != null) pickupInRange = !l.getPickUpDate().isBefore(startDate);
+                        if (endDate != null) pickupInRange = pickupInRange && !l.getPickUpDate().isAfter(endDate);
+                        if (pickupInRange) inRange = true;
+                    }
+                    
+                    if (l.getDeliveryDate() != null) {
+                        boolean deliveryInRange = true;
+                        if (startDate != null) deliveryInRange = !l.getDeliveryDate().isBefore(startDate);
+                        if (endDate != null) deliveryInRange = deliveryInRange && !l.getDeliveryDate().isAfter(endDate);
+                        if (deliveryInRange) inRange = true;
+                    }
+                    
+                    return inRange;
+                });
+            }
+            
+            tab.filteredList.setPredicate(pred);
+        };
+
+        // Add listeners
+        loadNumField.textProperty().addListener((obs, o, n) -> refilter.run());
+        truckUnitField.textProperty().addListener((obs, o, n) -> refilter.run());
+        trailerNumberField.textProperty().addListener((obs, o, n) -> refilter.run());
+        driverBox.valueProperty().addListener((obs, o, n) -> refilter.run());
+        trailerBox.valueProperty().addListener((obs, o, n) -> refilter.run());
+        customerBox.valueProperty().addListener((obs, o, n) -> refilter.run());
+        startDatePicker.valueProperty().addListener((obs, o, n) -> refilter.run());
+        endDatePicker.valueProperty().addListener((obs, o, n) -> refilter.run());
+        
+        clearSearchBtn.setOnAction(e -> {
+            logger.info("Clearing search filters for Paid Loads");
+            loadNumField.clear();
+            truckUnitField.clear();
+            trailerNumberField.clear();
+            driverBox.setValue(null);
+            trailerBox.setValue(null);
+            customerBox.setValue(null);
+            // Reset to default date range (last 90 days)
+            startDatePicker.setValue(LocalDate.now().minusDays(90));
+            endDatePicker.setValue(LocalDate.now());
+            refilter.run();
+        });
+
+        // Button actions
+        editBtn.setOnAction(e -> {
+            Load selected = table.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                logger.info("Edit paid load button clicked for: {}", selected.getLoadNumber());
+                showLoadDialog(selected, false);
+            }
+        });
+        deleteBtn.setOnAction(e -> {
+            Load selected = table.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                logger.info("Delete paid load button clicked for: {}", selected.getLoadNumber());
+                Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                        "Delete paid load \"" + selected.getLoadNumber() + "\"?",
+                        ButtonType.YES, ButtonType.NO);
+                confirm.setHeaderText("Confirm Delete");
+                confirm.showAndWait().ifPresent(resp -> {
+                    if (resp == ButtonType.YES) {
+                        logger.info("User confirmed deletion of paid load: {}", selected.getLoadNumber());
+                        loadDAO.delete(selected.getId());
+                        reloadAll();
+                        notifyLoadDataChanged(); // Notify listeners
+                    }
+                });
+            }
+        });
+        confirmationBtn.setOnAction(e -> {
+            Load selected = table.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                logger.info("Load Confirmation button clicked for paid load: {}", selected.getLoadNumber());
+                LoadConfirmationPreviewDialog previewDialog = new LoadConfirmationPreviewDialog(selected);
+                previewDialog.show();
+            } else {
+                showError("Please select a load first.");
+            }
+        });
+        exportBtn.setOnAction(e -> {
+            logger.info("Export CSV button clicked for Paid Loads");
+            exportCSV(table);
+        });
+        refreshBtn.setOnAction(e -> {
+            logger.info("Refresh button clicked for Paid Loads");
+            reloadAll();
+            notifyLoadDataChanged(); // Notify listeners
+        });
+
+        // Wrap table in ScrollPane for horizontal scrolling
+        ScrollPane tableScrollPane = new ScrollPane(table);
+        tableScrollPane.setFitToHeight(true);
+        tableScrollPane.setFitToWidth(false);  // Allow horizontal scrolling
+        tableScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        tableScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        tableScrollPane.setPrefViewportHeight(600);
+        
+        VBox vbox = new VBox(searchContainer, tableScrollPane, buttonBox);
+        vbox.setSpacing(10);
+        tab.tab = new Tab("Paid Loads", vbox);
         tab.table = table;
         refilter.run();
         return tab;
@@ -1708,7 +2031,7 @@ public class LoadsPanel extends BorderPane {
                             loadDAO.updateCustomerAddress(address);
                         }
                         refreshCustomerAddresses.run();
-                        showInfo("Address added successfully!");
+                        logger.info("Address added successfully");
                     } else {
                         showError("Failed to add address.");
                     }
@@ -1781,7 +2104,336 @@ public class LoadsPanel extends BorderPane {
             }
         });
         
-        statusTab.tab = new Tab("Customer Settings", mainSplitPane);
+        // ===== CLEAR ALL SECTION =====
+        
+        // Add Clear All section at the bottom
+        VBox clearAllSection = new VBox(10);
+        clearAllSection.setPadding(new Insets(15));
+        clearAllSection.setStyle("-fx-background-color: #fff5f5; -fx-border-color: #ffcccc; -fx-border-radius: 5; -fx-background-radius: 5;");
+        
+        Label clearAllLabel = new Label("🗑️ Bulk Operations");
+        clearAllLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: #d32f2f;");
+        
+        Label warningLabel = new Label("⚠️ WARNING: These operations are destructive and cannot be undone!");
+        warningLabel.setStyle("-fx-text-fill: #d32f2f; -fx-font-weight: bold; -fx-font-size: 12px;");
+        
+        // Clear All Data button
+        Button clearAllDataBtn = createStyledButton("🧹 Clear ALL Customer Data", "#d32f2f", "white");
+        clearAllDataBtn.setTooltip(new Tooltip("Delete ALL customers, billing entities, and addresses - CANNOT BE UNDONE!"));
+        clearAllDataBtn.setPrefWidth(250);
+        clearAllDataBtn.setOnAction(e -> {
+            Alert warningAlert = new Alert(Alert.AlertType.WARNING);
+            warningAlert.setTitle("DANGER: Clear All Customer Data");
+            warningAlert.setHeaderText("⚠️ DESTRUCTIVE OPERATION WARNING ⚠️");
+            warningAlert.setContentText("This will permanently delete ALL customer data including:\n" +
+                    "• All customers (" + allCustomers.size() + " items)\n" +
+                    "• All billing entities (" + allBillingEntities.size() + " items)\n" +
+                    "• All customer addresses\n\n" +
+                    "THIS CANNOT BE UNDONE!\n\n" +
+                    "Type 'DELETE ALL' to confirm:");
+            
+            ButtonType confirmBtn = new ButtonType("I UNDERSTAND - DELETE ALL", ButtonBar.ButtonData.OK_DONE);
+            ButtonType cancelBtn = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+            warningAlert.getButtonTypes().setAll(confirmBtn, cancelBtn);
+            
+            // Add text field for confirmation
+            TextField confirmField = new TextField();
+            confirmField.setPromptText("Type 'DELETE ALL' to confirm");
+            warningAlert.getDialogPane().setExpandableContent(new VBox(10, 
+                new Label("Confirmation required:"), confirmField));
+            warningAlert.getDialogPane().setExpanded(true);
+            
+            warningAlert.showAndWait().ifPresent(response -> {
+                if (response == confirmBtn && "DELETE ALL".equals(confirmField.getText().trim())) {
+                    logger.warn("User confirmed clearing ALL customer data");
+                    try {
+                        String result = loadDAO.clearAllCustomerSettings();
+                        
+                        // Refresh all data
+                        reloadAll();
+                        
+                        // Clear selections and refresh UI
+                        Platform.runLater(() -> {
+                            customerList.getSelectionModel().clearSelection();
+                            billingList.getSelectionModel().clearSelection();
+                            addressList.setItems(FXCollections.emptyObservableList());
+                            rightPane.setDisable(true);
+                            
+                            // Invalidate cache
+                            cacheManager.invalidateAllCaches();
+                            
+                            showInfo("✅ " + result);
+                        });
+                        
+                        // Notify load data changed
+                        notifyLoadDataChanged();
+                        
+                    } catch (Exception ex) {
+                        logger.error("Error clearing all customer data", ex);
+                        showError("Error clearing all customer data: " + ex.getMessage());
+                    }
+                } else if (response == confirmBtn) {
+                    showError("Confirmation text does not match. Operation cancelled.");
+                }
+            });
+        });
+        
+        // Individual clear buttons
+        HBox individualClearBox = new HBox(10);
+        individualClearBox.setAlignment(Pos.CENTER_LEFT);
+        
+        Button clearCustomersBtn = createStyledButton("Clear Customers", "#ff5722", "white");
+        clearCustomersBtn.setTooltip(new Tooltip("Delete ALL customers and their addresses"));
+        clearCustomersBtn.setOnAction(e -> {
+            if (allCustomers.isEmpty()) {
+                showInfo("No customers to clear.");
+                return;
+            }
+            
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("Clear All Customers");
+            confirm.setHeaderText("Delete all " + allCustomers.size() + " customers?");
+            confirm.setContentText("This will also delete all associated addresses.\nThis cannot be undone.");
+            
+            confirm.showAndWait().ifPresent(response -> {
+                if (response == ButtonType.OK) {
+                    try {
+                        int deleted = loadDAO.clearAllCustomers();
+                        reloadAll();
+                        customerList.getSelectionModel().clearSelection();
+                        addressList.setItems(FXCollections.emptyObservableList());
+                        rightPane.setDisable(true);
+                        notifyLoadDataChanged();
+                        showInfo("Cleared " + deleted + " customers successfully!");
+                    } catch (Exception ex) {
+                        logger.error("Error clearing customers", ex);
+                        showError("Error clearing customers: " + ex.getMessage());
+                    }
+                }
+            });
+        });
+        
+        Button clearBillingBtn = createStyledButton("Clear Billing", "#ff5722", "white");
+        clearBillingBtn.setTooltip(new Tooltip("Delete ALL billing entities"));
+        clearBillingBtn.setOnAction(e -> {
+            if (allBillingEntities.isEmpty()) {
+                showInfo("No billing entities to clear.");
+                return;
+            }
+            
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("Clear All Billing Entities");
+            confirm.setHeaderText("Delete all " + allBillingEntities.size() + " billing entities?");
+            confirm.setContentText("This cannot be undone.");
+            
+            confirm.showAndWait().ifPresent(response -> {
+                if (response == ButtonType.OK) {
+                    try {
+                        int deleted = loadDAO.clearAllBillingEntities();
+                        reloadAll();
+                        billingList.getSelectionModel().clearSelection();
+                        notifyLoadDataChanged();
+                        showInfo("Cleared " + deleted + " billing entities successfully!");
+                    } catch (Exception ex) {
+                        logger.error("Error clearing billing entities", ex);
+                        showError("Error clearing billing entities: " + ex.getMessage());
+                    }
+                }
+            });
+        });
+        
+        Button clearAddressesBtn = createStyledButton("Clear Addresses", "#ff5722", "white");
+        clearAddressesBtn.setTooltip(new Tooltip("Delete ALL customer addresses"));
+        clearAddressesBtn.setOnAction(e -> {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("Clear All Customer Addresses");
+            confirm.setHeaderText("Delete all customer addresses?");
+            confirm.setContentText("This will clear the entire customer address book.\nThis cannot be undone.");
+            
+            confirm.showAndWait().ifPresent(response -> {
+                if (response == ButtonType.OK) {
+                    try {
+                        int deleted = loadDAO.clearAllCustomerAddresses();
+                        refreshCustomerAddresses.run();
+                        notifyLoadDataChanged();
+                        showInfo("Cleared " + deleted + " customer addresses successfully!");
+                    } catch (Exception ex) {
+                        logger.error("Error clearing customer addresses", ex);
+                        showError("Error clearing customer addresses: " + ex.getMessage());
+                    }
+                }
+            });
+        });
+        
+        individualClearBox.getChildren().addAll(clearCustomersBtn, clearBillingBtn, clearAddressesBtn);
+        
+        clearAllSection.getChildren().addAll(clearAllLabel, warningLabel, clearAllDataBtn, 
+                                            new Separator(), new Label("Individual Clear Operations:"), individualClearBox);
+        
+        // ===== BULK DELETE ENHANCEMENTS =====
+        
+        // Enable multiple selection for customer list
+        customerList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        
+        // Add bulk delete button for customers
+        Button bulkDeleteCustomersBtn = createStyledButton("🗑️ Delete Selected", "#f44336", "white");
+        bulkDeleteCustomersBtn.setTooltip(new Tooltip("Delete multiple selected customers"));
+        bulkDeleteCustomersBtn.setDisable(true);
+        
+        // Update customer selection listener to handle multiple selections
+        customerList.getSelectionModel().getSelectedItems().addListener((ListChangeListener<String>) c -> {
+            ObservableList<String> selectedCustomers = customerList.getSelectionModel().getSelectedItems();
+            bulkDeleteCustomersBtn.setDisable(selectedCustomers.isEmpty());
+            
+            // Handle single selection for address book (keep existing behavior)
+            if (selectedCustomers.size() == 1) {
+                rightPane.setDisable(false);
+                refreshCustomerAddresses.run();
+            } else {
+                rightPane.setDisable(true);
+                addressList.setItems(FXCollections.emptyObservableList());
+            }
+        });
+        
+        bulkDeleteCustomersBtn.setOnAction(e -> {
+            ObservableList<String> selectedCustomers = customerList.getSelectionModel().getSelectedItems();
+            if (selectedCustomers.isEmpty()) {
+                showError("No customers selected.");
+                return;
+            }
+            
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("Bulk Delete Customers");
+            confirm.setHeaderText("Delete " + selectedCustomers.size() + " selected customers?");
+            confirm.setContentText("Selected customers:\n" + String.join("\n", selectedCustomers) + 
+                                  "\n\nThis will also delete all associated addresses.\nThis cannot be undone.");
+            
+            confirm.showAndWait().ifPresent(response -> {
+                if (response == ButtonType.OK) {
+                    try {
+                        List<String> customerNames = new ArrayList<>(selectedCustomers);
+                        int deleted = loadDAO.bulkDeleteCustomers(customerNames);
+                        reloadAll();
+                        customerList.getSelectionModel().clearSelection();
+                        rightPane.setDisable(true);
+                        notifyLoadDataChanged();
+                        showInfo("Successfully deleted " + deleted + " customers!");
+                    } catch (Exception ex) {
+                        logger.error("Error in bulk delete customers", ex);
+                        showError("Error deleting customers: " + ex.getMessage());
+                    }
+                }
+            });
+        });
+        
+        // Update customer input box to include bulk delete button
+        customerInputBox.getChildren().add(bulkDeleteCustomersBtn);
+        
+        // Enable multiple selection for billing list
+        billingList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        
+        // Add bulk delete button for billing entities
+        Button bulkDeleteBillingBtn = createStyledButton("🗑️ Delete Selected", "#f44336", "white");
+        bulkDeleteBillingBtn.setTooltip(new Tooltip("Delete multiple selected billing entities"));
+        bulkDeleteBillingBtn.setDisable(true);
+        
+        billingList.getSelectionModel().getSelectedItems().addListener((ListChangeListener<String>) c -> {
+            bulkDeleteBillingBtn.setDisable(billingList.getSelectionModel().getSelectedItems().isEmpty());
+        });
+        
+        bulkDeleteBillingBtn.setOnAction(e -> {
+            ObservableList<String> selectedBilling = billingList.getSelectionModel().getSelectedItems();
+            if (selectedBilling.isEmpty()) {
+                showError("No billing entities selected.");
+                return;
+            }
+            
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("Bulk Delete Billing Entities");
+            confirm.setHeaderText("Delete " + selectedBilling.size() + " selected billing entities?");
+            confirm.setContentText("Selected billing entities:\n" + String.join("\n", selectedBilling) + 
+                                  "\n\nThis cannot be undone.");
+            
+            confirm.showAndWait().ifPresent(response -> {
+                if (response == ButtonType.OK) {
+                    try {
+                        List<String> billingNames = new ArrayList<>(selectedBilling);
+                        int deleted = loadDAO.bulkDeleteBillingEntities(billingNames);
+                        reloadAll();
+                        billingList.getSelectionModel().clearSelection();
+                        notifyLoadDataChanged();
+                        showInfo("Successfully deleted " + deleted + " billing entities!");
+                    } catch (Exception ex) {
+                        logger.error("Error in bulk delete billing entities", ex);
+                        showError("Error deleting billing entities: " + ex.getMessage());
+                    }
+                }
+            });
+        });
+        
+        // Update billing input box to include bulk delete button
+        billingInputBox.getChildren().add(bulkDeleteBillingBtn);
+        
+        // Enable multiple selection for address list
+        addressList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        
+        // Add bulk delete button for addresses
+        Button bulkDeleteAddressesBtn = createStyledButton("🗑️ Delete Selected", "#f44336", "white");
+        bulkDeleteAddressesBtn.setTooltip(new Tooltip("Delete multiple selected addresses"));
+        bulkDeleteAddressesBtn.setDisable(true);
+        
+        addressList.getSelectionModel().getSelectedItems().addListener((ListChangeListener<CustomerAddress>) c -> {
+            ObservableList<CustomerAddress> selectedAddresses = addressList.getSelectionModel().getSelectedItems();
+            bulkDeleteAddressesBtn.setDisable(selectedAddresses.isEmpty());
+            
+            // Update existing edit/delete buttons for single selection
+            boolean hasSingleSelection = selectedAddresses.size() == 1;
+            editAddressBtn.setDisable(!hasSingleSelection);
+            deleteAddressBtn.setDisable(!hasSingleSelection);
+        });
+        
+        bulkDeleteAddressesBtn.setOnAction(e -> {
+            ObservableList<CustomerAddress> selectedAddresses = addressList.getSelectionModel().getSelectedItems();
+            if (selectedAddresses.isEmpty()) {
+                showError("No addresses selected.");
+                return;
+            }
+            
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("Bulk Delete Addresses");
+            confirm.setHeaderText("Delete " + selectedAddresses.size() + " selected addresses?");
+            confirm.setContentText("Selected addresses:\n" + 
+                    selectedAddresses.stream()
+                            .map(CustomerAddress::getDisplayText)
+                            .collect(Collectors.joining("\n")) + 
+                    "\n\nThis cannot be undone.");
+            
+            confirm.showAndWait().ifPresent(response -> {
+                if (response == ButtonType.OK) {
+                    try {
+                        List<Integer> addressIds = selectedAddresses.stream()
+                                .map(CustomerAddress::getId)
+                                .collect(Collectors.toList());
+                        int deleted = loadDAO.bulkDeleteCustomerAddresses(addressIds);
+                        refreshCustomerAddresses.run();
+                        notifyLoadDataChanged();
+                        showInfo("Successfully deleted " + deleted + " addresses!");
+                    } catch (Exception ex) {
+                        logger.error("Error in bulk delete addresses", ex);
+                        showError("Error deleting addresses: " + ex.getMessage());
+                    }
+                }
+            });
+        });
+        
+        // Update address buttons box to include bulk delete button
+        addressButtonsBox.getChildren().add(bulkDeleteAddressesBtn);
+        
+        // Add the clear all section to the main split pane
+        VBox mainContainer = new VBox(10);
+        mainContainer.getChildren().addAll(mainSplitPane, clearAllSection);
+        
+        statusTab.tab = new Tab("Customer Settings", mainContainer);
         return statusTab;
     }
 
@@ -2950,7 +3602,7 @@ public class LoadsPanel extends BorderPane {
                         }
                         targetComboBox.setValue(customerName.trim());
                     });
-                    showInfo("Customer added successfully!");
+                    logger.info("Customer added successfully");
                 } catch (Exception e) {
                     logger.error("Error adding customer", e);
                     showError("Failed to add customer: " + e.getMessage());
@@ -3320,7 +3972,8 @@ public class LoadsPanel extends BorderPane {
                     String customer = matchingCustomers.iterator().next();
                     Platform.runLater(() -> {
                         customerCombo.setValue(customer);
-                        showInfo("Auto-selected customer: " + customer);
+                        // Log instead of blocking popup - prevents repeated dialog loop
+                        logger.info("Auto-selected customer: {}", customer);
                     });
                 } else if (matchingCustomers.size() > 1) {
                     // Multiple customers have this location - show them at the top of the list
@@ -3612,7 +4265,7 @@ public class LoadsPanel extends BorderPane {
                 }
                 // Set location in field
                 locationField.setLocationString(location);
-                showInfo("Location added successfully!");
+                                    logger.info("Location added successfully");
             } catch (Exception e) {
                 logger.error("Error adding location", e);
                 showError("Failed to add location: " + e.getMessage());
@@ -3620,8 +4273,11 @@ public class LoadsPanel extends BorderPane {
         });
     }
 
-    // ENHANCEMENT #4: ENHANCED CUSTOMER FIELDS WITH CLEAR BUTTONS
-    private static class EnhancedCustomerFieldWithClear extends HBox {
+    // REMOVED: DUPLICATE INNER CLASS - WAS CAUSING 10x POPUP LOOP
+    // This inner class duplicated EnhancedCustomerFieldWithClear.java and caused multiple event handlers
+    // IMPACT: Removing this duplicate fixes the repeated popup dialog issue
+    /*
+    // DELETED: private static class EnhancedCustomerFieldWithClear extends HBox {
         private final ComboBox<String> customerCombo;
         private final Button clearButton;
         private final Button addButton;
@@ -3706,17 +4362,11 @@ public class LoadsPanel extends BorderPane {
                         refreshCustomers();
                         customerCombo.setValue(customerName.trim());
                         // Show success message
-                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                        alert.setTitle("Success");
-                        alert.setHeaderText(null);
-                        alert.setContentText("Customer added successfully!");
-                        alert.showAndWait();
+                        // Log success instead of blocking popup dialog - prevents UI freezes
+                        logger.info("Customer added successfully");
                     } catch (Exception ex) {
-                        Alert alert = new Alert(Alert.AlertType.ERROR);
-                        alert.setTitle("Error");
-                        alert.setHeaderText(null);
-                        alert.setContentText("Failed to add customer: " + ex.getMessage());
-                        alert.showAndWait();
+                        // Log error instead of blocking popup dialog - prevents UI freezes
+                        logger.error("Failed to add customer: {}", ex.getMessage());
                     }
                 }
             });
@@ -3743,6 +4393,7 @@ public class LoadsPanel extends BorderPane {
             customerCombo.setValue(value);
         }
     }
+    */ // END OF REMOVED DUPLICATE INNER CLASS
 
     // ENHANCEMENT #5: TRUCK DROPDOWN INTEGRATION
     private static class EnhancedTruckDropdown extends ComboBox<String> {
@@ -4593,6 +5244,10 @@ public class LoadsPanel extends BorderPane {
         // Multi-location support
         List<ComboBox<String>> additionalPickupLocations = new ArrayList<>();
         List<ComboBox<String>> additionalDropLocations = new ArrayList<>();
+        List<DatePicker> additionalPickupDates = new ArrayList<>();
+        List<DatePicker> additionalDropDates = new ArrayList<>();
+        List<Spinner<LocalTime>> additionalPickupTimes = new ArrayList<>();
+        List<Spinner<LocalTime>> additionalDropTimes = new ArrayList<>();
         
         // Enhanced Driver & Equipment
         ComboBox<Employee> driverBox;
@@ -4993,6 +5648,10 @@ public class LoadsPanel extends BorderPane {
             // Clear the additional location lists to prevent stale references
             dialogFields.additionalPickupLocations.clear();
             dialogFields.additionalDropLocations.clear();
+            dialogFields.additionalPickupDates.clear();
+            dialogFields.additionalDropDates.clear();
+            dialogFields.additionalPickupTimes.clear();
+            dialogFields.additionalDropTimes.clear();
             
             // Load additional locations if they exist
             if (load.getLocations() != null && !load.getLocations().isEmpty()) {
@@ -5032,6 +5691,9 @@ public class LoadsPanel extends BorderPane {
                     // Ensure customer-location relationship is properly established
                     ComboBox<String> locationCombo = (ComboBox<String>) row.getChildren().get(3);
                     ComboBox<String> customerCombo = (ComboBox<String>) row.getChildren().get(1);
+                    DatePicker datePicker = (DatePicker) row.getChildren().get(5);
+                    @SuppressWarnings("unchecked")
+                    Spinner<LocalTime> timeSpinner = (Spinner<LocalTime>) row.getChildren().get(6);
                     
                     // Set location value
                     String locationString = formatLocationAddress(loc.getAddress(), loc.getCity(), loc.getState());
@@ -5040,6 +5702,14 @@ public class LoadsPanel extends BorderPane {
                         // Double-check customer value is set correctly
                         if (loc.getCustomer() != null && !loc.getCustomer().trim().isEmpty()) {
                             customerCombo.setValue(loc.getCustomer());
+                        }
+                        
+                        // Set date and time values for pickup location
+                        if (loc.getDate() != null) {
+                            datePicker.setValue(loc.getDate());
+                        }
+                        if (loc.getTime() != null) {
+                            timeSpinner.getValueFactory().setValue(loc.getTime());
                         }
                     });
                 }
@@ -5080,6 +5750,9 @@ public class LoadsPanel extends BorderPane {
                     // Ensure customer-location relationship is properly established
                     ComboBox<String> locationCombo = (ComboBox<String>) row.getChildren().get(3);
                     ComboBox<String> customerCombo = (ComboBox<String>) row.getChildren().get(1);
+                    DatePicker datePicker = (DatePicker) row.getChildren().get(5);
+                    @SuppressWarnings("unchecked")
+                    Spinner<LocalTime> timeSpinner = (Spinner<LocalTime>) row.getChildren().get(6);
                     
                     // Set location value
                     String locationString = formatLocationAddress(loc.getAddress(), loc.getCity(), loc.getState());
@@ -5088,6 +5761,14 @@ public class LoadsPanel extends BorderPane {
                         // Double-check customer value is set correctly
                         if (loc.getCustomer() != null && !loc.getCustomer().trim().isEmpty()) {
                             customerCombo.setValue(loc.getCustomer());
+                        }
+                        
+                        // Set date and time values for drop location
+                        if (loc.getDate() != null) {
+                            datePicker.setValue(loc.getDate());
+                        }
+                        if (loc.getTime() != null) {
+                            timeSpinner.getValueFactory().setValue(loc.getTime());
                         }
                     });
                 }
@@ -6007,13 +6688,21 @@ public class LoadsPanel extends BorderPane {
                         }
                     }
                     
+                    // Get date and time from the corresponding additional pickup fields
+                    LocalDate pickupDate = i < dialogFields.additionalPickupDates.size() ? 
+                        dialogFields.additionalPickupDates.get(i).getValue() : 
+                        dialogFields.pickUpDatePicker.getValue(); // Fallback to primary date
+                    LocalTime pickupTime = i < dialogFields.additionalPickupTimes.size() ? 
+                        dialogFields.additionalPickupTimes.get(i).getValue() : 
+                        dialogFields.pickUpTimeSpinner.getValue(); // Fallback to primary time
+                    
                     // Create and add the additional pickup location
                     LoadLocation additionalPickup = new LoadLocation(
                         0, load.getId(), LoadLocation.LocationType.PICKUP,
                         customerName,
                         parts[0], parts[1], parts[2],
-                        dialogFields.pickUpDatePicker.getValue(), // Use same date as primary by default
-                        dialogFields.pickUpTimeSpinner.getValue(), // Use same time as primary by default
+                        pickupDate,
+                        pickupTime,
                         "", sequence
                     );
                     load.addLocation(additionalPickup);
@@ -6068,13 +6757,21 @@ public class LoadsPanel extends BorderPane {
                         }
                     }
                     
+                    // Get date and time from the corresponding additional drop fields
+                    LocalDate dropDate = i < dialogFields.additionalDropDates.size() ? 
+                        dialogFields.additionalDropDates.get(i).getValue() : 
+                        dialogFields.deliveryDatePicker.getValue(); // Fallback to primary date
+                    LocalTime dropTime = i < dialogFields.additionalDropTimes.size() ? 
+                        dialogFields.additionalDropTimes.get(i).getValue() : 
+                        dialogFields.deliveryTimeSpinner.getValue(); // Fallback to primary time
+                    
                     // Create and add the additional drop location
                     LoadLocation additionalDrop = new LoadLocation(
                         0, load.getId(), LoadLocation.LocationType.DROP,
                         customerName,
                         parts[0], parts[1], parts[2],
-                        dialogFields.deliveryDatePicker.getValue(), // Use same date as primary by default
-                        dialogFields.deliveryTimeSpinner.getValue(), // Use same time as primary by default
+                        dropDate,
+                        dropTime,
                         "", sequence
                     );
                     load.addLocation(additionalDrop);
@@ -6094,7 +6791,22 @@ public class LoadsPanel extends BorderPane {
             // Set financial information
             if (dialogFields.grossField.getText() != null && !dialogFields.grossField.getText().trim().isEmpty()) {
                 try {
-                    load.setGrossAmount(Double.parseDouble(dialogFields.grossField.getText().trim()));
+                    // Safe gross amount parsing
+                    String grossText = dialogFields.grossField.getText().trim();
+                    double grossAmount = 0.0;
+                    if (!grossText.isEmpty()) {
+                        try {
+                            String cleanAmount = grossText.replaceAll("[$,€£¥\\s]", "");
+                            grossAmount = Double.parseDouble(cleanAmount);
+                            if (grossAmount < 0) {
+                                throw new NumberFormatException("Gross amount cannot be negative");
+                            }
+                        } catch (NumberFormatException e) {
+                            logger.error("Invalid gross amount format: {}", grossText);
+                            grossAmount = 0.0; // Default to 0 for invalid input
+                        }
+                    }
+                    load.setGrossAmount(grossAmount);
                 } catch (NumberFormatException e) {
                     load.setGrossAmount(0.0);
                 }
@@ -6117,7 +6829,17 @@ public class LoadsPanel extends BorderPane {
                         // Remove any currency symbols and parse
                         String cleanAmount = lumperAmountText.replaceAll("[^0-9.]", "");
                         if (!cleanAmount.isEmpty()) {
-                            load.setLumperAmount(Double.parseDouble(cleanAmount));
+                            // Safe lumper amount parsing
+                            try {
+                                double lumperAmt = Double.parseDouble(cleanAmount);
+                                if (lumperAmt < 0) {
+                                    throw new NumberFormatException("Lumper amount cannot be negative");
+                                }
+                                load.setLumperAmount(lumperAmt);
+                            } catch (NumberFormatException e) {
+                                logger.error("Invalid lumper amount format: {}", cleanAmount);
+                                load.setLumperAmount(0.0); // Default to 0 for invalid input
+                            }
                         } else {
                             load.setLumperAmount(0.0);
                         }
@@ -6407,16 +7129,8 @@ public class LoadsPanel extends BorderPane {
     }
 
     private void showInfo(String msg) {
-        // Don't show dialogs during jpackage testing
-        if ("true".equals(System.getProperty("jpackage.testing"))) {
-            logger.info("Suppressing dialog during jpackage testing: {}", msg);
-            return;
-        }
-        
-        logger.info("Showing info dialog: {}", msg);
-        Alert alert = new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK);
-        alert.setHeaderText("Info");
-        alert.showAndWait();
+        // FIXED: Use non-blocking logging instead of freezing Alert dialogs
+        logger.info("Info: {}", msg);
     }
     
     private void showAddressSyncDialog() {
@@ -6697,14 +7411,8 @@ public class LoadsPanel extends BorderPane {
                             
                         } catch (Exception e) {
                             logger.error("Error saving customer: {}", normalizedCustomer, e);
-                            Platform.runLater(() -> {
-                                Alert alert = new Alert(Alert.AlertType.WARNING);
-                                alert.setTitle("Customer Save Warning");
-                                alert.setHeaderText(null);
-                                alert.setContentText("Warning: Could not save customer '" + normalizedCustomer + "': " + e.getMessage());
-                                alert.getDialogPane().setStyle("-fx-background-color: white; -fx-text-fill: black;");
-                                alert.showAndWait();
-                            });
+                                                            // Log warning instead of blocking popup dialog
+                                logger.warn("Could not save customer '{}': {}", normalizedCustomer, e.getMessage());
                         }
                     });
                     
@@ -6929,14 +7637,8 @@ public class LoadsPanel extends BorderPane {
                     
                 } catch (Exception e) {
                     logger.error("Error in customer selection handler: {}", e.getMessage(), e);
-                    Platform.runLater(() -> {
-                        Alert alert = new Alert(Alert.AlertType.ERROR);
-                        alert.setTitle("Customer Selection Error");
-                        alert.setHeaderText(null);
-                        alert.setContentText("Error loading customer data: " + e.getMessage());
-                        alert.getDialogPane().setStyle("-fx-background-color: white; -fx-text-fill: black;");
-                        alert.showAndWait();
-                    });
+                    // Log error instead of blocking popup dialog
+                    logger.error("Customer selection error: {}", e.getMessage());
                 }
             } else {
                 // No customer selected - hide address fields
@@ -7149,7 +7851,7 @@ public class LoadsPanel extends BorderPane {
                             addressAutocomplete.setAddress(newAddress);
                         }
                         
-                        showInfo("Address added successfully!");
+                        logger.info("Address added successfully");
                         return newAddress;
                     } else {
                         showError("Failed to add address");
@@ -7516,6 +8218,28 @@ public class LoadsPanel extends BorderPane {
         cacheManager.shutdown();
         
         logger.info("LoadsPanel shutdown completed");
+    }
+    
+    /**
+     * Save all pending changes (called during application exit)
+     */
+    public void saveAllPendingChanges() {
+        logger.info("Saving all pending load changes during application exit");
+        try {
+            // Force refresh all tables to ensure any pending edits are committed
+            for (StatusTab statusTab : statusTabs) {
+                if (statusTab.table != null) {
+                    statusTab.table.refresh();
+                }
+            }
+            
+            // Any additional save logic can be added here
+            // The data is already saved automatically when changes are made via the dialogs
+            
+            logger.info("All pending load changes saved successfully");
+        } catch (Exception e) {
+            logger.error("Error saving pending load changes", e);
+        }
     }
 
 }

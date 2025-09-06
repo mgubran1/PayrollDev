@@ -50,7 +50,8 @@ public class EnterpriseDataCacheManager {
     
     // Cache configuration
     private static final long CACHE_EXPIRY_MS = 1 * 60 * 1000; // 1 minute
-    private static final int MAX_CACHE_SIZE = 10000; // Maximum cached customers
+    private static final int MAX_CACHE_SIZE = 5000; // Reduced maximum cached customers
+    private static final int CACHE_CLEANUP_THRESHOLD = 4000; // Start cleanup before hitting max
     private static final int BACKGROUND_REFRESH_INTERVAL_MINUTES = 3;
     
     // Thread pools for async operations
@@ -174,9 +175,18 @@ public class EnterpriseDataCacheManager {
                 customerAddressCache.put(normalizedCustomer, new ArrayList<>(addresses));
                 cacheTimestamps.put(normalizedCustomer, System.currentTimeMillis());
                 
-                // Enforce cache size limit
-                if (customerAddressCache.size() > MAX_CACHE_SIZE) {
+                // Proactive cache management
+                if (customerAddressCache.size() > CACHE_CLEANUP_THRESHOLD) {
+                    logger.debug("Cache size {} exceeds cleanup threshold {}, performing cleanup", 
+                               customerAddressCache.size(), CACHE_CLEANUP_THRESHOLD);
                     cleanupOldestCacheEntries();
+                }
+                
+                // Emergency cleanup if still over max
+                if (customerAddressCache.size() > MAX_CACHE_SIZE) {
+                    logger.warn("Cache size {} exceeds MAX_CACHE_SIZE {}, performing emergency cleanup", 
+                              customerAddressCache.size(), MAX_CACHE_SIZE);
+                    emergencyCleanup();
                 }
                 
                 logger.debug("Loaded and cached {} addresses for customer: {}", addresses.size(), normalizedCustomer);
@@ -437,8 +447,8 @@ public class EnterpriseDataCacheManager {
     }
     
     private void cleanupOldestCacheEntries() {
-        // Remove oldest 20% of cache entries when size limit is exceeded
-        int entriesToRemove = MAX_CACHE_SIZE / 5;
+        // Remove oldest 15% of cache entries when cleanup threshold is exceeded
+        int entriesToRemove = Math.max(1, customerAddressCache.size() * 15 / 100);
         
         List<Map.Entry<String, Long>> sortedEntries = cacheTimestamps.entrySet().stream()
             .sorted(Map.Entry.comparingByValue())
@@ -450,7 +460,39 @@ public class EnterpriseDataCacheManager {
             cacheTimestamps.remove(entry.getKey());
         }
         
-        logger.debug("Cleaned up {} oldest cache entries", entriesToRemove);
+        logger.debug("Cleaned up {} oldest cache entries ({}% of cache)", entriesToRemove, 
+                    (entriesToRemove * 100 / Math.max(1, customerAddressCache.size() + entriesToRemove)));
+    }
+    
+    /**
+     * Emergency cleanup when cache exceeds maximum size
+     * Removes 50% of cache entries aggressively
+     */
+    private void emergencyCleanup() {
+        int entriesToRemove = customerAddressCache.size() / 2;
+        logger.warn("Performing emergency cache cleanup - removing {} entries", entriesToRemove);
+        
+        List<Map.Entry<String, Long>> sortedEntries = cacheTimestamps.entrySet().stream()
+            .sorted(Map.Entry.comparingByValue())
+            .limit(entriesToRemove)
+            .collect(Collectors.toList());
+        
+        for (Map.Entry<String, Long> entry : sortedEntries) {
+            customerAddressCache.remove(entry.getKey());
+            cacheTimestamps.remove(entry.getKey());
+        }
+        
+        logger.warn("Emergency cleanup completed - cache size reduced to {}", customerAddressCache.size());
+        
+        // Log memory usage warning
+        Runtime runtime = Runtime.getRuntime();
+        long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+        long maxMemory = runtime.maxMemory();
+        double memoryUsage = (double) usedMemory / maxMemory * 100;
+        
+        if (memoryUsage > 80) {
+            logger.warn("High memory usage detected: {:.1f}% - consider reducing cache size or increasing heap", memoryUsage);
+        }
     }
     
     private void refreshCustomersAsync() {

@@ -41,7 +41,11 @@ public class EnhancedLocationFieldOptimized extends HBox {
     private static final int MIN_SEARCH_LENGTH = 2; // Minimum characters to trigger search
     
     // Threading
-    private final ExecutorService searchExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService searchExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "LocationFieldSearch-" + System.currentTimeMillis());
+        t.setDaemon(true);
+        return t;
+    });
     private CompletableFuture<Void> currentSearchTask;
     private long lastSearchTime = 0;
     

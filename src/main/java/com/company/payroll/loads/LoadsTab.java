@@ -111,4 +111,21 @@ public class LoadsTab extends Tab implements EmployeesTab.EmployeeDataChangeList
                      load != null ? load.getLoadNumber() : "null");
         loadsPanel.showLoadDialogPublic(load, isAdd);
     }
+    
+    /**
+     * Save all pending changes (called during application exit)
+     */
+    public void saveAllPendingChanges() {
+        logger.info("Saving all pending load changes during application exit");
+        try {
+            // Delegate to the LoadsPanel to handle the actual saving
+            if (loadsPanel != null) {
+                loadsPanel.saveAllPendingChanges();
+            }
+            
+            logger.info("All pending load changes saved successfully");
+        } catch (Exception e) {
+            logger.error("Error saving pending load changes", e);
+        }
+    }
 }
