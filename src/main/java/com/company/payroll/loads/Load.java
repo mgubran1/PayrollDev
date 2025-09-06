@@ -1,11 +1,15 @@
 package com.company.payroll.loads;
 
 import com.company.payroll.employees.Employee;
+import com.company.payroll.employees.PaymentType;
 import com.company.payroll.trailers.Trailer;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class Load {
@@ -52,6 +56,18 @@ public class Load {
     private String deliveryCity;
     private String deliveryState;
     private double driverRate;
+    
+    // Zip code and mileage fields
+    private String pickupZipCode;
+    private String deliveryZipCode;
+    private double calculatedMiles;
+    private LocalDateTime milesCalculationDate;
+    private PaymentType paymentMethodUsed;
+    private double calculatedDriverPay;
+    private double paymentRateUsed;
+    
+    // Flat rate amount specific to this load (enterprise-ready)
+    private double flatRateAmount;
 
     public Load(int id, String loadNumber, String poNumber, String customer, String customer2, String billTo, String pickUpLocation, String dropLocation,
                 Employee driver, String truckUnitSnapshot, Status status, double grossAmount, String notes, 
@@ -177,6 +193,15 @@ public class Load {
         
         // Calculate driver rate as a percentage of gross amount (default 75%)
         this.driverRate = this.grossAmount * 0.75;
+        
+        // Initialize zip code fields
+        this.pickupZipCode = "";
+        this.deliveryZipCode = "";
+        this.calculatedMiles = 0.0;
+        this.milesCalculationDate = null;
+        this.paymentMethodUsed = null;
+        this.calculatedDriverPay = 0.0;
+        this.paymentRateUsed = 0.0;
     }
 
     // Getters and setters for existing fields
@@ -380,6 +405,127 @@ public class Load {
         }
     }
 
+    // Zip code and mileage getters and setters
+    public String getPickupZipCode() { return pickupZipCode; }
+    public void setPickupZipCode(String pickupZipCode) { 
+        this.pickupZipCode = normalizeZipCode(pickupZipCode);
+    }
+    
+    public String getDeliveryZipCode() { return deliveryZipCode; }
+    public void setDeliveryZipCode(String deliveryZipCode) { 
+        this.deliveryZipCode = normalizeZipCode(deliveryZipCode);
+    }
+    
+    public double getCalculatedMiles() { return calculatedMiles; }
+    public void setCalculatedMiles(double calculatedMiles) { 
+        this.calculatedMiles = calculatedMiles;
+        this.milesCalculationDate = LocalDateTime.now();
+    }
+    
+    public LocalDateTime getMilesCalculationDate() { return milesCalculationDate; }
+    public void setMilesCalculationDate(LocalDateTime milesCalculationDate) { 
+        this.milesCalculationDate = milesCalculationDate;
+    }
+    
+    public PaymentType getPaymentMethodUsed() { return paymentMethodUsed; }
+    public void setPaymentMethodUsed(PaymentType paymentMethodUsed) { 
+        this.paymentMethodUsed = paymentMethodUsed;
+    }
+    
+    public double getCalculatedDriverPay() { return calculatedDriverPay; }
+    public void setCalculatedDriverPay(double calculatedDriverPay) { 
+        this.calculatedDriverPay = calculatedDriverPay;
+    }
+    
+    public double getPaymentRateUsed() { return paymentRateUsed; }
+    public void setPaymentRateUsed(double paymentRateUsed) { 
+        this.paymentRateUsed = paymentRateUsed;
+    }
+    
+    public double getFlatRateAmount() { return flatRateAmount; }
+    public void setFlatRateAmount(double flatRateAmount) { 
+        this.flatRateAmount = flatRateAmount;
+    }
+    
+    // Zip code validation and utility methods
+    public boolean hasValidZipCodes() {
+        return isValidZipCode(pickupZipCode) && isValidZipCode(deliveryZipCode);
+    }
+    
+    public static boolean isValidZipCode(String zipCode) {
+        if (zipCode == null || zipCode.trim().isEmpty()) {
+            return false;
+        }
+        
+        // Pattern for 5-digit or 5+4 digit zip codes
+        Pattern pattern = Pattern.compile("^\\d{5}(-\\d{4})?$");
+        Matcher matcher = pattern.matcher(zipCode.trim());
+        return matcher.matches();
+    }
+    
+    private String normalizeZipCode(String zipCode) {
+        if (zipCode == null) {
+            return "";
+        }
+        return zipCode.trim().replaceAll("[^0-9-]", "");
+    }
+    
+    public boolean requiresMileageCalculation() {
+        return driver != null && 
+               driver.getPaymentType() == PaymentType.PER_MILE && 
+               hasValidZipCodes() && 
+               (calculatedMiles == 0 || milesCalculationDate == null);
+    }
+    
+    public String getFormattedPickupZip() {
+        return formatZipCode(pickupZipCode);
+    }
+    
+    public String getFormattedDeliveryZip() {
+        return formatZipCode(deliveryZipCode);
+    }
+    
+    private String formatZipCode(String zipCode) {
+        if (zipCode == null || zipCode.isEmpty()) {
+            return "";
+        }
+        
+        // Format as 5 digits or 5+4 format
+        if (zipCode.length() == 9 && !zipCode.contains("-")) {
+            return zipCode.substring(0, 5) + "-" + zipCode.substring(5);
+        }
+        
+        return zipCode;
+    }
+    
+    public String getDistanceDescription() {
+        if (calculatedMiles <= 0) {
+            return "Not calculated";
+        }
+        return String.format("%.1f miles", calculatedMiles);
+    }
+    
+    public boolean hasMileageData() {
+        return calculatedMiles > 0 && milesCalculationDate != null;
+    }
+    
+    public String getPaymentMethodDescription() {
+        if (paymentMethodUsed == null) {
+            return "Not specified";
+        }
+        
+        switch (paymentMethodUsed) {
+            case PERCENTAGE:
+                return String.format("Percentage (%.2f%%)", paymentRateUsed);
+            case FLAT_RATE:
+                return String.format("Flat Rate ($%.2f)", paymentRateUsed);
+            case PER_MILE:
+                return String.format("Per Mile ($%.2f/mile)", paymentRateUsed);
+            default:
+                return paymentMethodUsed.getDisplayName();
+        }
+    }
+    
     // Convenience methods
     public LocalDate getLoadDate() { return deliveryDate; }
     public double getAmount() { return getGrossAmount(); }

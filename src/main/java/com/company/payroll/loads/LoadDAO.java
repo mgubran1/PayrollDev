@@ -148,6 +148,57 @@ public class LoadDAO {
                 logger.debug("delivery_time column already exists");
             }
             
+            // Add zip code columns for per-mile payment
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN pickup_zip_code TEXT");
+                logger.info("Added pickup_zip_code column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("pickup_zip_code column already exists");
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN delivery_zip_code TEXT");
+                logger.info("Added delivery_zip_code column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("delivery_zip_code column already exists");
+            }
+            
+            // Add payment method tracking columns
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN calculated_miles REAL DEFAULT 0.0");
+                logger.info("Added calculated_miles column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("calculated_miles column already exists");
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN miles_calculation_date TIMESTAMP");
+                logger.info("Added miles_calculation_date column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("miles_calculation_date column already exists");
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN payment_method_used TEXT");
+                logger.info("Added payment_method_used column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("payment_method_used column already exists");
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN calculated_driver_pay REAL DEFAULT 0.0");
+                logger.info("Added calculated_driver_pay column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("calculated_driver_pay column already exists");
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE loads ADD COLUMN payment_rate_used REAL DEFAULT 0.0");
+                logger.info("Added payment_rate_used column to loads table");
+            } catch (SQLException ignore) {
+                logger.debug("payment_rate_used column already exists");
+            }
+            
             // Add new columns to customer_locations if they don't exist
             try {
                 conn.createStatement().execute("ALTER TABLE customer_locations ADD COLUMN location_name TEXT");
@@ -184,6 +235,42 @@ public class LoadDAO {
                 logger.info("Added customer column to load_locations table");
             } catch (SQLException ignore) {
                 logger.debug("customer column already exists in load_locations");
+            }
+            
+            // Add zip code columns to customer_address_book if they don't exist
+            try {
+                conn.createStatement().execute("ALTER TABLE customer_address_book ADD COLUMN zip_code TEXT");
+                logger.info("Added zip_code column to customer_address_book table");
+            } catch (SQLException ignore) {
+                logger.debug("zip_code column already exists in customer_address_book");
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE customer_address_book ADD COLUMN latitude REAL DEFAULT 0.0");
+                logger.info("Added latitude column to customer_address_book table");
+            } catch (SQLException ignore) {
+                logger.debug("latitude column already exists in customer_address_book");
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE customer_address_book ADD COLUMN longitude REAL DEFAULT 0.0");
+                logger.info("Added longitude column to customer_address_book table");
+            } catch (SQLException ignore) {
+                logger.debug("longitude column already exists in customer_address_book");
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE customer_address_book ADD COLUMN geocoded_date TIMESTAMP");
+                logger.info("Added geocoded_date column to customer_address_book table");
+            } catch (SQLException ignore) {
+                logger.debug("geocoded_date column already exists in customer_address_book");
+            }
+            
+            try {
+                conn.createStatement().execute("ALTER TABLE customer_address_book ADD COLUMN geocoding_status TEXT DEFAULT 'PENDING'");
+                logger.info("Added geocoding_status column to customer_address_book table");
+            } catch (SQLException ignore) {
+                logger.debug("geocoding_status column already exists in customer_address_book");
             }
             
             String sql = """
@@ -340,8 +427,10 @@ public class LoadDAO {
                 String sql = """
                     INSERT INTO loads (load_number, po_number, customer, customer2, bill_to, pick_up_location, drop_location, 
                     driver_id, truck_unit_snapshot, trailer_id, trailer_number, status, gross_amount, notes, 
-                    pickup_date, pickup_time, delivery_date, delivery_time, reminder, has_lumper, lumper_amount, has_revised_rate_confirmation) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    pickup_date, pickup_time, delivery_date, delivery_time, reminder, has_lumper, lumper_amount, has_revised_rate_confirmation,
+                    pickup_zip_code, delivery_zip_code, calculated_miles, miles_calculation_date, payment_method_used, 
+                    calculated_driver_pay, payment_rate_used, flat_rate_amount) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
                 
                 try (Connection conn = DatabaseConfig.getConnection();
@@ -381,6 +470,21 @@ public class LoadDAO {
                     ps.setInt(20, load.isHasLumper() ? 1 : 0);
                     ps.setDouble(21, load.getLumperAmount());
                     ps.setInt(22, load.isHasRevisedRateConfirmation() ? 1 : 0);
+                    
+                    // New zip code and payment method fields
+                    ps.setString(23, load.getPickupZipCode());
+                    ps.setString(24, load.getDeliveryZipCode());
+                    ps.setDouble(25, load.getCalculatedMiles());
+                    if (load.getMilesCalculationDate() != null) {
+                        ps.setTimestamp(26, java.sql.Timestamp.valueOf(load.getMilesCalculationDate()));
+                    } else {
+                        ps.setNull(26, java.sql.Types.TIMESTAMP);
+                    }
+                    ps.setString(27, load.getPaymentMethodUsed() != null ? load.getPaymentMethodUsed().name() : null);
+                    ps.setDouble(28, load.getCalculatedDriverPay());
+                    ps.setDouble(29, load.getPaymentRateUsed());
+                    ps.setDouble(30, load.getFlatRateAmount());
+                    
                     ps.executeUpdate();
                     
                     try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -444,7 +548,9 @@ public class LoadDAO {
                 String sql = """
                     UPDATE loads SET load_number=?, po_number=?, customer=?, customer2=?, bill_to=?, pick_up_location=?, 
                     drop_location=?, driver_id=?, truck_unit_snapshot=?, trailer_id=?, trailer_number=?, status=?, gross_amount=?, 
-                    notes=?, pickup_date=?, pickup_time=?, delivery_date=?, delivery_time=?, reminder=?, has_lumper=?, lumper_amount=?, has_revised_rate_confirmation=? 
+                    notes=?, pickup_date=?, pickup_time=?, delivery_date=?, delivery_time=?, reminder=?, has_lumper=?, lumper_amount=?, has_revised_rate_confirmation=?,
+                    pickup_zip_code=?, delivery_zip_code=?, calculated_miles=?, miles_calculation_date=?, payment_method_used=?,
+                    calculated_driver_pay=?, payment_rate_used=?, flat_rate_amount=?
                     WHERE id=?
                 """;
                 
@@ -485,7 +591,23 @@ public class LoadDAO {
                     ps.setInt(20, load.isHasLumper() ? 1 : 0);
                     ps.setDouble(21, load.getLumperAmount());
                     ps.setInt(22, load.isHasRevisedRateConfirmation() ? 1 : 0);
-                    ps.setInt(23, load.getId());
+                    
+                    // New zip code and payment method fields
+                    ps.setString(23, load.getPickupZipCode());
+                    ps.setString(24, load.getDeliveryZipCode());
+                    ps.setDouble(25, load.getCalculatedMiles());
+                    if (load.getMilesCalculationDate() != null) {
+                        ps.setTimestamp(26, java.sql.Timestamp.valueOf(load.getMilesCalculationDate()));
+                    } else {
+                        ps.setNull(26, java.sql.Types.TIMESTAMP);
+                    }
+                    ps.setString(27, load.getPaymentMethodUsed() != null ? load.getPaymentMethodUsed().name() : null);
+                    ps.setDouble(28, load.getCalculatedDriverPay());
+                    ps.setDouble(29, load.getPaymentRateUsed());
+                    ps.setDouble(30, load.getFlatRateAmount());
+                    
+                    // WHERE clause parameter
+                    ps.setInt(31, load.getId());
                     
                     int rowsAffected = ps.executeUpdate();
                     if (rowsAffected > 0) {
@@ -1225,6 +1347,26 @@ public class LoadDAO {
         load.setTrailerId(trailerId);
         load.setTrailerNumber(trailerNumber);
         load.setTrailer(trailer);
+        
+        // Set zip code and payment method fields
+        try { load.setPickupZipCode(rs.getString("pickup_zip_code")); } catch (SQLException ex) { }
+        try { load.setDeliveryZipCode(rs.getString("delivery_zip_code")); } catch (SQLException ex) { }
+        try { load.setCalculatedMiles(rs.getDouble("calculated_miles")); } catch (SQLException ex) { }
+        try { 
+            java.sql.Timestamp ts = rs.getTimestamp("miles_calculation_date");
+            if (ts != null) {
+                load.setMilesCalculationDate(ts.toLocalDateTime());
+            }
+        } catch (SQLException ex) { }
+        try { 
+            String paymentMethod = rs.getString("payment_method_used");
+            if (paymentMethod != null) {
+                load.setPaymentMethodUsed(com.company.payroll.employees.PaymentType.valueOf(paymentMethod));
+            }
+        } catch (Exception ex) { }
+        try { load.setCalculatedDriverPay(rs.getDouble("calculated_driver_pay")); } catch (SQLException ex) { }
+        try { load.setPaymentRateUsed(rs.getDouble("payment_rate_used")); } catch (SQLException ex) { }
+        try { load.setFlatRateAmount(rs.getDouble("flat_rate_amount")); } catch (SQLException ex) { }
         
         return load;
     }
@@ -3116,6 +3258,26 @@ public class LoadDAO {
                 load.setTrailerId(trailerId);
                 load.setTrailerNumber(trailerNumber);
                 load.setTrailer(trailer);
+                
+                // Set zip code and payment method fields
+                try { load.setPickupZipCode(rs.getString("pickup_zip_code")); } catch (SQLException ex) { }
+                try { load.setDeliveryZipCode(rs.getString("delivery_zip_code")); } catch (SQLException ex) { }
+                try { load.setCalculatedMiles(rs.getDouble("calculated_miles")); } catch (SQLException ex) { }
+                try { 
+                    java.sql.Timestamp ts = rs.getTimestamp("miles_calculation_date");
+                    if (ts != null) {
+                        load.setMilesCalculationDate(ts.toLocalDateTime());
+                    }
+                } catch (SQLException ex) { }
+                try { 
+                    String paymentMethod = rs.getString("payment_method_used");
+                    if (paymentMethod != null) {
+                        load.setPaymentMethodUsed(com.company.payroll.employees.PaymentType.valueOf(paymentMethod));
+                    }
+                } catch (Exception ex) { }
+                try { load.setCalculatedDriverPay(rs.getDouble("calculated_driver_pay")); } catch (SQLException ex) { }
+                try { load.setPaymentRateUsed(rs.getDouble("payment_rate_used")); } catch (SQLException ex) { }
+                try { load.setFlatRateAmount(rs.getDouble("flat_rate_amount")); } catch (SQLException ex) { }
                 
                 loads.add(load);
             }

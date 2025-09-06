@@ -1,6 +1,8 @@
 package com.company.payroll.loads;
 
+import java.time.LocalDateTime;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * Represents a unified customer address that can be used for both pickup and drop locations
@@ -15,6 +17,32 @@ public class CustomerAddress {
     private boolean isDefaultPickup; // Flag to mark default pickup location
     private boolean isDefaultDrop; // Flag to mark default drop location
     private String customerName; // Customer name for display purposes
+    
+    // Zip code and geocoding fields
+    private String zipCode;
+    private double latitude;
+    private double longitude;
+    private LocalDateTime geocodedDate;
+    private GeocodingStatus geocodingStatus = GeocodingStatus.PENDING;
+    
+    public enum GeocodingStatus {
+        PENDING("Pending", "Geocoding not yet attempted"),
+        GEOCODED("Geocoded", "Successfully geocoded"),
+        FAILED("Failed", "Geocoding failed"),
+        MANUAL("Manual", "Coordinates entered manually"),
+        ESTIMATED("Estimated", "Coordinates estimated from region");
+        
+        private final String displayName;
+        private final String description;
+        
+        GeocodingStatus(String displayName, String description) {
+            this.displayName = displayName;
+            this.description = description;
+        }
+        
+        public String getDisplayName() { return displayName; }
+        public String getDescription() { return description; }
+    }
     
     public CustomerAddress() {
     }
@@ -81,6 +109,45 @@ public class CustomerAddress {
         this.state = state;
     }
     
+    public String getZipCode() {
+        return zipCode;
+    }
+    
+    public void setZipCode(String zipCode) {
+        this.zipCode = normalizeZipCode(zipCode);
+    }
+    
+    public double getLatitude() {
+        return latitude;
+    }
+    
+    public void setLatitude(double latitude) {
+        this.latitude = latitude;
+    }
+    
+    public double getLongitude() {
+        return longitude;
+    }
+    
+    public void setLongitude(double longitude) {
+        this.longitude = longitude;
+    }
+    
+    public LocalDateTime getGeocodedDate() {
+        return geocodedDate;
+    }
+    
+    public void setGeocodedDate(LocalDateTime geocodedDate) {
+        this.geocodedDate = geocodedDate;
+    }
+    
+    public GeocodingStatus getGeocodingStatus() {
+        return geocodingStatus;
+    }
+    
+    public void setGeocodingStatus(GeocodingStatus geocodingStatus) {
+        this.geocodingStatus = geocodingStatus;
+    }
     
     public boolean isDefaultPickup() {
         return isDefaultPickup;
@@ -120,7 +187,91 @@ public class CustomerAddress {
             if (sb.length() > 0) sb.append(", ");
             sb.append(state);
         }
+        if (zipCode != null && !zipCode.trim().isEmpty()) {
+            if (sb.length() > 0) sb.append(" ");
+            sb.append(zipCode);
+        }
         return sb.toString();
+    }
+    
+    // Get full address without zip for geocoding
+    public String getFullAddressWithoutZip() {
+        StringBuilder sb = new StringBuilder();
+        if (address != null && !address.trim().isEmpty()) {
+            sb.append(address);
+        }
+        if (city != null && !city.trim().isEmpty()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(city);
+        }
+        if (state != null && !state.trim().isEmpty()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(state);
+        }
+        return sb.toString();
+    }
+    
+    // Get full address with zip
+    public String getFullAddressWithZip() {
+        return getFullAddress();
+    }
+    
+    // Zip code validation and utility methods
+    public boolean isGeocodingRequired() {
+        return geocodingStatus == GeocodingStatus.PENDING || 
+               (geocodingStatus == GeocodingStatus.FAILED && zipCode != null && !zipCode.isEmpty());
+    }
+    
+    public boolean isValidZipCode() {
+        return isValidZipCode(zipCode);
+    }
+    
+    public static boolean isValidZipCode(String zipCode) {
+        if (zipCode == null || zipCode.trim().isEmpty()) {
+            return false;
+        }
+        
+        // Pattern for 5-digit or 5+4 digit zip codes
+        Pattern pattern = Pattern.compile("^\\d{5}(-\\d{4})?$");
+        return pattern.matcher(zipCode.trim()).matches();
+    }
+    
+    private String normalizeZipCode(String zipCode) {
+        if (zipCode == null) {
+            return null;
+        }
+        return zipCode.trim().replaceAll("[^0-9-]", "");
+    }
+    
+    public String getFormattedZipCode() {
+        if (zipCode == null || zipCode.isEmpty()) {
+            return "";
+        }
+        
+        // Format as 5 digits or 5+4 format
+        if (zipCode.length() == 9 && !zipCode.contains("-")) {
+            return zipCode.substring(0, 5) + "-" + zipCode.substring(5);
+        }
+        
+        return zipCode;
+    }
+    
+    public boolean hasCoordinates() {
+        return latitude != 0.0 && longitude != 0.0;
+    }
+    
+    public String getGeocodingStatusDescription() {
+        if (geocodingStatus == null) {
+            return "Unknown";
+        }
+        return geocodingStatus.getDescription();
+    }
+    
+    public void setCoordinates(double latitude, double longitude, GeocodingStatus status) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.geocodingStatus = status;
+        this.geocodedDate = LocalDateTime.now();
     }
     
     // Display text for UI

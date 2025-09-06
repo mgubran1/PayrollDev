@@ -105,9 +105,10 @@ public class AddressBookManager {
         title.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: black;");
         
         Label description = new Label(
-            "Import addresses from CSV files with columns: Customer, Address, City, State\n" +
+            "Import addresses from CSV files with columns: Customer, Address, City, State, Zip (optional)\n" +
             "All addresses will be converted to uppercase and duplicates will be automatically removed.\n" +
-            "Supports large files with 5000+ addresses for fast, professional processing."
+            "Supports large files with 5000+ addresses for fast, professional processing.\n" +
+            "Zip codes are optional but recommended for per-mile payment calculations."
         );
         description.setWrapText(true);
         description.setStyle("-fx-text-fill: black;");
@@ -305,11 +306,13 @@ public class AddressBookManager {
                 
                 String[] parts = parseCsvLine(line);
                 if (parts.length >= 4) {
+                    String zipCode = parts.length > 4 ? normalizeString(parts[4]) : "";
                     records.add(new AddressRecord(
                         normalizeString(parts[0]), // Customer Name
                         normalizeString(parts[1]), // Address
                         normalizeString(parts[2]), // City
-                        normalizeString(parts[3])  // State
+                        normalizeString(parts[3]), // State
+                        zipCode                    // Zip Code (optional)
                     ));
                 }
             }
@@ -333,13 +336,15 @@ public class AddressBookManager {
                     String address = getCellValue((org.apache.poi.ss.usermodel.Cell) row.getCell(1));
                     String city = getCellValue((org.apache.poi.ss.usermodel.Cell) row.getCell(2));
                     String state = getCellValue((org.apache.poi.ss.usermodel.Cell) row.getCell(3));
+                    String zipCode = getCellValue((org.apache.poi.ss.usermodel.Cell) row.getCell(4));
                     
                     if (customerName != null && !customerName.trim().isEmpty()) {
                         records.add(new AddressRecord(
                             normalizeString(customerName),
                             normalizeString(address),
                             normalizeString(city),
-                            normalizeString(state)
+                            normalizeString(state),
+                            normalizeString(zipCode != null ? zipCode : "")
                         ));
                     }
                 }
@@ -474,18 +479,19 @@ public class AddressBookManager {
     private void exportAddressesToCsv(File file) {
         try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
             // Write header
-            writer.println("Customer Name,Address,City,State,Location Name,Default Pickup,Default Drop");
+            writer.println("Customer Name,Address,City,State,Zip Code,Location Name,Default Pickup,Default Drop");
             
             // Get all customers and their addresses
             List<String> customers = loadDAO.getAllCustomers();
             for (String customer : customers) {
                 List<CustomerAddress> addresses = loadDAO.getCustomerAddressBook(customer);
                 for (CustomerAddress address : addresses) {
-                    writer.printf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%s,%s%n",
+                    writer.printf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%s,%s%n",
                         escapeCsvField(customer),
                         escapeCsvField(address.getAddress()),
                         escapeCsvField(address.getCity()),
                         escapeCsvField(address.getState()),
+                        escapeCsvField(address.getZipCode() != null ? address.getZipCode() : ""),
                         escapeCsvField(address.getLocationName()),
                         address.isDefaultPickup() ? "Yes" : "No",
                         address.isDefaultDrop() ? "Yes" : "No"
@@ -506,7 +512,7 @@ public class AddressBookManager {
             
             // Create header row
             org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
-            String[] headers = {"Customer Name", "Address", "City", "State", "Location Name", "Default Pickup", "Default Drop"};
+            String[] headers = {"Customer Name", "Address", "City", "State", "Zip Code", "Location Name", "Default Pickup", "Default Drop"};
             for (int i = 0; i < headers.length; i++) {
                 org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
                 cell.setCellValue(headers[i]);
@@ -523,9 +529,10 @@ public class AddressBookManager {
                     row.createCell(1).setCellValue(address.getAddress());
                     row.createCell(2).setCellValue(address.getCity());
                     row.createCell(3).setCellValue(address.getState());
-                    row.createCell(4).setCellValue(address.getLocationName());
-                    row.createCell(5).setCellValue(address.isDefaultPickup() ? "Yes" : "No");
-                    row.createCell(6).setCellValue(address.isDefaultDrop() ? "Yes" : "No");
+                    row.createCell(4).setCellValue(address.getZipCode() != null ? address.getZipCode() : "");
+                    row.createCell(5).setCellValue(address.getLocationName());
+                    row.createCell(6).setCellValue(address.isDefaultPickup() ? "Yes" : "No");
+                    row.createCell(7).setCellValue(address.isDefaultDrop() ? "Yes" : "No");
                 }
             }
             
@@ -634,16 +641,22 @@ public class AddressBookManager {
         final String address;
         final String city;
         final String state;
+        final String zipCode;
         
         AddressRecord(String customerName, String address, String city, String state) {
+            this(customerName, address, city, state, "");
+        }
+        
+        AddressRecord(String customerName, String address, String city, String state, String zipCode) {
             this.customerName = customerName;
             this.address = address;
             this.city = city;
             this.state = state;
+            this.zipCode = zipCode != null ? zipCode : "";
         }
         
         String getAddressKey() {
-            return customerName + "|" + address + "|" + city + "|" + state;
+            return customerName + "|" + address + "|" + city + "|" + state + (zipCode.isEmpty() ? "" : "|" + zipCode);
         }
     }
     

@@ -56,6 +56,13 @@ public class Employee {
     private double escrowBalance;
     private double weeklyPayRate; // For company drivers
     
+    // Payment method fields
+    private PaymentType paymentType = PaymentType.PERCENTAGE;
+    private double flatRateAmount = 0.0;
+    private double perMileRate = 0.0;
+    private LocalDate paymentEffectiveDate = LocalDate.now();
+    private String paymentNotes;
+    
     // Audit fields
     private LocalDate createdDate;
     private LocalDate modifiedDate;
@@ -117,6 +124,21 @@ public class Employee {
         this.state = state;
         this.zipCode = zipCode;
         this.hireDate = hireDate != null ? hireDate : LocalDate.now();
+    }
+    
+    // Constructor with payment method support
+    public Employee(int id, String name, String truckUnit, String trailerNumber, double driverPercent,
+                    double companyPercent, double serviceFeePercent, LocalDate dob, String licenseNumber,
+                    DriverType driverType, String employeeLLC, LocalDate cdlExpiry, LocalDate medicalExpiry,
+                    Status status, PaymentType paymentType, double flatRateAmount, double perMileRate,
+                    LocalDate paymentEffectiveDate, String paymentNotes) {
+        this(id, name, truckUnit, trailerNumber, driverPercent, companyPercent, serviceFeePercent,
+             dob, licenseNumber, driverType, employeeLLC, cdlExpiry, medicalExpiry, status);
+        this.paymentType = paymentType != null ? paymentType : PaymentType.PERCENTAGE;
+        this.flatRateAmount = flatRateAmount;
+        this.perMileRate = perMileRate;
+        this.paymentEffectiveDate = paymentEffectiveDate != null ? paymentEffectiveDate : LocalDate.now();
+        this.paymentNotes = paymentNotes;
     }
 
     // Computed properties
@@ -189,6 +211,66 @@ public class Employee {
             return "";
         }
         return address + ", " + city + ", " + state + " " + zipCode;
+    }
+    
+    // Payment method validation and calculation
+    public boolean isValidPaymentConfiguration() {
+        if (paymentType == null) {
+            return false;
+        }
+        return paymentType.isValidConfiguration(driverPercent, companyPercent, serviceFeePercent, 
+                                               flatRateAmount, perMileRate);
+    }
+    
+    public String getPaymentConfigurationError() {
+        if (paymentType == null) {
+            return "Payment type is not set";
+        }
+        return paymentType.getValidationError(driverPercent, companyPercent, serviceFeePercent,
+                                            flatRateAmount, perMileRate);
+    }
+    
+    public double calculateLoadPayment(double grossAmount, double miles) {
+        if (paymentType == null) {
+            return calculatePercentagePayment(grossAmount);
+        }
+        return paymentType.calculatePayment(grossAmount, miles, driverPercent, flatRateAmount, perMileRate);
+    }
+    
+    public double calculatePercentagePayment(double grossAmount) {
+        return grossAmount * (driverPercent / 100.0);
+    }
+    
+    public String getPaymentMethodDescription() {
+        if (paymentType == null) {
+            return "Not configured";
+        }
+        
+        switch (paymentType) {
+            case PERCENTAGE:
+                return String.format("%s (%.2f%%)", paymentType.getDisplayName(), driverPercent);
+            case FLAT_RATE:
+                return String.format("%s ($%.2f/load)", paymentType.getDisplayName(), flatRateAmount);
+            case PER_MILE:
+                return String.format("%s ($%.2f/mile)", paymentType.getDisplayName(), perMileRate);
+            default:
+                return paymentType.getDisplayName();
+        }
+    }
+    
+    public boolean requiresZipCodesForPayment() {
+        return paymentType != null && paymentType.requiresZipCodes();
+    }
+    
+    public boolean requiresGrossAmountForPayment() {
+        return paymentType != null && paymentType.requiresGrossAmount();
+    }
+    
+    public String getPaymentWarning(double amount, double miles) {
+        if (paymentType == null) {
+            return null;
+        }
+        return paymentType.getPaymentWarning(amount, miles);
     }
 
     // Original getters and setters
@@ -452,6 +534,37 @@ public class Employee {
     
     public String getModifiedBy() { return modifiedBy; }
     public void setModifiedBy(String modifiedBy) { this.modifiedBy = modifiedBy; }
+    
+    // Payment method getters and setters
+    public PaymentType getPaymentType() { return paymentType; }
+    public void setPaymentType(PaymentType paymentType) {
+        this.paymentType = paymentType;
+        updateModified();
+    }
+    
+    public double getFlatRateAmount() { return flatRateAmount; }
+    public void setFlatRateAmount(double flatRateAmount) {
+        this.flatRateAmount = flatRateAmount;
+        updateModified();
+    }
+    
+    public double getPerMileRate() { return perMileRate; }
+    public void setPerMileRate(double perMileRate) {
+        this.perMileRate = perMileRate;
+        updateModified();
+    }
+    
+    public LocalDate getPaymentEffectiveDate() { return paymentEffectiveDate; }
+    public void setPaymentEffectiveDate(LocalDate paymentEffectiveDate) {
+        this.paymentEffectiveDate = paymentEffectiveDate;
+        updateModified();
+    }
+    
+    public String getPaymentNotes() { return paymentNotes; }
+    public void setPaymentNotes(String paymentNotes) {
+        this.paymentNotes = paymentNotes;
+        updateModified();
+    }
     
     // Helper method to update modification tracking
     private void updateModified() {

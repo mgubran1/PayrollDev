@@ -60,6 +60,7 @@ import org.slf4j.LoggerFactory;
 // Application-specific imports
 import com.company.payroll.employees.Employee;
 import com.company.payroll.employees.EmployeeDAO;
+import com.company.payroll.employees.PaymentType;
 import com.company.payroll.trailers.Trailer;
 import com.company.payroll.trailers.TrailerDAO;
 import com.company.payroll.trucks.Truck;
@@ -67,6 +68,8 @@ import com.company.payroll.trucks.TruckDAO;
 import com.company.payroll.exception.DataAccessException;
 import com.company.payroll.config.DocumentManagerConfig;
 import com.company.payroll.config.DocumentManagerSettingsDialog;
+import com.company.payroll.services.DistanceCalculationService;
+import com.company.payroll.validation.DistanceValidationService;
 import javafx.application.Platform;
 
 // JavaFX concurrency imports for scheduled tasks
@@ -5270,6 +5273,14 @@ public class LoadsPanel extends BorderPane {
         CheckBox hasLumperCheck;
         TextField lumperAmountField;
         CheckBox hasRevisedRateCheck;
+        
+        // Zip code fields for per-mile payment calculation
+        TextField pickupZipField;
+        TextField deliveryZipField;
+        
+        // Flat rate field for enterprise-ready per-load flat rates
+        TextField flatRateField;
+        Label flatRateLabel;
     }
     
     private LoadDialogFields dialogFields;
@@ -5966,11 +5977,134 @@ public class LoadsPanel extends BorderPane {
         scheduleGrid.add(delivery12hLabel, 6, 1);
         scheduleGrid.add(deliveryTime12Hour, 7, 1);
         
-        // Row 2: Financial - move status further right for better organization
-        scheduleGrid.add(grossLabel, 0, 2);
-        scheduleGrid.add(dialogFields.grossField, 1, 2);
-        scheduleGrid.add(statusLabel, 4, 2);        // Move further right for professional look
-        scheduleGrid.add(dialogFields.statusBox, 5, 2, 3, 1);
+        // Row 2: Zip Codes for Per-Mile Payment Calculation
+        Label pickupZipLabel = new Label("Pickup Zip Code");
+        pickupZipLabel.getStyleClass().add("modern-form-label");
+        dialogFields.pickupZipField = new TextField();
+        dialogFields.pickupZipField.setPromptText("12345");
+        dialogFields.pickupZipField.getStyleClass().add("modern-text-field");
+        dialogFields.pickupZipField.setPrefWidth(100);
+        
+        Label deliveryZipLabel = new Label("Delivery Zip Code");
+        deliveryZipLabel.getStyleClass().add("modern-form-label");
+        dialogFields.deliveryZipField = new TextField();
+        dialogFields.deliveryZipField.setPromptText("12345");
+        dialogFields.deliveryZipField.getStyleClass().add("modern-text-field");
+        dialogFields.deliveryZipField.setPrefWidth(100);
+        
+        // Estimated miles label
+        Label milesLabel = new Label("Estimated Miles:");
+        milesLabel.getStyleClass().add("modern-form-label");
+        Label estimatedMilesValue = new Label("-");
+        estimatedMilesValue.getStyleClass().add("estimated-miles-value");
+        estimatedMilesValue.setStyle("-fx-font-weight: bold; -fx-text-fill: #007bff;");
+        
+        // Calculate miles button
+        Button calculateMilesBtn = new Button("Calculate");
+        calculateMilesBtn.getStyleClass().add("calculate-miles-button");
+        calculateMilesBtn.setStyle("-fx-background-color: #17a2b8; -fx-text-fill: white;");
+        calculateMilesBtn.setOnAction(e -> calculateAndDisplayMiles(dialogFields.pickupZipField, 
+                                                                   dialogFields.deliveryZipField, 
+                                                                   estimatedMilesValue));
+        
+        // Add zip validation listeners
+        DistanceValidationService validationService = new DistanceValidationService();
+        
+        dialogFields.pickupZipField.textProperty().addListener((obs, old, newVal) -> {
+            if (newVal != null && !newVal.isEmpty()) {
+                DistanceValidationService.ValidationResult result = validationService.validateZipCode(newVal);
+                if (!result.isValid()) {
+                    dialogFields.pickupZipField.setStyle("-fx-border-color: red;");
+                    dialogFields.pickupZipField.setTooltip(new Tooltip(result.getFirstError()));
+                } else if (result.hasWarnings()) {
+                    dialogFields.pickupZipField.setStyle("-fx-border-color: orange;");
+                    dialogFields.pickupZipField.setTooltip(new Tooltip(result.getFirstWarning()));
+                } else {
+                    dialogFields.pickupZipField.setStyle("");
+                    dialogFields.pickupZipField.setTooltip(null);
+                }
+            }
+        });
+        
+        dialogFields.deliveryZipField.textProperty().addListener((obs, old, newVal) -> {
+            if (newVal != null && !newVal.isEmpty()) {
+                DistanceValidationService.ValidationResult result = validationService.validateZipCode(newVal);
+                if (!result.isValid()) {
+                    dialogFields.deliveryZipField.setStyle("-fx-border-color: red;");
+                    dialogFields.deliveryZipField.setTooltip(new Tooltip(result.getFirstError()));
+                } else if (result.hasWarnings()) {
+                    dialogFields.deliveryZipField.setStyle("-fx-border-color: orange;");
+                    dialogFields.deliveryZipField.setTooltip(new Tooltip(result.getFirstWarning()));
+                } else {
+                    dialogFields.deliveryZipField.setStyle("");
+                    dialogFields.deliveryZipField.setTooltip(null);
+                }
+            }
+        });
+        
+        // Check if driver requires zip codes
+        dialogFields.driverBox.valueProperty().addListener((obs, oldDriver, newDriver) -> {
+            boolean requiresZipCodes = newDriver != null && 
+                                     newDriver.getPaymentType() == PaymentType.PER_MILE;
+            if (requiresZipCodes) {
+                pickupZipLabel.setText("Pickup Zip Code*");
+                deliveryZipLabel.setText("Delivery Zip Code*");
+                pickupZipLabel.setStyle("-fx-text-fill: #dc3545; -fx-font-weight: bold;");
+                deliveryZipLabel.setStyle("-fx-text-fill: #dc3545; -fx-font-weight: bold;");
+            } else {
+                pickupZipLabel.setText("Pickup Zip Code");
+                deliveryZipLabel.setText("Delivery Zip Code");
+                pickupZipLabel.setStyle("");
+                deliveryZipLabel.setStyle("");
+            }
+        });
+        
+        scheduleGrid.add(pickupZipLabel, 0, 2);
+        scheduleGrid.add(dialogFields.pickupZipField, 1, 2);
+        scheduleGrid.add(deliveryZipLabel, 2, 2);
+        scheduleGrid.add(dialogFields.deliveryZipField, 3, 2);
+        scheduleGrid.add(milesLabel, 4, 2);
+        scheduleGrid.add(estimatedMilesValue, 5, 2);
+        scheduleGrid.add(calculateMilesBtn, 6, 2);
+        
+        // Row 3: Financial - move status further right for better organization
+        scheduleGrid.add(grossLabel, 0, 3);
+        scheduleGrid.add(dialogFields.grossField, 1, 3);
+        
+        // Flat rate field for per-load pricing (enterprise-ready)
+        dialogFields.flatRateLabel = new Label("Flat Rate Amount");
+        dialogFields.flatRateLabel.getStyleClass().add("modern-form-label");
+        dialogFields.flatRateField = new TextField();
+        dialogFields.flatRateField.setPromptText("$0.00");
+        dialogFields.flatRateField.getStyleClass().add("modern-text-field");
+        dialogFields.flatRateField.setPrefWidth(120);
+        
+        // Initially hide flat rate field
+        dialogFields.flatRateLabel.setVisible(false);
+        dialogFields.flatRateField.setVisible(false);
+        dialogFields.flatRateLabel.setManaged(false);
+        dialogFields.flatRateField.setManaged(false);
+        
+        // Show/hide flat rate field based on driver's payment method
+        dialogFields.driverBox.valueProperty().addListener((obs, oldDriver, newDriver) -> {
+            boolean showFlatRate = newDriver != null && 
+                                 newDriver.getPaymentType() == PaymentType.FLAT_RATE;
+            dialogFields.flatRateLabel.setVisible(showFlatRate);
+            dialogFields.flatRateField.setVisible(showFlatRate);
+            dialogFields.flatRateLabel.setManaged(showFlatRate);
+            dialogFields.flatRateField.setManaged(showFlatRate);
+            
+            // Pre-populate with driver's default flat rate if available
+            if (showFlatRate && newDriver.getFlatRateAmount() > 0) {
+                dialogFields.flatRateField.setText(String.format("%.2f", newDriver.getFlatRateAmount()));
+            }
+        });
+        
+        scheduleGrid.add(dialogFields.flatRateLabel, 2, 3);
+        scheduleGrid.add(dialogFields.flatRateField, 3, 3);
+        
+        scheduleGrid.add(statusLabel, 4, 3);        // Move further right for professional look
+        scheduleGrid.add(dialogFields.statusBox, 5, 3, 3, 1);
         
         scheduleFinancialSection.getChildren().add(scheduleGrid);
         
@@ -6064,9 +6198,22 @@ public class LoadsPanel extends BorderPane {
                 dialogFields.deliveryTimeSpinner.getValueFactory().setValue(load.getDeliveryTime());
             }
             
+            // Pre-fill zip codes
+            if (load.getPickupZipCode() != null) {
+                dialogFields.pickupZipField.setText(load.getPickupZipCode());
+            }
+            if (load.getDeliveryZipCode() != null) {
+                dialogFields.deliveryZipField.setText(load.getDeliveryZipCode());
+            }
+            
             // Pre-fill financial and status
             dialogFields.grossField.setText(String.valueOf(load.getGrossAmount()));
             dialogFields.statusBox.setValue(load.getStatus());
+            
+            // Pre-fill flat rate if applicable
+            if (load.getFlatRateAmount() > 0) {
+                dialogFields.flatRateField.setText(String.format("%.2f", load.getFlatRateAmount()));
+            }
             
             // Pre-fill additional details
             dialogFields.notesField.setText(load.getNotes());
@@ -6788,6 +6935,24 @@ public class LoadsPanel extends BorderPane {
             load.setDeliveryDate(dialogFields.deliveryDatePicker.getValue());
             load.setDeliveryTime(dialogFields.deliveryTimeSpinner.getValue());
             
+            // Set zip codes
+            if (dialogFields.pickupZipField != null && dialogFields.pickupZipField.getText() != null) {
+                load.setPickupZipCode(dialogFields.pickupZipField.getText().trim());
+            }
+            if (dialogFields.deliveryZipField != null && dialogFields.deliveryZipField.getText() != null) {
+                load.setDeliveryZipCode(dialogFields.deliveryZipField.getText().trim());
+            }
+            
+            // Validate zip codes if driver uses per-mile payment
+            if (load.getDriver() != null && load.getDriver().getPaymentType() == PaymentType.PER_MILE) {
+                if (!Load.isValidZipCode(load.getPickupZipCode())) {
+                    throw new IllegalArgumentException("Valid pickup zip code is required for per-mile payment");
+                }
+                if (!Load.isValidZipCode(load.getDeliveryZipCode())) {
+                    throw new IllegalArgumentException("Valid delivery zip code is required for per-mile payment");
+                }
+            }
+            
             // Set financial information
             if (dialogFields.grossField.getText() != null && !dialogFields.grossField.getText().trim().isEmpty()) {
                 try {
@@ -6815,6 +6980,35 @@ public class LoadsPanel extends BorderPane {
             }
             
             load.setStatus(dialogFields.statusBox.getValue() != null ? dialogFields.statusBox.getValue() : Load.Status.BOOKED);
+            
+            // Process flat rate amount if driver uses flat rate payment
+            if (load.getDriver() != null && load.getDriver().getPaymentType() == PaymentType.FLAT_RATE) {
+                String flatRateText = dialogFields.flatRateField.getText();
+                if (flatRateText != null && !flatRateText.trim().isEmpty()) {
+                    try {
+                        // Remove any currency symbols and parse
+                        String cleanAmount = flatRateText.replaceAll("[^0-9.]", "");
+                        if (!cleanAmount.isEmpty()) {
+                            double flatRate = Double.parseDouble(cleanAmount);
+                            if (flatRate < 0) {
+                                throw new NumberFormatException("Flat rate cannot be negative");
+                            }
+                            load.setFlatRateAmount(flatRate);
+                        } else {
+                            // Use driver's default flat rate if no load-specific rate provided
+                            load.setFlatRateAmount(load.getDriver().getFlatRateAmount());
+                        }
+                    } catch (NumberFormatException e) {
+                        logger.warn("Invalid flat rate format: '{}', using driver default", flatRateText);
+                        load.setFlatRateAmount(load.getDriver().getFlatRateAmount());
+                    }
+                } else {
+                    // Use driver's default flat rate if no load-specific rate provided
+                    load.setFlatRateAmount(load.getDriver().getFlatRateAmount());
+                }
+            } else {
+                load.setFlatRateAmount(0.0);
+            }
             
             // Set additional details
             load.setNotes(dialogFields.notesField.getText() != null ? dialogFields.notesField.getText().trim() : "");
@@ -8240,6 +8434,70 @@ public class LoadsPanel extends BorderPane {
         } catch (Exception e) {
             logger.error("Error saving pending load changes", e);
         }
+    }
+    
+    /**
+     * Calculate and display miles between two zip codes
+     */
+    private void calculateAndDisplayMiles(TextField pickupZipField, TextField deliveryZipField, Label estimatedMilesLabel) {
+        String pickupZip = pickupZipField.getText().trim();
+        String deliveryZip = deliveryZipField.getText().trim();
+        
+        if (pickupZip.isEmpty() || deliveryZip.isEmpty()) {
+            showError("Please enter both pickup and delivery zip codes");
+            return;
+        }
+        
+        // Validate zip codes
+        DistanceValidationService validationService = new DistanceValidationService();
+        DistanceValidationService.ValidationResult pickupValidation = validationService.validateZipCode(pickupZip);
+        DistanceValidationService.ValidationResult deliveryValidation = validationService.validateZipCode(deliveryZip);
+        
+        if (!pickupValidation.isValid()) {
+            showError("Invalid pickup zip code: " + pickupValidation.getFirstError());
+            return;
+        }
+        
+        if (!deliveryValidation.isValid()) {
+            showError("Invalid delivery zip code: " + deliveryValidation.getFirstError());
+            return;
+        }
+        
+        // Show loading indicator
+        estimatedMilesLabel.setText("Calculating...");
+        estimatedMilesLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffc107;");
+        
+        // Calculate distance in background
+        CompletableFuture.supplyAsync(() -> {
+            DistanceCalculationService distanceService = new DistanceCalculationService();
+            return distanceService.calculateDistance(pickupZip, deliveryZip);
+        }).thenAccept(distance -> {
+            Platform.runLater(() -> {
+                if (distance >= 0) {
+                    estimatedMilesLabel.setText(String.format("%.1f miles", distance));
+                    estimatedMilesLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #28a745;");
+                    
+                    // Check if distance seems reasonable
+                    if (!validationService.isReasonableDistance(pickupZip, deliveryZip, distance)) {
+                        estimatedMilesLabel.setText(String.format("%.1f miles (verify)", distance));
+                        estimatedMilesLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #ffc107;");
+                        estimatedMilesLabel.setTooltip(new Tooltip("Distance seems unusually high for these zip codes"));
+                    }
+                } else {
+                    estimatedMilesLabel.setText("Unable to calculate");
+                    estimatedMilesLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #dc3545;");
+                    estimatedMilesLabel.setTooltip(new Tooltip("Failed to calculate distance between zip codes"));
+                }
+            });
+        }).exceptionally(ex -> {
+            Platform.runLater(() -> {
+                logger.error("Error calculating distance", ex);
+                estimatedMilesLabel.setText("Error");
+                estimatedMilesLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #dc3545;");
+                estimatedMilesLabel.setTooltip(new Tooltip("Error: " + ex.getMessage()));
+            });
+            return null;
+        });
     }
 
 }

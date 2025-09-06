@@ -326,9 +326,25 @@ public class EmployeesTab extends BorderPane implements WindowAware {
         ComboBox<String> trailerComboBox = new ComboBox<>();
         TextField phoneField = new TextField();
         TextField emailField = new TextField();
+        
+        // Payment method fields
+        ComboBox<PaymentType> paymentTypeBox = new ComboBox<>(
+                FXCollections.observableArrayList(PaymentType.values()));
+        paymentTypeBox.setValue(PaymentType.PERCENTAGE); // Default to percentage
+        
+        // Percentage payment fields
         TextField driverPctField = new TextField();
         TextField companyPctField = new TextField();
         TextField serviceFeeField = new TextField();
+        
+        // Flat rate field
+        TextField flatRateField = new TextField();
+        flatRateField.setPromptText("e.g. 500.00");
+        
+        // Per mile field
+        TextField perMileRateField = new TextField();
+        perMileRateField.setPromptText("e.g. 1.50");
+        
         DatePicker dobPicker = new DatePicker();
         TextField licenseField = new TextField();
         ComboBox<Employee.DriverType> driverTypeBox = new ComboBox<>(
@@ -441,9 +457,23 @@ public class EmployeesTab extends BorderPane implements WindowAware {
             }
             phoneField.setText(employee.getPhone());
             emailField.setText(employee.getEmail());
+            
+            // Set payment method
+            paymentTypeBox.setValue(employee.getPaymentType() != null ? employee.getPaymentType() : PaymentType.PERCENTAGE);
+            
+            // Set payment-specific fields
             driverPctField.setText(String.valueOf(employee.getDriverPercent()));
             companyPctField.setText(String.valueOf(employee.getCompanyPercent()));
             serviceFeeField.setText(String.valueOf(employee.getServiceFeePercent()));
+            
+            if (employee.getFlatRateAmount() > 0) {
+                flatRateField.setText(String.valueOf(employee.getFlatRateAmount()));
+            }
+            
+            if (employee.getPerMileRate() > 0) {
+                perMileRateField.setText(String.valueOf(employee.getPerMileRate()));
+            }
+            
             dobPicker.setValue(employee.getDob());
             licenseField.setText(employee.getLicenseNumber());
             driverTypeBox.setValue(employee.getDriverType());
@@ -467,9 +497,34 @@ public class EmployeesTab extends BorderPane implements WindowAware {
         grid.add(new Label("Trailer #:"), 0, r);           grid.add(trailerComboBox, 1, r++);
         grid.add(new Label("Mobile #:"), 0, r);            grid.add(phoneField, 1, r++);
         grid.add(new Label("Email:"), 0, r);               grid.add(emailField, 1, r++);
-        grid.add(new Label("Driver %*:"), 0, r);           grid.add(driverPctField, 1, r++);
-        grid.add(new Label("Company %:"), 0, r);           grid.add(companyPctField, 1, r++);
-        grid.add(new Label("Service Fee %:"), 0, r);       grid.add(serviceFeeField, 1, r++);
+        
+        // Payment method selection
+        grid.add(new Label("Payment Method*:"), 0, r);     grid.add(paymentTypeBox, 1, r++);
+        
+        // Percentage payment fields (shown by default)
+        Label driverPctLabel = new Label("Driver %*:");
+        Label companyPctLabel = new Label("Company %:");
+        Label serviceFeeLabel = new Label("Service Fee %:");
+        grid.add(driverPctLabel, 0, r);                    grid.add(driverPctField, 1, r++);
+        grid.add(companyPctLabel, 0, r);                   grid.add(companyPctField, 1, r++);
+        grid.add(serviceFeeLabel, 0, r);                   grid.add(serviceFeeField, 1, r++);
+        
+        // Flat rate field (hidden by default)
+        Label flatRateLabel = new Label("Flat Rate Amount*:");
+        grid.add(flatRateLabel, 0, r);                     grid.add(flatRateField, 1, r++);
+        flatRateLabel.setVisible(false);
+        flatRateField.setVisible(false);
+        flatRateLabel.setManaged(false);
+        flatRateField.setManaged(false);
+        
+        // Per mile field (hidden by default)
+        Label perMileLabel = new Label("Per Mile Rate*:");
+        grid.add(perMileLabel, 0, r);                      grid.add(perMileRateField, 1, r++);
+        perMileLabel.setVisible(false);
+        perMileRateField.setVisible(false);
+        perMileLabel.setManaged(false);
+        perMileRateField.setManaged(false);
+        
         grid.add(new Label("DOB:"), 0, r);                 grid.add(dobPicker, 1, r++);
         grid.add(new Label("License #:"), 0, r);           grid.add(licenseField, 1, r++);
         grid.add(new Label("Driver Type:"), 0, r);         grid.add(driverTypeBox, 1, r++);
@@ -478,13 +533,125 @@ public class EmployeesTab extends BorderPane implements WindowAware {
         grid.add(new Label("Medical Expiry:"), 0, r);      grid.add(medPicker, 1, r++);
         grid.add(new Label("Status:"), 0, r);              grid.add(statusBox, 1, r++);
         grid.add(errorLabel, 1, r++);
+        
+        // Payment type change listener
+        paymentTypeBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                // Hide all payment-specific fields first
+                driverPctLabel.setVisible(false);
+                driverPctLabel.setManaged(false);
+                driverPctField.setVisible(false);
+                driverPctField.setManaged(false);
+                
+                companyPctLabel.setVisible(false);
+                companyPctLabel.setManaged(false);
+                companyPctField.setVisible(false);
+                companyPctField.setManaged(false);
+                
+                serviceFeeLabel.setVisible(false);
+                serviceFeeLabel.setManaged(false);
+                serviceFeeField.setVisible(false);
+                serviceFeeField.setManaged(false);
+                
+                flatRateLabel.setVisible(false);
+                flatRateLabel.setManaged(false);
+                flatRateField.setVisible(false);
+                flatRateField.setManaged(false);
+                
+                perMileLabel.setVisible(false);
+                perMileLabel.setManaged(false);
+                perMileRateField.setVisible(false);
+                perMileRateField.setManaged(false);
+                
+                // Show relevant fields based on payment type
+                switch (newVal) {
+                    case PERCENTAGE:
+                        driverPctLabel.setVisible(true);
+                        driverPctLabel.setManaged(true);
+                        driverPctField.setVisible(true);
+                        driverPctField.setManaged(true);
+                        
+                        companyPctLabel.setVisible(true);
+                        companyPctLabel.setManaged(true);
+                        companyPctField.setVisible(true);
+                        companyPctField.setManaged(true);
+                        
+                        serviceFeeLabel.setVisible(true);
+                        serviceFeeLabel.setManaged(true);
+                        serviceFeeField.setVisible(true);
+                        serviceFeeField.setManaged(true);
+                        break;
+                        
+                    case FLAT_RATE:
+                        flatRateLabel.setVisible(true);
+                        flatRateLabel.setManaged(true);
+                        flatRateField.setVisible(true);
+                        flatRateField.setManaged(true);
+                        break;
+                        
+                    case PER_MILE:
+                        perMileLabel.setVisible(true);
+                        perMileLabel.setManaged(true);
+                        perMileRateField.setVisible(true);
+                        perMileRateField.setManaged(true);
+                        break;
+                }
+                
+                // Resize dialog to fit content
+                dialog.getDialogPane().getScene().getWindow().sizeToScene();
+            }
+        });
 
         Node okBtn = dialog.getDialogPane().lookupButton(ButtonType.OK);
 
         // Validation logic
         Runnable validate = () -> {
             boolean nameValid = !nameField.getText().trim().isEmpty();
-            boolean driverPctValid = isDouble(driverPctField.getText());
+            boolean paymentValid = true;
+            String errorText = "";
+            
+            // Validate based on selected payment type
+            PaymentType selectedType = paymentTypeBox.getValue();
+            if (selectedType != null) {
+                switch (selectedType) {
+                    case PERCENTAGE:
+                        paymentValid = isDouble(driverPctField.getText()) && 
+                                     isDouble(companyPctField.getText()) && 
+                                     isDouble(serviceFeeField.getText());
+                        
+                        if (paymentValid) {
+                            double driverPct = parseDouble(driverPctField.getText());
+                            double companyPct = parseDouble(companyPctField.getText());
+                            double servicePct = parseDouble(serviceFeeField.getText());
+                            double total = driverPct + companyPct + servicePct;
+                            
+                            if (Math.abs(total - 100.0) > 0.01) {
+                                paymentValid = false;
+                                errorText = "Percentages must total 100% (currently " + String.format("%.2f", total) + "%)";
+                            }
+                        } else {
+                            errorText = "Please enter valid percentage values";
+                        }
+                        break;
+                        
+                    case FLAT_RATE:
+                        paymentValid = isDouble(flatRateField.getText()) && 
+                                     parseDouble(flatRateField.getText()) > 0;
+                        if (!paymentValid) {
+                            errorText = "Please enter a valid flat rate amount";
+                        }
+                        break;
+                        
+                    case PER_MILE:
+                        paymentValid = isDouble(perMileRateField.getText()) && 
+                                     parseDouble(perMileRateField.getText()) > 0;
+                        if (!paymentValid) {
+                            errorText = "Please enter a valid per-mile rate";
+                        }
+                        break;
+                }
+            }
+            
             boolean duplicate = checkDuplicateDriverName(
                     nameField.getText().trim(),
                     isAdd ? -1 : (employee != null ? employee.getId() : -1)
@@ -501,10 +668,13 @@ public class EmployeesTab extends BorderPane implements WindowAware {
             } else if (dupTruck && selectedTruck != null && !selectedTruck.trim().isEmpty()) {
                 errorLabel.setText("Truck/Unit already assigned to another driver.");
                 errorLabel.setVisible(true);
+            } else if (!paymentValid && !errorText.isEmpty()) {
+                errorLabel.setText(errorText);
+                errorLabel.setVisible(true);
             } else {
                 errorLabel.setVisible(false);
             }
-            okBtn.setDisable(!(nameValid && driverPctValid) || duplicate || dupTruck);
+            okBtn.setDisable(!(nameValid && paymentValid) || duplicate || dupTruck);
         };
 
         // Enhanced input validation for percentage fields
@@ -512,9 +682,18 @@ public class EmployeesTab extends BorderPane implements WindowAware {
         addPercentageValidation(companyPctField, "Company %");
         addCurrencyValidation(serviceFeeField, "Service Fee");
         
+        // Add validation for new payment fields
+        addCurrencyValidation(flatRateField, "Flat Rate");
+        addCurrencyValidation(perMileRateField, "Per Mile Rate");
+        
         nameField.textProperty().addListener((obs, oldV, newV) -> validate.run());
         truckComboBox.valueProperty().addListener((obs, oldV, newV) -> validate.run());
+        paymentTypeBox.valueProperty().addListener((obs, oldV, newV) -> validate.run());
         driverPctField.textProperty().addListener((obs, oldV, newV) -> validate.run());
+        companyPctField.textProperty().addListener((obs, oldV, newV) -> validate.run());
+        serviceFeeField.textProperty().addListener((obs, oldV, newV) -> validate.run());
+        flatRateField.textProperty().addListener((obs, oldV, newV) -> validate.run());
+        perMileRateField.textProperty().addListener((obs, oldV, newV) -> validate.run());
         validate.run(); // initial
 
         dialog.getDialogPane().setContent(grid);
@@ -535,9 +714,28 @@ public class EmployeesTab extends BorderPane implements WindowAware {
                     String email = emailField != null ? emailField.getText() : "";
                     if (email != null) email = email.trim();
                     
-                    double driverPct = driverPctField != null ? parseDouble(driverPctField.getText()) : 0.0;
-                    double companyPct = companyPctField != null ? parseDouble(companyPctField.getText()) : 0.0;
-                    double serviceFee = serviceFeeField != null ? parseDouble(serviceFeeField.getText()) : 0.0;
+                    // Get payment method and related fields
+                    PaymentType paymentType = paymentTypeBox != null ? paymentTypeBox.getValue() : PaymentType.PERCENTAGE;
+                    double driverPct = 0.0;
+                    double companyPct = 0.0;
+                    double serviceFee = 0.0;
+                    double flatRateAmount = 0.0;
+                    double perMileRate = 0.0;
+                    
+                    // Set values based on payment type
+                    switch (paymentType) {
+                        case PERCENTAGE:
+                            driverPct = driverPctField != null ? parseDouble(driverPctField.getText()) : 0.0;
+                            companyPct = companyPctField != null ? parseDouble(companyPctField.getText()) : 0.0;
+                            serviceFee = serviceFeeField != null ? parseDouble(serviceFeeField.getText()) : 0.0;
+                            break;
+                        case FLAT_RATE:
+                            flatRateAmount = flatRateField != null ? parseDouble(flatRateField.getText()) : 0.0;
+                            break;
+                        case PER_MILE:
+                            perMileRate = perMileRateField != null ? parseDouble(perMileRateField.getText()) : 0.0;
+                            break;
+                    }
                     
                     LocalDate dob = dobPicker != null ? dobPicker.getValue() : null;
                     
@@ -555,10 +753,15 @@ public class EmployeesTab extends BorderPane implements WindowAware {
                     Employee.Status status = statusBox != null ? statusBox.getValue() : null;
 
                     if (isAdd) {
-                        logger.info("Adding new employee: {}", name);
+                        logger.info("Adding new employee: {} with payment type: {}", name, paymentType);
                         Employee emp = new Employee(0, name, truck, trailer, driverPct, companyPct, serviceFee, dob, license, driverType, llc, cdlExp, medExp, status);
                         emp.setPhone(phone);
                         emp.setEmail(email);
+                        
+                        // Set payment method fields
+                        emp.setPaymentType(paymentType);
+                        emp.setFlatRateAmount(flatRateAmount);
+                        emp.setPerMileRate(perMileRate);
                         int newId = dao.add(emp);
                         emp.setId(newId);
                         employees.setAll(dao.getAll());
@@ -578,9 +781,15 @@ public class EmployeesTab extends BorderPane implements WindowAware {
                         employee.setTrailerNumber(trailer);
                         employee.setPhone(phone);
                         employee.setEmail(email);
+                        
+                        // Update payment method fields
+                        employee.setPaymentType(paymentType);
                         employee.setDriverPercent(driverPct);
                         employee.setCompanyPercent(companyPct);
                         employee.setServiceFeePercent(serviceFee);
+                        employee.setFlatRateAmount(flatRateAmount);
+                        employee.setPerMileRate(perMileRate);
+                        
                         employee.setDob(dob);
                         employee.setLicenseNumber(license);
                         employee.setDriverType(driverType);
