@@ -472,8 +472,16 @@ public class LoadDAO {
                     ps.setInt(22, load.isHasRevisedRateConfirmation() ? 1 : 0);
                     
                     // New zip code and payment method fields
-                    ps.setString(23, load.getPickupZipCode());
-                    ps.setString(24, load.getDeliveryZipCode());
+                    if (load.getPickupZipCode() != null && !load.getPickupZipCode().trim().isEmpty()) {
+                        ps.setString(23, load.getPickupZipCode());
+                    } else {
+                        ps.setNull(23, java.sql.Types.VARCHAR);
+                    }
+                    if (load.getDeliveryZipCode() != null && !load.getDeliveryZipCode().trim().isEmpty()) {
+                        ps.setString(24, load.getDeliveryZipCode());
+                    } else {
+                        ps.setNull(24, java.sql.Types.VARCHAR);
+                    }
                     ps.setDouble(25, load.getCalculatedMiles());
                     if (load.getMilesCalculationDate() != null) {
                         ps.setTimestamp(26, java.sql.Timestamp.valueOf(load.getMilesCalculationDate()));
@@ -593,8 +601,16 @@ public class LoadDAO {
                     ps.setInt(22, load.isHasRevisedRateConfirmation() ? 1 : 0);
                     
                     // New zip code and payment method fields
-                    ps.setString(23, load.getPickupZipCode());
-                    ps.setString(24, load.getDeliveryZipCode());
+                    if (load.getPickupZipCode() != null && !load.getPickupZipCode().trim().isEmpty()) {
+                        ps.setString(23, load.getPickupZipCode());
+                    } else {
+                        ps.setNull(23, java.sql.Types.VARCHAR);
+                    }
+                    if (load.getDeliveryZipCode() != null && !load.getDeliveryZipCode().trim().isEmpty()) {
+                        ps.setString(24, load.getDeliveryZipCode());
+                    } else {
+                        ps.setNull(24, java.sql.Types.VARCHAR);
+                    }
                     ps.setDouble(25, load.getCalculatedMiles());
                     if (load.getMilesCalculationDate() != null) {
                         ps.setTimestamp(26, java.sql.Timestamp.valueOf(load.getMilesCalculationDate()));
