@@ -1,6 +1,7 @@
 package com.company.payroll.fuel;
 
 import com.company.payroll.exception.DataAccessException;
+import com.company.payroll.database.DatabaseConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +16,7 @@ public class FuelTransactionDAO {
 
     public FuelTransactionDAO() {
         logger.debug("Initializing FuelTransactionDAO");
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = """
                 CREATE TABLE IF NOT EXISTS fuel_transactions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +56,7 @@ public class FuelTransactionDAO {
     public List<FuelTransaction> getAll() {
         logger.debug("Fetching all fuel transactions");
         List<FuelTransaction> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM fuel_transactions";
             ResultSet rs = conn.createStatement().executeQuery(sql);
             while (rs.next()) {
@@ -79,7 +80,7 @@ public class FuelTransactionDAO {
             state_prov, fees, item, unit_price, disc_ppu, disc_cost, qty, disc_amt, disc_type, amt, db, currency, employee_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, t.getCardNumber());
             ps.setString(2, t.getTranDate());
@@ -132,7 +133,7 @@ public class FuelTransactionDAO {
                   LOWER(TRIM(location_name)) = ? AND
                   ROUND(amt, 2) = ROUND(?, 2)
         """;
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, invoice.trim().toLowerCase());
             ps.setString(2, tranDate.trim().toLowerCase());
@@ -157,7 +158,7 @@ public class FuelTransactionDAO {
                 disc_type=?, amt=?, db=?, currency=?, employee_id=?
             WHERE id=?
         """;
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, t.getCardNumber());
             ps.setString(2, t.getTranDate());
@@ -197,7 +198,7 @@ public class FuelTransactionDAO {
     public void delete(int id) {
         logger.info("Deleting fuel transaction with ID: {}", id);
         String sql = "DELETE FROM fuel_transactions WHERE id = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, id);
             int rowsAffected = ps.executeUpdate();
@@ -229,7 +230,7 @@ public class FuelTransactionDAO {
         
         sql.append(" ORDER BY tran_date DESC, tran_time DESC");
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql.toString())) {
             
             for (int i = 0; i < params.size(); i++) {
@@ -269,7 +270,7 @@ public class FuelTransactionDAO {
         }
         sql.append(" ORDER BY tran_date ASC");
 
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             PreparedStatement ps = conn.prepareStatement(sql.toString());
             for (int i = 0; i < params.size(); ++i)
                 ps.setObject(i + 1, params.get(i));

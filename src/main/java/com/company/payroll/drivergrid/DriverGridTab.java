@@ -46,21 +46,25 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import com.company.payroll.util.WindowAware;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DriverGridTab extends Tab implements WindowAware {
+    private static final Logger logger = LoggerFactory.getLogger(DriverGridTab.class);
+    
     private final BorderPane mainLayout = new BorderPane();
     private final VBox leftPanel = new VBox(15);
     private final GridPane weekGrid = new GridPane();
@@ -88,6 +92,15 @@ public class DriverGridTab extends Tab implements WindowAware {
         setClosable(false);
         weekStart = LocalDate.now().with(DayOfWeek.SUNDAY);
         setupUI();
+        
+        // Load responsive CSS stylesheet
+        try {
+            String cssPath = getClass().getResource("/css/driver-grid-responsive.css").toExternalForm();
+            mainLayout.getStylesheets().add(cssPath);
+        } catch (Exception e) {
+            System.err.println("Could not load driver-grid-responsive.css: " + e.getMessage());
+        }
+        
         setContent(mainLayout);
         // Always select today on tab creation
         weekFilterPicker.setValue(LocalDate.now());
@@ -129,20 +142,38 @@ public class DriverGridTab extends Tab implements WindowAware {
         Label titleLabel = new Label("Driver Scheduling Grid");
         titleLabel.getStyleClass().add("driver-grid-title");
         
-        // Week navigation
-        HBox weekControls = new HBox(10);
+        // Phase 3.1: Responsive Week Navigation Controls
+        FlowPane weekControls = new FlowPane(10, 10); // Horizontal and vertical gaps
         weekControls.setAlignment(Pos.CENTER_LEFT);
         weekControls.getStyleClass().add("driver-grid-week-nav");
+        weekControls.setPrefWrapLength(400); // Wrap at this width
+        
         Button prevWeekBtn = new Button("◀ Previous");
+        prevWeekBtn.getStyleClass().add("driver-grid-nav-button");
+        prevWeekBtn.setMinWidth(100); // Touch-friendly sizing
+        
         Button todayBtn = new Button("Today");
+        todayBtn.getStyleClass().add("driver-grid-nav-button");
+        todayBtn.setMinWidth(80);
+        
         Button nextWeekBtn = new Button("Next ▶");
+        nextWeekBtn.getStyleClass().add("driver-grid-nav-button");
+        nextWeekBtn.setMinWidth(100);
+        
+        // Make date picker responsive
+        weekFilterPicker.setMinWidth(140);
+        weekFilterPicker.setPrefWidth(160);
+        weekFilterPicker.setMaxWidth(200);
+        
         Label weekLabel = new Label();
         weekLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
         weekLabel.setTextFill(Color.rgb(31, 41, 55));
+        
         prevWeekBtn.setOnAction(e -> { weekStart = weekStart.minusWeeks(1); weekFilterPicker.setValue(weekStart); refresh(); });
         nextWeekBtn.setOnAction(e -> { weekStart = weekStart.plusWeeks(1); weekFilterPicker.setValue(weekStart); refresh(); });
         todayBtn.setOnAction(e -> { weekStart = LocalDate.now().with(DayOfWeek.SUNDAY); weekFilterPicker.setValue(LocalDate.now()); refresh(); });
         weekFilterPicker.valueProperty().addListener((obs, oldV, newV) -> { if (newV != null) { weekStart = newV.with(DayOfWeek.SUNDAY); refresh(); }});
+        
         weekControls.getChildren().addAll(prevWeekBtn, todayBtn, weekFilterPicker, nextWeekBtn);
         
         leftSide.getChildren().addAll(titleLabel, weekControls);
@@ -173,10 +204,11 @@ public class DriverGridTab extends Tab implements WindowAware {
         
         actionButtons.getChildren().addAll(scheduleLoadBtn, assignDriverBtn, exportScheduleBtn, printViewBtn, refreshBtn, autoRefreshCheck);
         
-        // Summary statistics boxes row
-        HBox summaryBoxes = new HBox(15);
+        // Phase 3.3: Responsive Summary Cards Adaptation
+        FlowPane summaryBoxes = new FlowPane(15, 15); // Use FlowPane for automatic wrapping
         summaryBoxes.setAlignment(Pos.CENTER_RIGHT);
         summaryBoxes.getStyleClass().add("driver-grid-summary-container");
+        summaryBoxes.setPrefWrapLength(600); // Wrap at this width
         
         totalLoadsBox = createSummaryBox("Total Loads", "0");
         activeDriversBox = createSummaryBox("Active Drivers", "0");
@@ -197,31 +229,41 @@ public class DriverGridTab extends Tab implements WindowAware {
         
         leftPanel.getChildren().add(mainHeader);
         
-        // Search and filter section
-        HBox searchFilterSection = new HBox(15);
+        // Phase 3.2: Filter Section Responsiveness - Convert to FlowPane
+        FlowPane searchFilterSection = new FlowPane(15, 10); // Horizontal and vertical gaps
         searchFilterSection.setAlignment(Pos.CENTER_LEFT);
         searchFilterSection.setPadding(new Insets(0, 0, 20, 0));
         searchFilterSection.getStyleClass().add("driver-grid-search-section");
+        searchFilterSection.setPrefWrapLength(800); // Wrap filters when width is constrained
         
         Label searchLabel = new Label("Search:");
         searchField.setPromptText("Search by load #, driver, truck");
-        searchField.setMinWidth(200);
+        searchField.setMinWidth(180); // Phase 1.2: Reduced from 200 for flexibility
+        searchField.setPrefWidth(250); // Preferred width
+        searchField.setMaxWidth(Double.MAX_VALUE); // Allow expansion
+        HBox.setHgrow(searchField, Priority.ALWAYS); // Flexible header
         searchField.getStyleClass().add("driver-grid-search-field");
         searchField.textProperty().addListener((obs, oldV, newV) -> applyAdvancedFilter());
         
         ComboBox<String> driverFilter = new ComboBox<>();
         driverFilter.setPromptText("Driver: All Driv...");
-        driverFilter.setMinWidth(150);
+        driverFilter.setMinWidth(120); // Phase 1.2: Reduced from 150
+        driverFilter.setPrefWidth(150);
+        driverFilter.setMaxWidth(200); // Cap maximum width
         driverFilter.getStyleClass().add("driver-grid-filter-combo");
         
         ComboBox<String> customerFilter = new ComboBox<>();
         customerFilter.setPromptText("Customer: All Cust...");
-        customerFilter.setMinWidth(150);
+        customerFilter.setMinWidth(120); // Phase 1.2: Reduced from 150
+        customerFilter.setPrefWidth(150);
+        customerFilter.setMaxWidth(200); // Cap maximum width
         customerFilter.getStyleClass().add("driver-grid-filter-combo");
         
         ComboBox<String> statusFilter = new ComboBox<>();
         statusFilter.setPromptText("Status: All Stat...");
-        statusFilter.setMinWidth(150);
+        statusFilter.setMinWidth(120); // Phase 1.2: Reduced from 150
+        statusFilter.setPrefWidth(150);
+        statusFilter.setMaxWidth(200); // Cap maximum width
         statusFilter.getStyleClass().add("driver-grid-filter-combo");
         
         CheckBox showConflictsOnly = new CheckBox("Show Conflicts Only");
@@ -245,32 +287,123 @@ public class DriverGridTab extends Tab implements WindowAware {
         weekGrid.setVgap(1);
         weekGrid.setStyle("-fx-background-color: #e5e7eb; -fx-border-color: #d1d5db; -fx-border-width: 2px; -fx-border-radius: 8;");
         weekGrid.setPadding(new Insets(2));
-        weekGridScrollPane.setFitToWidth(false);
-        weekGridScrollPane.setPannable(true);
-        weekGridScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        // Phase 1.3: Enhanced ScrollPane Configuration
+        weekGridScrollPane.setFitToWidth(true);
+        weekGridScrollPane.setFitToHeight(true); // Ensure vertical fit as well
+        weekGridScrollPane.setPannable(true); // Enable smooth scrolling with momentum
         weekGridScrollPane.setPrefHeight(480);
+        weekGridScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED); // Show horizontal scrollbar only when needed
+        weekGridScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED); // Show vertical scrollbar only when needed
         weekGridScrollPane.setStyle("-fx-background: #f8fafc; -fx-border-color: #d1d5db; -fx-border-radius: 8;");
+        
+        // Maintain header synchronization with smooth scrolling
         weekGridScrollPane.hvalueProperty().addListener((obs, oldV, newV) -> {
             double hVal = newV.doubleValue();
-            weekHeaderRow.setTranslateX(-hVal * (weekGrid.getWidth() - weekGridScrollPane.getViewportBounds().getWidth()));
+            double scrollableWidth = weekGrid.getWidth() - weekGridScrollPane.getViewportBounds().getWidth();
+            if (scrollableWidth > 0) {
+                weekHeaderRow.setTranslateX(-hVal * scrollableWidth);
+            }
         });
-        weekGridScrollPane.viewportBoundsProperty().addListener((obs, o, n) -> adjustColumnWidths());
         leftPanel.getChildren().add(weekGridScrollPane);
         refreshBtn.setOnAction(e -> refresh());
         mainLayout.setLeft(leftPanel);
         mainLayout.setStyle("-fx-background-color: #f8fafc;");
+        
+        // Phase 5.1: Breakpoint System - Add responsive behavior based on window size
+        setupResponsiveListeners();
+    }
+    
+    private void setupResponsiveListeners() {
+        // Listen for window size changes and apply responsive classes
+        mainLayout.widthProperty().addListener((obs, oldWidth, newWidth) -> {
+            double width = newWidth.doubleValue();
+            applyResponsiveBreakpoint(width);
+        });
+    }
+    
+    private void applyResponsiveBreakpoint(double width) {
+        // Clear all breakpoint classes
+        mainLayout.getStyleClass().removeAll("driver-grid-mobile", "driver-grid-tablet", 
+                                           "driver-grid-desktop", "driver-grid-wide");
+        
+        if (width < 768) {
+            // Mobile: < 768px - Single column, stacked layout
+            mainLayout.getStyleClass().add("driver-grid-mobile");
+            // Adjust column constraints for mobile
+            adjustColumnsForMobile();
+        } else if (width < 1024) {
+            // Tablet: 768px - 1024px - Condensed grid, 2-3 day view
+            mainLayout.getStyleClass().add("driver-grid-tablet");
+            adjustColumnsForTablet();
+        } else if (width < 1440) {
+            // Desktop: 1024px - 1440px - Standard 7-day view
+            mainLayout.getStyleClass().add("driver-grid-desktop");
+            adjustColumnsForDesktop();
+        } else {
+            // Wide: > 1440px - Enhanced spacing, additional details
+            mainLayout.getStyleClass().add("driver-grid-wide");
+            adjustColumnsForWide();
+        }
+    }
+    
+    private void adjustColumnsForMobile() {
+        // Show fewer day columns on mobile
+        // This would need more complex logic to actually hide columns
+        // For now, just adjust minimum widths
+        weekGrid.getColumnConstraints().forEach(constraint -> {
+            if (constraint instanceof ColumnConstraints) {
+                constraint.setMinWidth(80); // Smaller minimum for mobile
+            }
+        });
+    }
+    
+    private void adjustColumnsForTablet() {
+        weekGrid.getColumnConstraints().forEach(constraint -> {
+            if (constraint instanceof ColumnConstraints) {
+                constraint.setMinWidth(90); // Slightly larger for tablet
+            }
+        });
+    }
+    
+    private void adjustColumnsForDesktop() {
+        weekGrid.getColumnConstraints().forEach(constraint -> {
+            if (constraint instanceof ColumnConstraints) {
+                constraint.setMinWidth(100); // Standard desktop size
+            }
+        });
+    }
+    
+    private void adjustColumnsForWide() {
+        weekGrid.getColumnConstraints().forEach(constraint -> {
+            if (constraint instanceof ColumnConstraints) {
+                constraint.setMinWidth(120); // More spacing for wide screens
+            }
+        });
     }
     
     private VBox createSummaryBox(String title, String value) {
         VBox box = new VBox(5);
         box.setAlignment(Pos.CENTER);
-        box.getStyleClass().add("driver-grid-summary-box");
+        box.getStyleClass().add("driver-grid-summary-card"); // Updated class name
+        
+        // Phase 3.3: Make summary boxes responsive
+        box.setMinWidth(120); // Minimum width for readability
+        box.setPrefWidth(150);
+        box.setMaxWidth(180); // Maximum width to prevent over-expansion
+        box.setPadding(new Insets(15));
+        box.setStyle("-fx-background-color: white; -fx-background-radius: 8; " +
+                     "-fx-border-color: #e5e7eb; -fx-border-width: 1; -fx-border-radius: 8; " +
+                     "-fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.05), 4, 0, 0, 1);");
         
         Label valueLabel = new Label(value);
         valueLabel.getStyleClass().add("driver-grid-summary-value");
+        valueLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
+        valueLabel.setTextFill(Color.rgb(17, 24, 39)); // gray-900
         
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("driver-grid-summary-title");
+        titleLabel.setFont(Font.font("Segoe UI", 12));
+        titleLabel.setTextFill(Color.rgb(107, 114, 128)); // gray-500
         
         box.getChildren().addAll(valueLabel, titleLabel);
         return box;
@@ -391,11 +524,19 @@ public class DriverGridTab extends Tab implements WindowAware {
         weekGrid.getColumnConstraints().clear();
         weekGrid.getRowConstraints().clear();
         // Columns: 0 = driver info, 1-7 = days
-        ColumnConstraints driverCol = new ColumnConstraints(180);
-        driverCol.setHgrow(Priority.NEVER);
+        // Phase 1.1: Update Column Constraints - Use percentage-based sizing
+        ColumnConstraints driverCol = new ColumnConstraints();
+        driverCol.setMinWidth(150); // Minimum width for driver column
+        driverCol.setPercentWidth(18); // 18% of available width for driver column
+        driverCol.setHgrow(Priority.SOMETIMES);
         weekGrid.getColumnConstraints().add(driverCol);
+        
+        // Distribute remaining 82% equally among 7 day columns
+        double dayColumnPercent = 82.0 / 7.0; // ~11.7% per day column
         for (int i = 0; i < 7; i++) {
-            ColumnConstraints dayCol = new ColumnConstraints(140);
+            ColumnConstraints dayCol = new ColumnConstraints();
+            dayCol.setMinWidth(100); // Minimum width for readability
+            dayCol.setPercentWidth(dayColumnPercent);
             dayCol.setHgrow(Priority.ALWAYS);
             weekGrid.getColumnConstraints().add(dayCol);
         }
@@ -405,30 +546,6 @@ public class DriverGridTab extends Tab implements WindowAware {
             Employee driver = drivers.get(i);
             buildDriverRow(driver, i + 1, i);
         }
-
-        adjustColumnWidths();
-    }
-
-    private void adjustColumnWidths() {
-        double viewportWidth = weekGridScrollPane.getViewportBounds().getWidth();
-        if (viewportWidth == 0) return;
-        double available = viewportWidth - 180; // subtract driver column
-        double dayWidth = Math.max(140, available / 7);
-        ObservableList<ColumnConstraints> cols = weekGrid.getColumnConstraints();
-        if (cols.size() == 8) {
-            for (int i = 1; i < cols.size(); i++) {
-                ColumnConstraints cc = cols.get(i);
-                cc.setPrefWidth(dayWidth);
-                cc.setMinWidth(dayWidth);
-            }
-        }
-        weekGrid.getChildren().forEach(node -> {
-            Integer col = GridPane.getColumnIndex(node);
-            if (col != null && col > 0 && node instanceof Region region) {
-                region.setMinWidth(dayWidth);
-                region.setPrefWidth(dayWidth);
-            }
-        });
     }
 
     private void buildHeaderRow() {
@@ -436,7 +553,7 @@ public class DriverGridTab extends Tab implements WindowAware {
         VBox cornerCell = new VBox();
         cornerCell.setStyle("-fx-background-color: #f9fafb; -fx-border-color: #e5e7eb; -fx-border-width: 0 1 1 0;");
         cornerCell.setMinHeight(50);
-        cornerCell.setMinWidth(180);
+        cornerCell.setMinWidth(150); // Phase 1.2: Reduced from 180, matches column constraint
         weekHeaderRow.getChildren().add(cornerCell);
         String[] dayNames = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MMM d");
@@ -445,20 +562,45 @@ public class DriverGridTab extends Tab implements WindowAware {
             VBox dayHeader = new VBox(2);
             dayHeader.setAlignment(Pos.CENTER);
             dayHeader.setPadding(new Insets(8));
-            dayHeader.setMinWidth(140);
-            dayHeader.setStyle("-fx-background-color: #f9fafb; -fx-border-color: #e5e7eb; -fx-border-width: 0 1 1 0;");
-            Label dayName = new Label(dayNames[d]);
-            dayName.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
-            dayName.setTextFill(Color.rgb(55, 65, 81));
-            Label dateLabel = new Label(day.format(dateFormatter));
-            dateLabel.setFont(Font.font("Segoe UI", 10));
-            dateLabel.setTextFill(Color.rgb(107, 114, 128));
-            if (day.equals(LocalDate.now())) {
-                dayHeader.setStyle(dayHeader.getStyle() + "-fx-background-color: #dbeafe; -fx-border-color: #3b82f6; -fx-border-width: 0 1 1 2;");
-                dayName.setTextFill(Color.rgb(30, 64, 175));
-                dateLabel.setTextFill(Color.rgb(59, 130, 246));
+            dayHeader.setMinWidth(100); // Phase 1.2: Reduced from 140 for flexibility
+            HBox.setHgrow(dayHeader, Priority.ALWAYS); // Allow day headers to grow
+            
+            // Phase 2.1: Day Header Colors with better contrast
+            DayOfWeek dayOfWeek = day.getDayOfWeek();
+            boolean isWeekend = dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY;
+            boolean isToday = day.equals(LocalDate.now());
+            
+            if (isToday) {
+                // Today: Vibrant teal (#0891B2) with contrasting accent
+                dayHeader.setStyle("-fx-background-color: #0891B2; -fx-border-color: #0e7490; -fx-border-width: 0 1 2 0;");
+                Label dayName = new Label(dayNames[d]);
+                dayName.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
+                dayName.setTextFill(Color.WHITE);
+                Label dateLabel = new Label(day.format(dateFormatter));
+                dateLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11));
+                dateLabel.setTextFill(Color.rgb(224, 242, 254)); // Light cyan for contrast
+                dayHeader.getChildren().addAll(dayName, dateLabel);
+            } else if (isWeekend) {
+                // Sunday/Saturday: Deep purple (#6B46C1) or Rich burgundy (#9F1239)
+                dayHeader.setStyle("-fx-background-color: #6B46C1; -fx-border-color: #553C9A; -fx-border-width: 0 1 1 0;");
+                Label dayName = new Label(dayNames[d]);
+                dayName.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
+                dayName.setTextFill(Color.WHITE);
+                Label dateLabel = new Label(day.format(dateFormatter));
+                dateLabel.setFont(Font.font("Segoe UI", 10));
+                dateLabel.setTextFill(Color.rgb(233, 213, 255)); // Light purple for contrast
+                dayHeader.getChildren().addAll(dayName, dateLabel);
+            } else {
+                // Weekdays: Professional blue (#1E40AF) with white text
+                dayHeader.setStyle("-fx-background-color: #1E40AF; -fx-border-color: #1e3a8a; -fx-border-width: 0 1 1 0;");
+                Label dayName = new Label(dayNames[d]);
+                dayName.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
+                dayName.setTextFill(Color.WHITE);
+                Label dateLabel = new Label(day.format(dateFormatter));
+                dateLabel.setFont(Font.font("Segoe UI", 10));
+                dateLabel.setTextFill(Color.rgb(219, 234, 254)); // Light blue for contrast
+                dayHeader.getChildren().addAll(dayName, dateLabel);
             }
-            dayHeader.getChildren().addAll(dayName, dateLabel);
             weekHeaderRow.getChildren().add(dayHeader);
         }
     }
@@ -936,5 +1078,23 @@ public class DriverGridTab extends Tab implements WindowAware {
                 valueLabel.setText(String.valueOf(0)); // TODO: Calculate unassigned loads
             }
         });
+    }
+
+    @Override
+    public void updateWindowSize(double width, double height) {
+        // Handle window size changes by adjusting responsive breakpoints
+        logger.debug("Window resized to: {}x{}", width, height);
+        applyResponsiveBreakpoint(width);
+    }
+
+    @Override
+    public void onWindowStateChanged(boolean maximized, boolean minimized) {
+        // Handle window state changes (maximized/minimized)
+        logger.debug("Window state changed: maximized={}, minimized={}", maximized, minimized);
+        
+        if (!minimized && mainLayout.getWidth() > 0) {
+            // Reapply responsive behavior when restoring from minimized state
+            applyResponsiveBreakpoint(mainLayout.getWidth());
+        }
     }
 } 

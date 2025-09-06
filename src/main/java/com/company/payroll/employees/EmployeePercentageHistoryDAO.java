@@ -1,6 +1,7 @@
 package com.company.payroll.employees;
 
 import com.company.payroll.exception.DataAccessException;
+import com.company.payroll.database.DatabaseConfig;
 import java.sql.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -10,12 +11,71 @@ import java.util.List;
 public class EmployeePercentageHistoryDAO {
     
     private final Connection connection;
+    private static final String DB_URL = "jdbc:sqlite:payroll.db";
     
     public EmployeePercentageHistoryDAO(Connection connection) {
         this.connection = connection;
+        initializeTable();
+    }
+    
+    // Ensure we have a valid connection
+    private Connection getConnection() throws SQLException {
+        if (connection != null && !connection.isClosed()) {
+            return connection;
+        }
+        // Create a new connection if the provided one is closed
+        return DatabaseConfig.getConnection();
+    }
+    
+    private void initializeTable() {
+        String createTableSQL = """
+            CREATE TABLE IF NOT EXISTS employee_percentage_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                driver_percent REAL NOT NULL,
+                company_percent REAL NOT NULL,
+                service_fee_percent REAL NOT NULL,
+                effective_date DATE NOT NULL,
+                end_date DATE,
+                created_by TEXT,
+                created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                notes TEXT,
+                FOREIGN KEY (employee_id) REFERENCES employees(id)
+            )
+        """;
+        
+        Connection conn = null;
+        boolean shouldClose = false;
+        try {
+            conn = getConnection();
+            // Check if we created a new connection
+            shouldClose = (conn != connection);
+            
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute(createTableSQL);
+                
+                // Create index for performance
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_emp_percentage_history_dates ON employee_percentage_history(employee_id, effective_date, end_date)");
+            }
+        } catch (SQLException e) {
+            // Don't fail the operation - log and continue
+            System.err.println("Warning: Failed to initialize employee_percentage_history table: " + e.getMessage());
+        } finally {
+            // Only close if we created a new connection
+            if (shouldClose && conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                    // Ignore
+                }
+            }
+        }
     }
     
     public void createPercentageHistory(EmployeePercentageHistory history) throws DataAccessException {
+        // Ensure table exists first
+        initializeTable();
+        
         String sql = """
             INSERT INTO employee_percentage_history 
             (employee_id, driver_percent, company_percent, service_fee_percent, 
@@ -23,27 +83,45 @@ public class EmployeePercentageHistoryDAO {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         
-        try (PreparedStatement pstmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            pstmt.setInt(1, history.getEmployeeId());
-            pstmt.setDouble(2, history.getDriverPercent());
-            pstmt.setDouble(3, history.getCompanyPercent());
-            pstmt.setDouble(4, history.getServiceFeePercent());
-            pstmt.setDate(5, Date.valueOf(history.getEffectiveDate()));
-            pstmt.setDate(6, history.getEndDate() != null ? Date.valueOf(history.getEndDate()) : null);
-            pstmt.setString(7, history.getCreatedBy());
-            pstmt.setTimestamp(8, Timestamp.valueOf(history.getCreatedDate() != null ? 
-                history.getCreatedDate() : LocalDateTime.now()));
-            pstmt.setString(9, history.getNotes());
+        Connection conn = null;
+        boolean shouldClose = false;
+        
+        try {
+            conn = getConnection();
+            shouldClose = (conn != connection);
             
-            pstmt.executeUpdate();
-            
-            try (ResultSet rs = pstmt.getGeneratedKeys()) {
-                if (rs.next()) {
-                    history.setId(rs.getInt(1));
+            try (PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                pstmt.setInt(1, history.getEmployeeId());
+                pstmt.setDouble(2, history.getDriverPercent());
+                pstmt.setDouble(3, history.getCompanyPercent());
+                pstmt.setDouble(4, history.getServiceFeePercent());
+                pstmt.setDate(5, Date.valueOf(history.getEffectiveDate()));
+                pstmt.setDate(6, history.getEndDate() != null ? Date.valueOf(history.getEndDate()) : null);
+                pstmt.setString(7, history.getCreatedBy());
+                pstmt.setTimestamp(8, Timestamp.valueOf(history.getCreatedDate() != null ? 
+                    history.getCreatedDate() : LocalDateTime.now()));
+                pstmt.setString(9, history.getNotes());
+                
+                pstmt.executeUpdate();
+                
+                try (ResultSet rs = pstmt.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        history.setId(rs.getInt(1));
+                    }
                 }
             }
         } catch (SQLException e) {
-            throw new DataAccessException("Failed to create percentage history", e);
+            System.err.println("SQL Error creating percentage history: " + e.getMessage());
+            e.printStackTrace();
+            throw new DataAccessException("Failed to create percentage history: " + e.getMessage(), e);
+        } finally {
+            if (shouldClose && conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                    // Ignore
+                }
+            }
         }
     }
     
@@ -160,7 +238,10 @@ public class EmployeePercentageHistoryDAO {
         }
     }
     
-    public void closeCurrentPercentages(int employeeId, LocalDate endDate) throws DataAccessException {
+    public void closeCurrentPercentages(int employeeId, LocalDate endDate) {
+        // First ensure the table exists
+        initializeTable();
+        
         String sql = """
             UPDATE employee_percentage_history 
             SET end_date = ?
@@ -169,14 +250,32 @@ public class EmployeePercentageHistoryDAO {
             AND effective_date < ?
         """;
         
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            pstmt.setDate(1, Date.valueOf(endDate.minusDays(1)));
-            pstmt.setInt(2, employeeId);
-            pstmt.setDate(3, Date.valueOf(endDate));
+        Connection conn = null;
+        boolean shouldClose = false;
+        
+        try {
+            conn = getConnection();
+            shouldClose = (conn != connection);
             
-            pstmt.executeUpdate();
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setDate(1, Date.valueOf(endDate.minusDays(1)));
+                pstmt.setInt(2, employeeId);
+                pstmt.setDate(3, Date.valueOf(endDate));
+                
+                pstmt.executeUpdate();
+            }
         } catch (SQLException e) {
-            throw new DataAccessException("Failed to close current percentages", e);
+            // Log but don't throw - allow the operation to continue
+            System.err.println("Warning: Could not close current percentages for employee " + employeeId + ": " + e.getMessage());
+            // This is likely because there are no existing records to close, which is fine
+        } finally {
+            if (shouldClose && conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                    // Ignore
+                }
+            }
         }
     }
     

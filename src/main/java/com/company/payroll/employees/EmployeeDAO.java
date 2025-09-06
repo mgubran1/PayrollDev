@@ -1,6 +1,7 @@
 package com.company.payroll.employees;
 
 import com.company.payroll.exception.DataAccessException;
+import com.company.payroll.database.DatabaseConfig;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import org.slf4j.Logger;
@@ -23,7 +24,7 @@ public class EmployeeDAO {
     public EmployeeDAO(Connection connection) {
         this.connection = connection;
         logger.debug("Initializing EmployeeDAO");
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             // Add trailer_number column if it doesn't exist
             try {
                 conn.createStatement().execute("ALTER TABLE employees ADD COLUMN trailer_number TEXT");
@@ -81,7 +82,7 @@ public class EmployeeDAO {
             if (connection != null && !connection.isClosed()) {
                 return connection;
             }
-            return DriverManager.getConnection(DB_URL);
+            return DatabaseConfig.getConnection();
         } catch (SQLException e) {
             throw new DataAccessException("Failed to get database connection", e);
         }
@@ -90,7 +91,7 @@ public class EmployeeDAO {
     public List<Employee> getAll() {
         logger.debug("Fetching all employees");
         List<Employee> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM employees ORDER BY name COLLATE NOCASE";
             ResultSet rs = conn.createStatement().executeQuery(sql);
             while (rs.next()) {
@@ -112,7 +113,7 @@ public class EmployeeDAO {
     public List<Employee> getActive() {
         logger.debug("Fetching active employees");
         List<Employee> list = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             String sql = "SELECT * FROM employees WHERE status = ? ORDER BY name COLLATE NOCASE";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setString(1, Employee.Status.ACTIVE.name());
@@ -135,7 +136,7 @@ public class EmployeeDAO {
             (name, truck_unit, trailer_number, driver_percent, company_percent, service_fee_percent, dob, license_number, driver_type, employee_llc, cdl_expiry, medical_expiry, status, email, phone) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             setParams(ps, emp);
             ps.executeUpdate();
@@ -159,7 +160,7 @@ public class EmployeeDAO {
                 name=?, truck_unit=?, trailer_number=?, driver_percent=?, company_percent=?, service_fee_percent=?, dob=?, license_number=?, driver_type=?, employee_llc=?, cdl_expiry=?, medical_expiry=?, status=?, email=?, phone=?
             WHERE id=?
         """;
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             setParams(ps, emp);
             ps.setInt(16, emp.getId());
@@ -178,7 +179,7 @@ public class EmployeeDAO {
     public void delete(int id) {
         logger.info("Deleting employee with ID: {}", id);
         String sql = "DELETE FROM employees WHERE id=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
             int rowsAffected = ps.executeUpdate();
@@ -196,7 +197,7 @@ public class EmployeeDAO {
     public Employee getById(int id) {
         logger.debug("Getting employee by ID: {}", id);
         String sql = "SELECT * FROM employees WHERE id = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
             ResultSet rs = ps.executeQuery();
@@ -218,7 +219,7 @@ public class EmployeeDAO {
         if (truckUnit == null || truckUnit.trim().isEmpty()) return null;
         
         String sql = "SELECT * FROM employees WHERE truck_unit = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, truckUnit.trim());
             ResultSet rs = ps.executeQuery();
@@ -244,7 +245,7 @@ public class EmployeeDAO {
         logger.info("Processing {} employees for import", employees.size());
         List<Employee> resultEmployees = new ArrayList<>();
         
-        try (Connection conn = DriverManager.getConnection(DB_URL)) {
+        try (Connection conn = DatabaseConfig.getConnection()) {
             conn.setAutoCommit(false);
             
             try {
@@ -365,7 +366,7 @@ public class EmployeeDAO {
         if (name == null || name.trim().isEmpty()) return null;
         
         String sql = "SELECT * FROM employees WHERE LOWER(name) = LOWER(?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, name.trim());
             ResultSet rs = ps.executeQuery();

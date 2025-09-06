@@ -1,5 +1,6 @@
 package com.company.payroll.employees;
 
+import javafx.application.Platform;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -47,6 +48,8 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import com.company.payroll.employees.EmployeeDocumentManager;
 import com.company.payroll.config.DOTComplianceConfigDialog;
+import com.company.payroll.employees.EmployeePercentageHistory;
+import com.company.payroll.employees.EmployeePercentageHistoryDAO;
 
 import com.company.payroll.util.WindowAware;
 
@@ -504,6 +507,11 @@ public class EmployeesTab extends BorderPane implements WindowAware {
             okBtn.setDisable(!(nameValid && driverPctValid) || duplicate || dupTruck);
         };
 
+        // Enhanced input validation for percentage fields
+        addPercentageValidation(driverPctField, "Driver %");
+        addPercentageValidation(companyPctField, "Company %");
+        addCurrencyValidation(serviceFeeField, "Service Fee");
+        
         nameField.textProperty().addListener((obs, oldV, newV) -> validate.run());
         truckComboBox.valueProperty().addListener((obs, oldV, newV) -> validate.run());
         driverPctField.textProperty().addListener((obs, oldV, newV) -> validate.run());
@@ -604,6 +612,26 @@ public class EmployeesTab extends BorderPane implements WindowAware {
         dialog.showAndWait();
     }
 
+    /**
+     * Save all pending changes (called during application exit)
+     */
+    public void saveAllPendingChanges() {
+        logger.info("Saving all pending employee changes during application exit");
+        try {
+            // Force refresh table to ensure any pending edits are committed
+            if (table != null) {
+                table.refresh();
+            }
+            
+            // Any additional save logic can be added here
+            // The data is already saved automatically when changes are made via the dialogs
+            
+            logger.info("All pending employee changes saved successfully");
+        } catch (Exception e) {
+            logger.error("Error saving pending employee changes", e);
+        }
+    }
+
     // --- Listener registration for other tabs (e.g. PayrollTab) ---
     public void addEmployeeDataChangeListener(EmployeeDataChangeListener listener) {
         listeners.add(listener);
@@ -665,6 +693,103 @@ public class EmployeesTab extends BorderPane implements WindowAware {
     private double parseDouble(String s) {
         if (s == null || s.trim().isEmpty()) return 0.0;
         return Double.parseDouble(s.trim());
+    }
+    
+    /**
+     * Add percentage validation to a text field (0-100% range)
+     */
+    private void addPercentageValidation(TextField field, String fieldName) {
+        field.textProperty().addListener((obs, oldText, newText) -> {
+            if (newText.isEmpty()) {
+                return;
+            }
+            
+            // Allow digits, decimal point, and % symbol
+            if (!newText.matches("^\\d*\\.?\\d{0,2}%?$")) {
+                field.setText(oldText);
+                return;
+            }
+            
+            // Validate range
+            try {
+                String cleanText = newText.replace("%", "");
+                if (!cleanText.isEmpty()) {
+                    double value = Double.parseDouble(cleanText);
+                    if (value > 100.0) {
+                        field.setText(oldText);
+                        return;
+                    }
+                }
+            } catch (NumberFormatException e) {
+                field.setText(oldText);
+            }
+        });
+        
+        // Add visual feedback
+        field.focusedProperty().addListener((obs, oldFocused, newFocused) -> {
+            if (!newFocused && !field.getText().isEmpty()) {
+                try {
+                    String cleanText = field.getText().replace("%", "");
+                    double value = Double.parseDouble(cleanText);
+                    if (value < 0 || value > 100) {
+                        field.setStyle("-fx-border-color: red; -fx-border-width: 2px;");
+                        field.setTooltip(new Tooltip(fieldName + " must be between 0 and 100"));
+                    } else {
+                        field.setStyle("");
+                        field.setTooltip(null);
+                    }
+                } catch (NumberFormatException e) {
+                    field.setStyle("-fx-border-color: red; -fx-border-width: 2px;");
+                    field.setTooltip(new Tooltip("Invalid " + fieldName + " format"));
+                }
+            }
+        });
+    }
+    
+    /**
+     * Add currency validation to a text field
+     */
+    private void addCurrencyValidation(TextField field, String fieldName) {
+        field.textProperty().addListener((obs, oldText, newText) -> {
+            if (newText.isEmpty()) {
+                return;
+            }
+            
+            // Allow currency symbols, digits, decimal point, and commas
+            if (!newText.matches("^[$€£¥]?\\d{0,8}(,\\d{3})*(\\.\\d{0,2})?$")) {
+                field.setText(oldText);
+                return;
+            }
+            
+            // Prevent extremely large values
+            try {
+                String cleanText = newText.replaceAll("[$€£¥,]", "");
+                if (!cleanText.isEmpty()) {
+                    double value = Double.parseDouble(cleanText);
+                    if (value > 999999.99) {
+                        field.setText(oldText);
+                        return;
+                    }
+                }
+            } catch (NumberFormatException e) {
+                field.setText(oldText);
+            }
+        });
+        
+        // Add visual feedback
+        field.focusedProperty().addListener((obs, oldFocused, newFocused) -> {
+            if (!newFocused && !field.getText().isEmpty()) {
+                try {
+                    String cleanText = field.getText().replaceAll("[$€£¥,]", "");
+                    Double.parseDouble(cleanText);
+                    field.setStyle("");
+                    field.setTooltip(null);
+                } catch (NumberFormatException e) {
+                    field.setStyle("-fx-border-color: red; -fx-border-width: 2px;");
+                    field.setTooltip(new Tooltip("Invalid " + fieldName + " format"));
+                }
+            }
+        });
     }
     
     // Helper method to extract truck unit from combo box display text
@@ -757,11 +882,10 @@ public class EmployeesTab extends BorderPane implements WindowAware {
         Button deleteBtn = createStyledButton("🗑️ Delete", "#F44336");
         Button refreshBtn = createStyledButton("🔄 Refresh", "#00BCD4");
         Button importBtn = createStyledButton("📥 Import CSV/XLSX", "#FF9800");
-        Button percentageBtn = createStyledButton("💰 Configure Percentages", "#FF9800");
         Button exportBtn = createStyledButton("📊 Export", "#9C27B0");
         
         // Setup button actions
-        setupButtonActions(addBtn, editBtn, deleteBtn, refreshBtn, importBtn, percentageBtn, exportBtn);
+        setupButtonActions(addBtn, editBtn, deleteBtn, refreshBtn, importBtn, exportBtn);
         
         Separator separator1 = new Separator(Orientation.VERTICAL);
         separator1.setPadding(new Insets(0, 5, 0, 5));
@@ -774,7 +898,7 @@ public class EmployeesTab extends BorderPane implements WindowAware {
         configureBtn.setOnAction(e -> showDOTComplianceConfiguration());
         
         actionBar.getChildren().addAll(addBtn, editBtn, deleteBtn, separator1, 
-                                      importBtn, percentageBtn, exportBtn, refreshBtn, separator2, configureBtn);
+                                      importBtn, exportBtn, refreshBtn, separator2, configureBtn);
         
         return actionBar;
     }
@@ -1003,17 +1127,29 @@ public class EmployeesTab extends BorderPane implements WindowAware {
     }
     
     /**
-     * Create percentage column with formatting
+     * Create percentage column with effective percentage display
      */
     private TableColumn<Employee, Number> createPercentColumn(String title, String property, int width) {
         TableColumn<Employee, Number> column = new TableColumn<>(title);
         
         if (property.equals("driverPercent")) {
-            column.setCellValueFactory(e -> new SimpleDoubleProperty(e.getValue().getDriverPercent()));
+            column.setCellValueFactory(e -> {
+                Employee emp = e.getValue();
+                double effectivePercent = getEffectivePercentage(emp.getId(), emp.getDriverPercent(), "driver");
+                return new SimpleDoubleProperty(effectivePercent);
+            });
         } else if (property.equals("companyPercent")) {
-            column.setCellValueFactory(e -> new SimpleDoubleProperty(e.getValue().getCompanyPercent()));
+            column.setCellValueFactory(e -> {
+                Employee emp = e.getValue();
+                double effectivePercent = getEffectivePercentage(emp.getId(), emp.getCompanyPercent(), "company");
+                return new SimpleDoubleProperty(effectivePercent);
+            });
         } else if (property.equals("serviceFeePercent")) {
-            column.setCellValueFactory(e -> new SimpleDoubleProperty(e.getValue().getServiceFeePercent()));
+            column.setCellValueFactory(e -> {
+                Employee emp = e.getValue();
+                double effectivePercent = getEffectivePercentage(emp.getId(), emp.getServiceFeePercent(), "service");
+                return new SimpleDoubleProperty(effectivePercent);
+            });
         }
         
         column.setCellFactory(col -> new TableCell<Employee, Number>() {
@@ -1022,14 +1158,72 @@ public class EmployeesTab extends BorderPane implements WindowAware {
                 super.updateItem(item, empty);
                 if (empty || item == null) {
                     setText(null);
+                    setStyle("");
+                    setTooltip(null);
                 } else {
-                    setText(String.format("%.1f%%", item.doubleValue()));
+                    double value = item.doubleValue();
+                    setText(String.format("%.1f%%", value));
+                    
+                    // Check if this is a configured percentage (different from base)
+                    if (getTableRow() != null && getTableRow().getItem() != null) {
+                        Employee emp = (Employee) getTableRow().getItem();
+                        double basePercent = 0;
+                        boolean isConfigured = false;
+                        
+                        if (property.equals("driverPercent")) {
+                            basePercent = emp.getDriverPercent();
+                        } else if (property.equals("companyPercent")) {
+                            basePercent = emp.getCompanyPercent();
+                        } else if (property.equals("serviceFeePercent")) {
+                            basePercent = emp.getServiceFeePercent();
+                        }
+                        
+                        // If effective percentage differs from base, it's configured
+                        if (Math.abs(value - basePercent) > 0.01) {
+                            isConfigured = true;
+                        }
+                        
+                        if (isConfigured) {
+                            // Highlight configured percentages with a blue background
+                            setStyle("-fx-background-color: #E3F2FD; -fx-font-weight: bold;");
+                            setTooltip(new Tooltip("Configured percentage (effective rate)"));
+                        } else {
+                            setStyle("");
+                            setTooltip(null);
+                        }
+                    }
                 }
             }
         });
         
         column.setPrefWidth(width);
         return column;
+    }
+    
+    /**
+     * Get the effective percentage for an employee on the current date
+     */
+    private double getEffectivePercentage(int employeeId, double basePercentage, String percentageType) {
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:payroll.db")) {
+            EmployeePercentageHistoryDAO percentageDAO = new EmployeePercentageHistoryDAO(conn);
+            EmployeePercentageHistory history = percentageDAO.getEffectivePercentages(employeeId, LocalDate.now());
+            
+            if (history != null) {
+                switch (percentageType) {
+                    case "driver":
+                        return history.getDriverPercent();
+                    case "company":
+                        return history.getCompanyPercent();
+                    case "service":
+                        return history.getServiceFeePercent();
+                    default:
+                        return basePercentage;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not get effective percentages for employee {}: {}", employeeId, e.getMessage());
+        }
+        return basePercentage;
     }
     
     /**
@@ -1276,7 +1470,7 @@ public class EmployeesTab extends BorderPane implements WindowAware {
      * Setup button actions
      */
     private void setupButtonActions(Button addBtn, Button editBtn, Button deleteBtn, 
-                                   Button refreshBtn, Button importBtn, Button percentageBtn, Button exportBtn) {
+                                   Button refreshBtn, Button importBtn, Button exportBtn) {
         addBtn.setOnAction(e -> {
             logger.info("Add employee button clicked");
             showEmployeeDialog(null, true);
@@ -1314,16 +1508,6 @@ public class EmployeesTab extends BorderPane implements WindowAware {
             showImportDialog();
         });
         
-        percentageBtn.setOnAction(e -> {
-            Employee selected = table.getSelectionModel().getSelectedItem();
-            if (selected != null) {
-                showPercentageConfiguration(selected);
-            } else {
-                showAlert(Alert.AlertType.WARNING, "No Selection", 
-                         "Please select an employee to configure percentages.");
-            }
-        });
-        
         exportBtn.setOnAction(e -> {
             logger.info("Export button clicked");
             showExportDialog();
@@ -1354,28 +1538,7 @@ public class EmployeesTab extends BorderPane implements WindowAware {
         });
     }
     
-    /**
-     * Show percentage configuration dialog
-     */
-    private void showPercentageConfiguration(Employee employee) {
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:payroll.db")) {
-            PercentageConfigurationDialog dialog = new PercentageConfigurationDialog(conn);
-            dialog.showAndWait().ifPresent(result -> {
-                if (result != null && !result.isEmpty()) {
-                    refreshData();
-                    statusLabel.setText("Percentages updated for: " + employee.getName());
-                }
-            });
-        } catch (SQLException ex) {
-            logger.error("Failed to open percentage configuration dialog", ex);
-            Alert alert = new Alert(Alert.AlertType.ERROR, 
-                "Failed to open percentage configuration: " + ex.getMessage(), 
-                ButtonType.OK);
-            alert.setHeaderText("Database Error");
-            alert.showAndWait();
-        }
-    }
-    
+
     /**
      * Refresh data from database
      */
@@ -1384,6 +1547,44 @@ public class EmployeesTab extends BorderPane implements WindowAware {
         notifyEmployeeDataChanged();
         updateRecordCount();
         statusLabel.setText("Data refreshed");
+    }
+    
+    /**
+     * Public method to refresh data with effective percentages from external sources (like PayrollTab)
+     * This method ensures that the table displays the current effective percentages
+     */
+    public void refreshDataWithEffectivePercentages() {
+        logger.info("Refreshing employee data with effective percentages");
+        
+        // Refresh the employee list from database
+        employees.setAll(dao.getAll());
+        
+        // Force table refresh to show updated percentages
+        if (table != null) {
+            table.refresh();
+            
+            // Show a brief notification about the percentage update
+            Platform.runLater(() -> {
+                statusLabel.setText("✅ Percentages updated - showing effective rates");
+                statusLabel.setStyle("-fx-text-fill: #2196F3; -fx-font-weight: bold;");
+                
+                // Reset status label after 3 seconds
+                Timeline timeline = new Timeline(new KeyFrame(
+                    Duration.seconds(3),
+                    ae -> {
+                        statusLabel.setText("Ready");
+                        statusLabel.setStyle("");
+                    }
+                ));
+                timeline.play();
+            });
+        }
+        
+        // Notify listeners about the data change
+        notifyEmployeeDataChanged();
+        updateRecordCount();
+        
+        logger.info("Employee data refreshed with {} employees", employees.size());
     }
     
     /**
@@ -1760,47 +1961,53 @@ public class EmployeesTab extends BorderPane implements WindowAware {
         // Handle completion
         importTask.setOnSucceeded(e -> {
             ImportResult result = importTask.getValue();
-            progressDialog.close();
             
-            // Use the saved employees that already have proper IDs
-            List<Employee> savedEmployees = result.savedEmployees;
-            logger.info("Import completed with {} employees, refreshing UI", savedEmployees.size());
-            
-            // Log IDs for debugging
-            for (Employee emp : savedEmployees) {
-                logger.debug("Employee in result: {} (ID: {})", emp.getName(), emp.getId());
-            }
-            
-            // Clear and reload the observable list with the correct data
-            employees.clear();
-            employees.addAll(savedEmployees);
-            logger.info("Updated observable list with {} employees", employees.size());
-            
-            // Force table refresh to show changes immediately
-            if (table != null) {
-                table.refresh();
-            }
-            
-            // Notify data change listeners
-            notifyEmployeeDataChanged();
-            
-            // Update record count
-            updateRecordCount();
-            
-            // Show results
-            showImportResults(result, selectedFile.getName());
+            // Ensure all UI updates happen on JavaFX Application Thread
+            Platform.runLater(() -> {
+                progressDialog.close();
+                
+                // Use the saved employees that already have proper IDs
+                List<Employee> savedEmployees = result.savedEmployees;
+                logger.info("Import completed with {} employees, refreshing UI", savedEmployees.size());
+                
+                // Log IDs for debugging
+                for (Employee emp : savedEmployees) {
+                    logger.debug("Employee in result: {} (ID: {})", emp.getName(), emp.getId());
+                }
+                
+                // Clear and reload the observable list with the correct data
+                employees.clear();
+                employees.addAll(savedEmployees);
+                logger.info("Updated observable list with {} employees", employees.size());
+                
+                // Force table refresh to show changes immediately
+                if (table != null) {
+                    table.refresh();
+                }
+                
+                // Notify data change listeners
+                notifyEmployeeDataChanged();
+                
+                // Update record count
+                updateRecordCount();
+                
+                // Show results
+                showImportResults(result, selectedFile.getName());
+            });
         });
         
         importTask.setOnFailed(e -> {
-            progressDialog.close();
-            Throwable error = importTask.getException();
-            logger.error("Import failed", error);
-            
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle("Import Error");
-            alert.setHeaderText("Failed to import employees");
-            alert.setContentText("Error: " + error.getMessage());
-            alert.showAndWait();
+            Platform.runLater(() -> {
+                progressDialog.close();
+                Throwable error = importTask.getException();
+                logger.error("Import failed", error);
+                
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Import Error");
+                alert.setHeaderText("Failed to import employees");
+                alert.setContentText("Error: " + error.getMessage());
+                alert.showAndWait();
+            });
         });
         
         // Handle cancellation

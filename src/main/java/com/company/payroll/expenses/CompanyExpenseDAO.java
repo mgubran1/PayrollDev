@@ -1,6 +1,7 @@
 package com.company.payroll.expenses;
 
 import com.company.payroll.exception.DataAccessException;
+import com.company.payroll.database.DatabaseConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +24,7 @@ public class CompanyExpenseDAO {
     }
 
     private void initializeDatabase() {
-        try (Connection conn = DriverManager.getConnection(DB_URL); Statement stmt = conn.createStatement()) {
+        try (Connection conn = DatabaseConfig.getConnection(); Statement stmt = conn.createStatement()) {
             String sql = """
                 CREATE TABLE IF NOT EXISTS company_expenses (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +78,7 @@ public class CompanyExpenseDAO {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             
             setParameters(ps, expense);
@@ -106,7 +107,7 @@ public class CompanyExpenseDAO {
             WHERE id=?
         """;
         
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             
             // Set all parameters except created_at
@@ -138,7 +139,7 @@ public class CompanyExpenseDAO {
 
     public void delete(int id) {
         String sql = "DELETE FROM company_expenses WHERE id=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
             int affected = ps.executeUpdate();
@@ -155,7 +156,7 @@ public class CompanyExpenseDAO {
 
     public CompanyExpense findById(int id) {
         String sql = "SELECT * FROM company_expenses WHERE id=?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, id);
             ResultSet rs = ps.executeQuery();
@@ -172,7 +173,7 @@ public class CompanyExpenseDAO {
     public List<CompanyExpense> getAll() {
         List<CompanyExpense> list = new ArrayList<>();
         String sql = "SELECT * FROM company_expenses ORDER BY expense_date DESC";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
@@ -189,7 +190,7 @@ public class CompanyExpenseDAO {
     public List<CompanyExpense> findByDateRange(LocalDate start, LocalDate end) {
         List<CompanyExpense> list = new ArrayList<>();
         String sql = "SELECT * FROM company_expenses WHERE expense_date >= ? AND expense_date <= ? ORDER BY expense_date DESC";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setDate(1, Date.valueOf(start));
             ps.setDate(2, Date.valueOf(end));
@@ -208,7 +209,7 @@ public class CompanyExpenseDAO {
     public List<CompanyExpense> findByVendor(String vendor) {
         List<CompanyExpense> list = new ArrayList<>();
         String sql = "SELECT * FROM company_expenses WHERE vendor LIKE ? ORDER BY expense_date DESC";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, "%" + vendor + "%");
             ResultSet rs = ps.executeQuery();
@@ -225,7 +226,7 @@ public class CompanyExpenseDAO {
     public List<CompanyExpense> findByCategory(String category) {
         List<CompanyExpense> list = new ArrayList<>();
         String sql = "SELECT * FROM company_expenses WHERE category = ? ORDER BY expense_date DESC";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, category);
             ResultSet rs = ps.executeQuery();
@@ -242,7 +243,7 @@ public class CompanyExpenseDAO {
     public List<CompanyExpense> findByStatus(String status) {
         List<CompanyExpense> list = new ArrayList<>();
         String sql = "SELECT * FROM company_expenses WHERE status = ? ORDER BY expense_date DESC";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status);
             ResultSet rs = ps.executeQuery();
@@ -259,7 +260,7 @@ public class CompanyExpenseDAO {
     public List<CompanyExpense> findRecurringExpenses() {
         List<CompanyExpense> list = new ArrayList<>();
         String sql = "SELECT * FROM company_expenses WHERE recurring = 1 ORDER BY expense_date DESC";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
@@ -274,7 +275,7 @@ public class CompanyExpenseDAO {
 
     public double getTotalExpensesByDateRange(LocalDate start, LocalDate end) {
         String sql = "SELECT SUM(amount) FROM company_expenses WHERE expense_date >= ? AND expense_date <= ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DatabaseConfig.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setDate(1, Date.valueOf(start));
             ps.setDate(2, Date.valueOf(end));

@@ -18,15 +18,15 @@ import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
+import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.VPos;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import javafx.scene.input.*;
 import javafx.scene.layout.*;
-import javafx.scene.layout.FlowPane;
-import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
 import javafx.geometry.Orientation;
 import javafx.scene.shape.Circle;
@@ -76,8 +76,6 @@ public class DriverGridTabEnhanced extends DriverGridTab {
     private final ObservableList<String> allCustomers = FXCollections.observableArrayList();
     private final Map<String, List<LoadConflict>> conflictMap = new HashMap<>();
     private LocalDate weekStart = LocalDate.now().with(DayOfWeek.SUNDAY);
-    private Employee selectedDriver;
-    private String selectedCustomer;
     
     // DAOs
     private final EmployeeDAO employeeDAO = new EmployeeDAO();
@@ -122,8 +120,13 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         
         // Load CSS styling - use the main styles.css file that contains the layout styles
         try {
-            String css = getClass().getResource("/styles.css").toExternalForm();
-            mainLayout.getStylesheets().add(css);
+            // Base styles
+            String baseCss = getClass().getResource("/styles.css").toExternalForm();
+            mainLayout.getStylesheets().add(baseCss);
+
+            // Responsive driver grid styles
+            String responsiveCss = getClass().getResource("/css/driver-grid-responsive.css").toExternalForm();
+            mainLayout.getStylesheets().add(responsiveCss);
         } catch (Exception e) {
             logger.warn("Could not load driver grid CSS", e);
         }
@@ -142,70 +145,104 @@ public class DriverGridTabEnhanced extends DriverGridTab {
     }
     
     private void setupUI() {
-        // Top panel with controls
-        topPanel.setPadding(new Insets(15));
-        topPanel.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
+        // Top panel with controls - collapsible
+        topPanel.setPadding(new Insets(0));
+        topPanel.setStyle("-fx-background-color: #f8fafc;");
         
-        // Main header with title, week navigation, filters, and action buttons
-        HBox mainHeader = new HBox(20);
-        mainHeader.setAlignment(Pos.CENTER_LEFT);
-        mainHeader.getStyleClass().add("driver-grid-main-header");
-        mainHeader.setFillHeight(false);
-        mainHeader.setSpacing(20);
+        // Create collapsible header container
+        VBox headerContainer = new VBox(0);
+        headerContainer.getStyleClass().add("driver-grid-header-container");
+        headerContainer.getStyleClass().add("driver-grid-header-expanded"); // Default to expanded
         
-        // Title
+        // Header toggle button row
+        HBox toggleRow = new HBox(10);
+        toggleRow.setAlignment(Pos.CENTER_LEFT);
+        toggleRow.setPadding(new Insets(5, 10, 5, 10));
+        
+        // Title in toggle row (always visible)
         Label titleLabel = new Label("Driver Scheduling Grid");
-        titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
-        titleLabel.setTextFill(Color.web("#1e293b"));
         titleLabel.getStyleClass().add("driver-grid-title");
         
-        // Week navigation controls
-        HBox weekControls = new HBox(10);
+        // Week range display (always visible)
+        weekRangeLabel = new Label();
+        weekRangeLabel.getStyleClass().add("driver-grid-week-range");
+        updateWeekRangeLabel(weekRangeLabel);
+        HBox.setHgrow(weekRangeLabel, Priority.ALWAYS);
+        
+        // Header toggle button
+        Button toggleHeaderBtn = new Button("▼"); // Down arrow for collapse
+        toggleHeaderBtn.getStyleClass().add("driver-grid-collapse-btn");
+        toggleHeaderBtn.setTooltip(new Tooltip("Collapse/Expand Header"));
+        
+        // Compact view button
+        Button compactViewBtn = new Button("📱 Compact View");
+        compactViewBtn.getStyleClass().add("driver-grid-compact-view-btn");
+        compactViewBtn.setOnAction(e -> showCompactView());
+        
+        // Add components to toggle row
+        toggleRow.getChildren().addAll(titleLabel, weekRangeLabel, compactViewBtn, toggleHeaderBtn);
+        
+        // Main header content that will be hidden/shown
+        VBox headerContent = new VBox(5);
+        headerContent.setPadding(new Insets(5, 10, 10, 10));
+        
+        // Week navigation controls in a FlowPane for better wrapping
+        FlowPane weekControls = new FlowPane(5, 5);
         weekControls.setAlignment(Pos.CENTER_LEFT);
         weekControls.getStyleClass().add("driver-grid-week-nav");
-        Button prevWeekBtn = new Button("◀ Previous");
-        prevWeekBtn.setStyle("-fx-background-color: #f3f4f6; -fx-text-fill: #374151; -fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;");
-        Button todayBtn = new Button("Today");
-        todayBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;");
-        Button nextWeekBtn = new Button("Next ▶");
-        nextWeekBtn.setStyle("-fx-background-color: #f3f4f6; -fx-text-fill: #374151; -fx-font-weight: bold; -fx-padding: 6 12 6 12; -fx-background-radius: 4; -fx-cursor: hand;");
-        weekPicker.setValue(weekStart);
-        weekPicker.setPrefWidth(150);
-        weekPicker.setEditable(false);
-        weekRangeLabel = new Label();
-        weekRangeLabel.setFont(Font.font("Segoe UI", FontWeight.MEDIUM, 14));
-        updateWeekRangeLabel(weekRangeLabel);
-        weekControls.getChildren().addAll(prevWeekBtn, todayBtn, weekPicker, nextWeekBtn, new Separator(javafx.geometry.Orientation.VERTICAL), weekRangeLabel);
+        weekControls.setPrefWrapLength(400);
         
-        // Filters inline with week controls
-        FlowPane filtersBox = new FlowPane(Orientation.HORIZONTAL, 10, 5);
-        filtersBox.setPrefWrapLength(500);
+        Button prevWeekBtn = new Button("◀");
+        prevWeekBtn.getStyleClass().add("driver-grid-nav-button");
+        prevWeekBtn.setTooltip(new Tooltip("Previous Week"));
+        
+        Button todayBtn = new Button("Today");
+        todayBtn.getStyleClass().add("driver-grid-nav-button");
+        todayBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white;");
+        
+        Button nextWeekBtn = new Button("▶");
+        nextWeekBtn.getStyleClass().add("driver-grid-nav-button");
+        nextWeekBtn.setTooltip(new Tooltip("Next Week"));
+        
+        weekPicker.setValue(weekStart);
+        weekPicker.setPrefWidth(120);
+        weekPicker.setEditable(false);
+        
+        weekControls.getChildren().addAll(prevWeekBtn, todayBtn, weekPicker, nextWeekBtn);
+        
+        // Filters in a FlowPane for better wrapping
+        FlowPane filtersBox = new FlowPane(5, 5);
         filtersBox.setAlignment(Pos.CENTER_LEFT);
         filtersBox.getStyleClass().add("driver-grid-search-section");
-        searchField.setPromptText("Search by load #, driver, truck, customer...");
-        searchField.setPrefWidth(200);
+        filtersBox.setPrefWrapLength(700);
+        
+        searchField.setPromptText("Search...");
         searchField.getStyleClass().add("driver-grid-search-field");
+        
         driverFilterBox.setPromptText("All Drivers");
-        driverFilterBox.setPrefWidth(140);
-        driverFilterBox.setItems(allDrivers);
         driverFilterBox.getStyleClass().add("driver-grid-filter-combo");
+        driverFilterBox.setItems(allDrivers);
         setupDriverComboBox(driverFilterBox);
+        
         customerFilterBox.setPromptText("All Customers");
-        customerFilterBox.setPrefWidth(140);
-        customerFilterBox.setItems(allCustomers);
         customerFilterBox.getStyleClass().add("driver-grid-filter-combo");
+        customerFilterBox.setItems(allCustomers);
+        
         statusFilterBox.setPromptText("All Statuses");
-        statusFilterBox.setPrefWidth(120);
+        statusFilterBox.getStyleClass().add("driver-grid-filter-combo");
         statusFilterBox.getItems().clear();
         statusFilterBox.getItems().add(null); // All option
         statusFilterBox.getItems().addAll(Load.Status.values());
         statusFilterBox.setCellFactory(cb -> new StatusListCell());
         statusFilterBox.setButtonCell(new StatusListCell());
-        statusFilterBox.getStyleClass().add("driver-grid-filter-combo");
-        Button clearFiltersBtn = new Button("Clear Filters");
-        clearFiltersBtn.getStyleClass().add("driver-grid-action-button");
+        
         showConflictsOnly.getStyleClass().add("driver-grid-checkbox");
         showUnassignedLoads.getStyleClass().add("driver-grid-checkbox");
+        
+        Button clearFiltersBtn = new Button("Clear");
+        clearFiltersBtn.getStyleClass().add("driver-grid-action-button-secondary");
+        
+        // Add filter components to filters box
         filtersBox.getChildren().addAll(
             new Label("Search:"), searchField,
             new Label("Driver:"), driverFilterBox,
@@ -214,61 +251,90 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             showConflictsOnly, showUnassignedLoads, clearFiltersBtn
         );
         
-        // Combine week controls and filters into a single row that can wrap on small windows
-        FlowPane weekAndFiltersBox = new FlowPane(Orientation.HORIZONTAL, 30, 10);
-        weekAndFiltersBox.setPrefWrapLength(600);
-        weekAndFiltersBox.setAlignment(Pos.CENTER_LEFT);
-        weekAndFiltersBox.getChildren().addAll(weekControls, filtersBox);
-        
-        // Right side: Action buttons and summary statistics
-        VBox rightSide = new VBox(15);
-        rightSide.setAlignment(Pos.TOP_RIGHT);
-        rightSide.getStyleClass().add("driver-grid-right-side");
-        rightSide.setSpacing(15);
-        HBox actionBox = new HBox(10);
+        // Action buttons in a FlowPane for better wrapping
+        FlowPane actionBox = new FlowPane(5, 5);
         actionBox.setAlignment(Pos.CENTER_RIGHT);
         actionBox.getStyleClass().add("driver-grid-action-buttons");
-        actionBox.setSpacing(10);
-        Button scheduleLoadBtn = new Button("📅 Schedule Load");
+        actionBox.setPrefWrapLength(500);
+        
+        Button scheduleLoadBtn = new Button("📅 Schedule");
         scheduleLoadBtn.getStyleClass().add("driver-grid-action-button");
-        Button assignDriverBtn = new Button("👤 Assign Driver");
+        
+        Button assignDriverBtn = new Button("👤 Assign");
         assignDriverBtn.getStyleClass().add("driver-grid-action-button");
-        Button exportBtn = new Button("📊 Export Schedule");
+        
+        Button exportBtn = new Button("📊 Export");
         exportBtn.getStyleClass().add("driver-grid-action-button");
-        Button printBtn = new Button("🖨 Print View");
+        
+        Button printBtn = new Button("🖨 Print");
         printBtn.getStyleClass().add("driver-grid-action-button");
-        Button refreshBtn = new Button("🔄 Refresh");
+        
+        Button refreshBtn = new Button("🔄");
         refreshBtn.getStyleClass().add("driver-grid-action-button");
-        CheckBox autoRefreshCheck = new CheckBox("Auto-refresh");
+        refreshBtn.setTooltip(new Tooltip("Refresh Data"));
+        
+        CheckBox autoRefreshCheck = new CheckBox("Auto");
         autoRefreshCheck.setSelected(true);
-        autoRefreshCheck.getStyleClass().add("driver-grid-auto-refresh");
+        autoRefreshCheck.getStyleClass().add("driver-grid-checkbox");
+        autoRefreshCheck.setTooltip(new Tooltip("Auto-refresh"));
+        
         autoRefreshCheck.selectedProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal) { startAutoRefresh(); } else { stopAutoRefresh(); }
         });
+        
         actionBox.getChildren().addAll(scheduleLoadBtn, assignDriverBtn, exportBtn, printBtn, refreshBtn, autoRefreshCheck);
-        HBox summaryBox = createSummaryCards();
+        
+        // Layout the header content
+        HBox controlsRow = new HBox(10);
+        controlsRow.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(filtersBox, Priority.ALWAYS);
+        controlsRow.getChildren().addAll(weekControls, filtersBox);
+        
+        // Add summary cards to a separate row
+        FlowPane summaryBox = createSummaryCards();
         summaryBox.getStyleClass().add("driver-grid-summary-container");
-        summaryBox.setSpacing(15);
+        
+        // Multi-stop indicator label
         Label multiStopTip = new Label("- Multi-stop load indicator");
-        multiStopTip.setFont(Font.font("Segoe UI", 11));
-        multiStopTip.setTextFill(Color.web("#64748b"));
-        multiStopTip.setPadding(new Insets(5, 0, 0, 0));
         multiStopTip.getStyleClass().add("driver-grid-multi-stop-indicator");
-        rightSide.getChildren().addAll(actionBox, summaryBox, multiStopTip);
         
-        // Add title, week/filters, and right side to main header
-        mainHeader.getChildren().addAll(titleLabel, weekAndFiltersBox, rightSide);
-        HBox.setHgrow(weekAndFiltersBox, Priority.ALWAYS);
-        HBox.setHgrow(rightSide, Priority.NEVER);
+        // Add all components to header content
+        headerContent.getChildren().addAll(controlsRow, actionBox, summaryBox, multiStopTip);
         
-        // Add main header to top panel
+        // Add toggle row and content to header container
+        headerContainer.getChildren().addAll(toggleRow, headerContent);
+        
+        // Add header container to top panel
         topPanel.getChildren().clear();
-        topPanel.getChildren().add(mainHeader);
+        topPanel.getChildren().add(headerContainer);
         
-        // Week grid setup
+        // Week grid setup with enhanced responsive layout
         setupWeekGrid();
         mainLayout.setTop(topPanel);
         mainLayout.setCenter(weekGridScrollPane);
+        
+        // Toggle header collapsible functionality
+        toggleHeaderBtn.setOnAction(e -> {
+            boolean isExpanded = headerContainer.getStyleClass().contains("driver-grid-header-expanded");
+            if (isExpanded) {
+                // Collapse the header
+                headerContainer.getStyleClass().remove("driver-grid-header-expanded");
+                headerContainer.getStyleClass().add("driver-grid-header-collapsed");
+                headerContent.setVisible(false);
+                headerContent.setManaged(false);
+                toggleHeaderBtn.setText("▲"); // Up arrow for expand
+            } else {
+                // Expand the header
+                headerContainer.getStyleClass().remove("driver-grid-header-collapsed");
+                headerContainer.getStyleClass().add("driver-grid-header-expanded");
+                headerContent.setVisible(true);
+                headerContent.setManaged(true);
+                toggleHeaderBtn.setText("▼"); // Down arrow for collapse
+            }
+        });
+        
+        // Add CSS class for dynamic responsive design
+        mainLayout.getStyleClass().add("driver-grid-desktop"); // Default class
         
         // Event handlers for controls
         prevWeekBtn.setOnAction(e -> navigateWeek(-1));
@@ -286,51 +352,85 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         assignDriverBtn.setOnAction(e -> showBulkAssignDialog());
         exportBtn.setOnAction(e -> exportSchedule());
         printBtn.setOnAction(e -> printSchedule());
+        
+        // Setup window resize listener for responsive design
+        setupWindowSizeListener();
     }
     
+    private void setupWindowSizeListener() {
+        mainLayout.widthProperty().addListener((obs, oldVal, newVal) -> {
+            double width = newVal.doubleValue();
+            applyResponsiveBreakpoint(width);
+        });
+    }
+
+    private void applyResponsiveBreakpoint(double width) {
+        // Clear all breakpoint classes
+        mainLayout.getStyleClass().removeAll(
+            "driver-grid-mobile", 
+            "driver-grid-tablet", 
+            "driver-grid-desktop", 
+            "driver-grid-wide"
+        );
+        
+        // Apply appropriate class based on width
+        if (width < 768) {
+            mainLayout.getStyleClass().add("driver-grid-mobile");
+            logger.info("Applied mobile breakpoint");
+        } else if (width < 1024) {
+            mainLayout.getStyleClass().add("driver-grid-tablet");
+            logger.info("Applied tablet breakpoint");
+        } else if (width < 1440) {
+            mainLayout.getStyleClass().add("driver-grid-desktop");
+            logger.info("Applied desktop breakpoint");
+        } else {
+            mainLayout.getStyleClass().add("driver-grid-wide");
+            logger.info("Applied wide breakpoint");
+        }
+        
+        // Force layout update
+        updateWeekGrid();
+    }
+
     private void setupWeekGrid() {
         // Create main container for the entire grid system
         VBox gridSystemContainer = new VBox(0);
-        gridSystemContainer.setStyle("-fx-background-color: #f8fafc;");
+        gridSystemContainer.getStyleClass().add("driver-grid-container");
         VBox.setVgrow(gridSystemContainer, Priority.ALWAYS);
         
-        
-        // Configure main grid for driver/load data
+        // Configure main grid with responsive column constraints
         weekGrid.setHgap(1);
         weekGrid.setVgap(1);
-        weekGrid.setStyle("-fx-background-color: #e2e8f0;");
+        weekGrid.getStyleClass().add("driver-grid-week-grid");
         weekGrid.setPadding(new Insets(0, 1, 1, 1));
         
-        // Create scroll pane for main grid content only
+        // Create enhanced scroll pane for the grid
         weekGridScrollPane.setContent(weekGrid);
-        weekGridScrollPane.setFitToWidth(false);
+        weekGridScrollPane.getStyleClass().add("driver-grid-scroll-pane");
+        weekGridScrollPane.setFitToWidth(true);
         weekGridScrollPane.setFitToHeight(false);
         weekGridScrollPane.setPannable(true);
         weekGridScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         weekGridScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.ALWAYS);
-        weekGridScrollPane.setStyle("-fx-background: #f8fafc; -fx-background-color: #f8fafc;");
         weekGridScrollPane.setMinHeight(400);
         weekGridScrollPane.setPrefHeight(600);
         weekGridScrollPane.setCache(true);
         weekGridScrollPane.setCacheHint(CacheHint.SPEED);
-        weekGridScrollPane.viewportBoundsProperty().addListener((obs, o, n) -> adjustDayColumnWidths());
-        
         
         // Ensure scroll pane expands
         VBox.setVgrow(weekGridScrollPane, Priority.ALWAYS);
         
         // Add scrollable content to container
         gridSystemContainer.getChildren().add(weekGridScrollPane);
-
+        
         // Set as center content
         mainLayout.setCenter(gridSystemContainer);
-
-        adjustDayColumnWidths();
     }
     
-    private HBox createSummaryCards() {
-        HBox summaryBox = new HBox(15);
-        summaryBox.setPadding(new Insets(15, 0, 0, 0));
+    private FlowPane createSummaryCards() {
+        FlowPane summaryBox = new FlowPane(15, 15);
+        summaryBox.setPrefWrapLength(650);
+        summaryBox.setAlignment(Pos.CENTER);
         
         // Total loads card
         VBox totalLoadsCard = createSummaryCard("📦", "Total Loads", "0", "#3b82f6");
@@ -406,9 +506,6 @@ public class DriverGridTabEnhanced extends DriverGridTab {
                 }
             }
         });
-
-        comboBox.setMinWidth(140);
-        comboBox.setMaxWidth(Double.MAX_VALUE);
     }
     
     private void setupEventHandlers() {
@@ -418,9 +515,6 @@ public class DriverGridTabEnhanced extends DriverGridTab {
                 refreshData();
             }
         });
-
-        // Adjust column widths when the window size changes
-        mainLayout.widthProperty().addListener((obs, oldV, newV) -> adjustDayColumnWidths());
         
         // Drag and drop setup will be added here
         setupDragAndDrop();
@@ -470,9 +564,6 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         
         // Also check at midnight for date changes
         scheduleTaskAtMidnight();
-
-        // Ensure column widths adjust if week changes
-        weekCheckTimeline.currentTimeProperty().addListener((obs, o, n) -> adjustDayColumnWidths());
     }
     
     private void scheduleTaskAtMidnight() {
@@ -648,13 +739,13 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             }
             
             // Driver filter
-            selectedDriver = driverFilterBox.getValue();
+            Employee selectedDriver = driverFilterBox.getValue();
             if (selectedDriver != null && !driver.equals(selectedDriver)) {
                 return false;
             }
             
             // Customer filter
-            selectedCustomer = customerFilterBox.getValue();
+            String selectedCustomer = customerFilterBox.getValue();
             if (selectedCustomer != null && !selectedCustomer.equals(load.getCustomer())) {
                 return false;
             }
@@ -691,18 +782,19 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         weekGrid.getColumnConstraints().clear();
         weekGrid.getRowConstraints().clear();
         
-        // Column constraints with fixed widths
+        // Enhanced responsive column sizing
         ColumnConstraints driverCol = new ColumnConstraints();
-        driverCol.setMinWidth(200);
-        driverCol.setPrefWidth(200);
-        driverCol.setMaxWidth(200);
-        driverCol.setHgrow(Priority.NEVER);
+        driverCol.setMinWidth(150);
+        driverCol.setPercentWidth(18);
+        driverCol.setHgrow(Priority.SOMETIMES);
         weekGrid.getColumnConstraints().add(driverCol);
-        
+
+        // All day columns should have equal width
+        double dayPercent = 82.0 / 7.0; // distribute remaining width
         for (int i = 0; i < 7; i++) {
             ColumnConstraints dayCol = new ColumnConstraints();
-            dayCol.setMinWidth(150);
-            dayCol.setPrefWidth(150);
+            dayCol.setMinWidth(100);
+            dayCol.setPercentWidth(dayPercent);
             dayCol.setHgrow(Priority.ALWAYS);
             weekGrid.getColumnConstraints().add(dayCol);
         }
@@ -752,6 +844,38 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             rowConstraint.setPrefHeight(120);
             rowConstraint.setVgrow(Priority.SOMETIMES);
             weekGrid.getRowConstraints().add(rowConstraint);
+            
+            // Add horizontal row separator after each driver (except the last one)
+            if (sortedDrivers.indexOf(driver) < sortedDrivers.size() - 1) {
+                Region rowSeparator = new Region();
+                rowSeparator.getStyleClass().add("driver-grid-row-separator");
+                rowSeparator.setPrefHeight(1);
+                rowSeparator.setMaxWidth(Double.MAX_VALUE);  // Ensure it spans full width
+                rowSeparator.setMouseTransparent(true); // Make sure it doesn't block mouse events
+                GridPane.setColumnSpan(rowSeparator, 8); // Span all columns
+                GridPane.setRowIndex(rowSeparator, rowIndex - 1);
+                GridPane.setValignment(rowSeparator, VPos.BOTTOM);
+                weekGrid.getChildren().add(0, rowSeparator); // Add at the bottom of z-order
+            }
+        }
+        
+        // If there are no drivers/loads, show an empty grid with placeholder cells
+        if (sortedDrivers.isEmpty()) {
+            addEmptyGridPlaceholder();
+        }
+        
+        // Add vertical day separators
+        for (int colIndex = 1; colIndex < 7; colIndex++) {
+            // Skip the first and last column as they don't need separators
+            Region colSeparator = new Region();
+            colSeparator.getStyleClass().add("driver-grid-day-divider");
+            colSeparator.setPrefWidth(1);
+            colSeparator.setMaxHeight(Double.MAX_VALUE);
+            colSeparator.setMouseTransparent(true); // Make sure it doesn't block mouse events
+            GridPane.setColumnIndex(colSeparator, colIndex);
+            GridPane.setRowSpan(colSeparator, rowIndex);
+            GridPane.setHalignment(colSeparator, HPos.LEFT);
+            weekGrid.getChildren().add(0, colSeparator); // Add at the bottom of z-order
         }
         
         // If we have many drivers (e.g., handling 80+ loads), ensure smooth scrolling
@@ -759,35 +883,75 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             weekGrid.setCache(true);
             weekGrid.setCacheHint(CacheHint.SPEED);
         }
-
-        adjustDayColumnWidths();
     }
 
-    private double dayCellWidth = 150;
-
-    private void adjustDayColumnWidths() {
-        double viewportWidth = weekGridScrollPane.getViewportBounds().getWidth();
-        if (viewportWidth == 0) {
-            return;
-        }
-        double available = viewportWidth - 200; // subtract driver column
-        double newWidth = Math.max(150, available / 7);
-        dayCellWidth = newWidth;
-        ObservableList<ColumnConstraints> cols = weekGrid.getColumnConstraints();
-        if (cols.size() == 8) {
-            for (int i = 1; i < cols.size(); i++) {
-                ColumnConstraints cc = cols.get(i);
-                cc.setPrefWidth(dayCellWidth);
-                cc.setMinWidth(dayCellWidth);
+    /**
+     * Add placeholder cells when grid is empty
+     */
+    private void addEmptyGridPlaceholder() {
+        // Add one empty row with placeholder cells
+        for (int colIndex = 1; colIndex <= 7; colIndex++) {
+            final int col = colIndex; // Make it effectively final for lambda
+            
+            StackPane emptyCell = new StackPane();
+            emptyCell.getStyleClass().add("driver-grid-day-cell");
+            emptyCell.getStyleClass().add("driver-grid-empty-cell");
+            
+            Label placeholderLabel = new Label("No loads scheduled");
+            placeholderLabel.setTextFill(Color.web("#9ca3af"));
+            placeholderLabel.setFont(Font.font("Segoe UI", FontPosture.ITALIC, 12));
+            
+            if (col == 4) { // Only add the label in the middle column
+                emptyCell.getChildren().add(placeholderLabel);
             }
+            
+            // Make cells clickable to add loads
+            Button addBtn = new Button("+");
+            addBtn.getStyleClass().add("driver-grid-quick-add-button");
+            addBtn.setVisible(false);
+            addBtn.setManaged(false);
+            addBtn.setOnAction(e -> showScheduleLoadDialog(null, weekStart.plusDays(col - 1)));
+            
+            StackPane.setAlignment(addBtn, Pos.CENTER);
+            emptyCell.getChildren().add(addBtn);
+            
+            // Show the add button on hover
+            emptyCell.setOnMouseEntered(e -> {
+                emptyCell.setStyle("-fx-background-color: #f0f9ff;");
+                addBtn.setVisible(true);
+                addBtn.setManaged(true);
+            });
+            
+            emptyCell.setOnMouseExited(e -> {
+                emptyCell.setStyle("");
+                addBtn.setVisible(false);
+                addBtn.setManaged(false);
+            });
+            
+            // Double-click to schedule
+            emptyCell.setOnMouseClicked(e -> {
+                if (e.getClickCount() == 2) {
+                    LocalDate date = weekStart.plusDays(col - 1);
+                    showScheduleLoadDialog(null, date);
+                }
+            });
+            
+            GridPane.setRowIndex(emptyCell, 1);
+            GridPane.setColumnIndex(emptyCell, col);
+            weekGrid.add(emptyCell, col, 1);
         }
-        weekGrid.getChildren().forEach(n -> {
-            Integer col = GridPane.getColumnIndex(n);
-            if (col != null && col > 0 && n instanceof Region r) {
-                r.setMinWidth(dayCellWidth);
-                r.setPrefWidth(dayCellWidth);
-            }
-        });
+        
+        // Add an empty driver cell
+        Label emptyDriverLabel = new Label("No drivers assigned");
+        emptyDriverLabel.setTextFill(Color.web("#9ca3af"));
+        emptyDriverLabel.setFont(Font.font("Segoe UI", FontPosture.ITALIC, 12));
+        
+        VBox emptyDriverCell = new VBox();
+        emptyDriverCell.getStyleClass().add("driver-grid-driver-cell");
+        emptyDriverCell.setAlignment(Pos.CENTER);
+        emptyDriverCell.getChildren().add(emptyDriverLabel);
+        
+        weekGrid.add(emptyDriverCell, 0, 1);
     }
     
     private void buildWeekHeaderInGrid() {
@@ -797,27 +961,19 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         VBox driverHeader = new VBox(2);
         driverHeader.setAlignment(Pos.CENTER);
         driverHeader.setPadding(new Insets(10));
-        driverHeader.setStyle(
-            "-fx-background-color: #1e293b; " +
-            "-fx-text-fill: white; " +
-            "-fx-border-color: #334155; " +
-            "-fx-border-width: 0 1 1 0;"
-        );
-        driverHeader.setMinHeight(98);
-        driverHeader.setPrefHeight(98);
+        driverHeader.getStyleClass().add("driver-grid-day-header");
+        driverHeader.setStyle("-fx-background-color: #1e293b;");
         
         Label driverLabel = new Label("DRIVER / TRUCK");
-        driverLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
+        driverLabel.getStyleClass().add("driver-grid-day-name");
         driverLabel.setTextFill(Color.WHITE);
         
-        Label driverSubLabel = new Label("Click name to view details");
-        driverSubLabel.setFont(Font.font("Segoe UI", 10));
-        driverSubLabel.setTextFill(Color.web("#94a3b8"));
+        // Removed "Click name to view details" text as requested
         
-        driverHeader.getChildren().addAll(driverLabel, driverSubLabel);
+        driverHeader.getChildren().addAll(driverLabel);
         weekGrid.add(driverHeader, 0, 0);
         
-        // Day headers
+        // Day headers with modern colors
         DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("MM/dd/yyyy");
         String[] dayNames = {"SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"};
         
@@ -826,37 +982,51 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             VBox dayHeader = new VBox(2);
             dayHeader.setAlignment(Pos.CENTER);
             dayHeader.setPadding(new Insets(8, 5, 8, 5));
-            dayHeader.setMinHeight(98);
-            dayHeader.setPrefHeight(98);
-            dayHeader.setMinWidth(dayCellWidth);
-            dayHeader.setPrefWidth(dayCellWidth);
             
             boolean isToday = date.equals(LocalDate.now());
             boolean isWeekend = (i == 0 || i == 6);
             
-            // Style for each day
-            String bgColor = isToday ? "#3b82f6" : (isWeekend ? "#fbbf24" : "#475569");
-            dayHeader.setStyle(
-                "-fx-background-color: " + bgColor + "; " +
-                "-fx-border-color: #334155; " +
-                "-fx-border-width: 0 1 1 0;"
-            );
+            // Apply appropriate CSS classes and set border styles
+            dayHeader.getStyleClass().add("driver-grid-day-header");
+            
+            // Apply weekend/weekday colors as requested
+            if (isWeekend) {
+                // Light yellow for Sunday and Saturday
+                dayHeader.setStyle("-fx-background-color: #FEF9C3;");
+                dayHeader.getStyleClass().add("driver-grid-day-header-weekend");
+            } else {
+                // Light blue for Monday-Friday
+                dayHeader.setStyle("-fx-background-color: #E0F2FE;");
+                dayHeader.getStyleClass().add("driver-grid-day-header-weekday");
+            }
+            
+            // Today highlight overrides weekend/weekday colors
+            if (isToday) {
+                dayHeader.setStyle("-fx-background-color: #CFFAFE;");
+                dayHeader.getStyleClass().add("driver-grid-day-header-today");
+            }
+            
+            // Add right border for column separation
+            if (i < 6) {
+                String currentStyle = dayHeader.getStyle();
+                dayHeader.setStyle(currentStyle + "; -fx-border-color: black; -fx-border-width: 0 1px 0 0;");
+            }
             
             // Day name
             Label dayLabel = new Label(dayNames[i]);
-            dayLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
-            dayLabel.setTextFill(Color.WHITE);
+            dayLabel.getStyleClass().add("driver-grid-day-name");
+            dayLabel.setTextFill(Color.web("#1e293b")); // Dark text for better contrast on light backgrounds
             
             // Date (MM/DD/YYYY)
             String formattedDate = date.format(dateFormat);
             Label dateLabel = new Label(formattedDate);
-            dateLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
-            dateLabel.setTextFill(isToday ? Color.WHITE : Color.web("#f1f5f9"));
+            dateLabel.getStyleClass().add("driver-grid-day-date");
+            dateLabel.setTextFill(Color.web("#475569")); // Medium dark text for better contrast
             
             // Load count
             Label loadCountLabel = new Label("0 loads");
             loadCountLabel.setFont(Font.font("Segoe UI", 9));
-            loadCountLabel.setTextFill(Color.web("#e2e8f0"));
+            loadCountLabel.setTextFill(Color.web("#475569"));
             loadCountLabel.setId("day-" + i + "-load-count");
             
             dayHeader.getChildren().addAll(dayLabel, dateLabel);
@@ -864,12 +1034,13 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             // Add TODAY badge if current day
             if (isToday) {
                 Label todayBadge = new Label("TODAY");
-                todayBadge.setFont(Font.font("Segoe UI", FontWeight.BOLD, 9));
-                todayBadge.setTextFill(Color.web("#1e293b"));
                 todayBadge.setStyle(
-                    "-fx-background-color: #fbbf24; " +
+                    "-fx-background-color: #0284c7; " + // Darker blue for TODAY badge
+                    "-fx-text-fill: white; " +
                     "-fx-padding: 1 6 1 6; " +
-                    "-fx-background-radius: 10;"
+                    "-fx-background-radius: 10;" +
+                    "-fx-font-size: 9px; " +
+                    "-fx-font-weight: bold;"
                 );
                 dayHeader.getChildren().add(todayBadge);
             }
@@ -891,25 +1062,23 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         // Driver info cell
         VBox driverCell = new VBox(5);
         driverCell.setPadding(new Insets(15));
-        driverCell.setStyle(
-            "-fx-background-color: " + (rowIndex % 2 == 0 ? "white" : "#f8fafc") + "; " +
-            "-fx-border-color: #e2e8f0; -fx-border-width: 0 2 1 0; "
-        );
-        driverCell.setMinWidth(200);
-        driverCell.setPrefWidth(200);
-        driverCell.setMaxWidth(200);
-        driverCell.setMinHeight(100);
-        driverCell.setPrefHeight(120);
-        driverCell.setMaxHeight(150); // Allow some flexibility for multiple loads
+        driverCell.getStyleClass().add("driver-grid-driver-cell");
+        
+        // Apply zebra striping classes for alternating row colors
+        // Note: rowIndex starts at 1 (header is row 0), so we use rowIndex for striping
+        if (rowIndex % 2 == 1) {
+            driverCell.getStyleClass().add("driver-grid-row-odd");
+        } else {
+            driverCell.getStyleClass().add("driver-grid-row-even");
+        }
         
         Label nameLabel = new Label(driver.getName());
-        nameLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
+        nameLabel.getStyleClass().add("driver-grid-driver-name");
         nameLabel.setTextFill(driver.getId() == -1 ? Color.web("#ef4444") : Color.web("#1e293b"));
         
         if (driver.getId() != -1) {
             Label truckLabel = new Label("🚛 " + (driver.getTruckUnit() != null ? driver.getTruckUnit() : "No Unit"));
-            truckLabel.setFont(Font.font("Segoe UI", 12));
-            truckLabel.setTextFill(Color.web("#64748b"));
+            truckLabel.getStyleClass().add("driver-grid-truck-label");
             
             // Driver status indicator
             HBox statusBox = new HBox(5);
@@ -931,45 +1100,38 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         for (int day = 0; day < 7; day++) {
             LocalDate date = weekStart.plusDays(day);
             StackPane dayCell = createDayCell(driver, date, entries, rowIndex);
+            
+            // The cell styling is now handled in CSS and createDayCell method
+            // No need to add inline styles that might interfere
+            
             weekGrid.add(dayCell, day + 1, rowIndex);
         }
     }
     
     private StackPane createDayCell(Employee driver, LocalDate date, List<LoadScheduleEntry> entries, int rowIndex) {
         StackPane cell = new StackPane();
-        cell.setStyle(
-            "-fx-background-color: " + (rowIndex % 2 == 0 ? "white" : "#f8fafc") + "; " +
-            "-fx-border-color: #e2e8f0; -fx-border-width: 0 1 1 0; "
-        );
-        cell.setMinWidth(dayCellWidth);
-        cell.setPrefWidth(dayCellWidth);
-        cell.setMinHeight(100);
-        cell.setPrefHeight(120);
-        cell.setMaxHeight(150); // Allow expansion for multiple loads
+        cell.getStyleClass().add("driver-grid-day-cell");
         
-        // Add hover effect for better interactivity
-        cell.setOnMouseEntered(e -> {
-            if (!cell.getStyle().contains("#e0e7ff")) {
-                cell.setStyle(cell.getStyle().replace(rowIndex % 2 == 0 ? "white" : "#f8fafc", "#f0f9ff"));
-            }
-        });
-        cell.setOnMouseExited(e -> {
-            cell.setStyle(
-                "-fx-background-color: " + (rowIndex % 2 == 0 ? "white" : "#f8fafc") + "; " +
-                "-fx-border-color: #e2e8f0; -fx-border-width: 0 1 1 0; "
-            );
-        });
+        // Apply zebra striping classes for alternating row colors
+        if (rowIndex % 2 == 0) {
+            cell.getStyleClass().add("driver-grid-row-even");
+        } else {
+            cell.getStyleClass().add("driver-grid-row-odd");
+        }
         
+        // Create loads container
         VBox loadsContainer = new VBox(3);
         loadsContainer.setPadding(new Insets(5));
         loadsContainer.setAlignment(Pos.TOP_LEFT);
+        loadsContainer.setPickOnBounds(false); // Allow mouse events to pass through
+        loadsContainer.setMouseTransparent(false); // But allow children to receive events
         
         // Find loads for this day
         List<LoadScheduleEntry> dayLoads = entries.stream()
             .filter(entry -> {
                 Load load = entry.getLoad();
                 return load.getPickUpDate() != null && load.getDeliveryDate() != null &&
-                       !date.isBefore(load.getPickUpDate()) && !date.isAfter(load.getDeliveryDate());
+                      !date.isBefore(load.getPickUpDate()) && !date.isAfter(load.getDeliveryDate());
             })
             .collect(Collectors.toList());
         
@@ -977,32 +1139,109 @@ public class DriverGridTabEnhanced extends DriverGridTab {
         int maxDisplayLoads = 4; // Show max 4 loads per cell
         for (int i = 0; i < Math.min(dayLoads.size(), maxDisplayLoads); i++) {
             HBox loadBar = createLoadBar(dayLoads.get(i), date);
+            // Make sure load bars don't block cell interactions
+            loadBar.setPickOnBounds(false);
             loadsContainer.getChildren().add(loadBar);
         }
         
         // Add "more" indicator if there are additional loads
         if (dayLoads.size() > maxDisplayLoads) {
+            HBox moreRow = new HBox(5);
+            moreRow.setAlignment(Pos.CENTER_LEFT);
+            moreRow.setPickOnBounds(false);
+            
             Label moreLabel = new Label(String.format("+%d more", dayLoads.size() - maxDisplayLoads));
             moreLabel.setFont(Font.font("Segoe UI", FontPosture.ITALIC, 10));
             moreLabel.setTextFill(Color.web("#6b7280"));
             moreLabel.setPadding(new Insets(2, 8, 2, 8));
-            loadsContainer.getChildren().add(moreLabel);
+            
+            Button viewAllBtn = new Button("View All");
+            viewAllBtn.getStyleClass().add("driver-grid-small-button");
+            viewAllBtn.setOnAction(e -> {
+                showLoadsList(driver, date, dayLoads);
+                e.consume();
+            });
+            
+            moreRow.getChildren().addAll(moreLabel, viewAllBtn);
+            loadsContainer.getChildren().add(moreRow);
         }
         
-        cell.getChildren().add(loadsContainer);
+        // Create a quick add button for this cell
+        Button quickAddBtn = new Button("+");
+        quickAddBtn.getStyleClass().add("driver-grid-quick-add-button");
+        quickAddBtn.setTooltip(new Tooltip("Quick schedule load"));
+        quickAddBtn.setVisible(false); // Initially hidden
+        quickAddBtn.setManaged(false); // Don't affect layout when hidden
+        
+        quickAddBtn.setOnAction(e -> {
+            showScheduleLoadDialog(driver, date);
+            e.consume();
+        });
+        
+        // Position in top-right corner
+        StackPane.setAlignment(quickAddBtn, Pos.TOP_RIGHT);
+        StackPane.setMargin(quickAddBtn, new Insets(5, 5, 0, 0));
+        
+        // Create an invisible overlay for mouse events - this should be on top
+        Region mouseEventRegion = new Region();
+        mouseEventRegion.setPickOnBounds(true);
+        mouseEventRegion.setStyle("-fx-background-color: transparent;");
+        
+        // Add components to cell in correct z-order (first added = bottom)
+        cell.getChildren().addAll(loadsContainer, quickAddBtn, mouseEventRegion);
+        
+        // Add hover effect for better interactivity
+        mouseEventRegion.setOnMouseEntered(e -> {
+            if (!cell.getStyle().contains("-fx-background-color: #f0f9ff;")) {
+                cell.setStyle(cell.getStyle() + "; -fx-background-color: #f0f9ff;");
+            }
+            quickAddBtn.setVisible(true);
+            quickAddBtn.setManaged(true);
+            quickAddBtn.toFront(); // Ensure button is on top
+        });
+        
+        mouseEventRegion.setOnMouseExited(e -> {
+            // Reset style but preserve borders
+            String style = cell.getStyle().replace("; -fx-background-color: #f0f9ff;", "");
+            cell.setStyle(style);
+            quickAddBtn.setVisible(false);
+            quickAddBtn.setManaged(false);
+        });
+        
+        // Double click to add a load
+        mouseEventRegion.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2 && e.getButton() == MouseButton.PRIMARY) {
+                showScheduleLoadDialog(driver, date);
+                e.consume();
+            }
+        });
+        
+        // Add tooltip to indicate scheduling ability
+        Tooltip tooltip = new Tooltip("Right-click to schedule/manage loads\nDouble-click to schedule new load");
+        tooltip.setShowDelay(Duration.millis(500));
+        Tooltip.install(mouseEventRegion, tooltip);
         
         // Add drop zone for drag and drop
         setupDropZone(cell, driver, date);
         
-        // Context menu
-        cell.setOnContextMenuRequested(e -> {
+        // Enhanced context menu with more options - attach to the mouseEventRegion
+        mouseEventRegion.setOnContextMenuRequested(e -> {
             ContextMenu menu = new ContextMenu();
+            
+            // Schedule new load
             MenuItem scheduleItem = new MenuItem("📅 Schedule New Load");
             scheduleItem.setOnAction(event -> showScheduleLoadDialog(driver, date));
             menu.getItems().add(scheduleItem);
             
+            // View all loads for this day
             if (!dayLoads.isEmpty()) {
+                MenuItem viewAllItem = new MenuItem("👁️ View All Loads (" + dayLoads.size() + ")");
+                viewAllItem.setOnAction(event -> showLoadsList(driver, date, dayLoads));
+                menu.getItems().add(viewAllItem);
+                
                 menu.getItems().add(new SeparatorMenuItem());
+                
+                // Edit individual loads
                 for (LoadScheduleEntry entry : dayLoads) {
                     Load load = entry.getLoad();
                     String menuText = "Edit " + load.getLoadNumber();
@@ -1017,95 +1256,10 @@ public class DriverGridTabEnhanced extends DriverGridTab {
             }
             
             menu.show(cell, e.getScreenX(), e.getScreenY());
+            e.consume();
         });
         
         return cell;
-    }
-    
-    private HBox createLoadBar(LoadScheduleEntry entry, LocalDate date) {
-        Load load = entry.getLoad();
-        Employee driver = entry.getDriver();
-        
-        HBox bar = new HBox(5);
-        bar.setPadding(new Insets(4, 8, 4, 8));
-        bar.setAlignment(Pos.CENTER_LEFT);
-        bar.setMaxWidth(Double.MAX_VALUE);
-        bar.setPrefWidth(dayCellWidth - 10);
-        
-        String color = LoadStatusUtil.colorFor(load.getStatus());
-        boolean hasConflict = conflictMap.containsKey(driver.getName()) &&
-            conflictMap.get(driver.getName()).stream()
-                .anyMatch(c -> c.load1.equals(load) || c.load2.equals(load));
-        
-        if (hasConflict) {
-            color = "#ef4444";
-        }
-        
-        bar.setStyle(
-            "-fx-background-color: " + color + "; " +
-            "-fx-background-radius: 4; " +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 4, 0, 0, 2); " +
-            "-fx-cursor: hand;"
-        );
-        
-        // Make the bar smaller to fit more loads
-        bar.setMaxHeight(22);
-        bar.setPrefHeight(22);
-        
-        // Load info with multi-stop indicator
-        Label iconLabel = new Label(LoadStatusUtil.iconFor(load.getStatus()));
-        iconLabel.setFont(Font.font("Segoe UI", 12));
-        
-        Label loadLabel = new Label(load.getLoadNumber());
-        loadLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11));
-        loadLabel.setTextFill(Color.WHITE);
-        
-        // Show time if it's pickup or delivery day
-        String timeText = "";
-        if (date.equals(load.getPickUpDate()) && load.getPickUpTime() != null) {
-            timeText = " • " + load.getPickUpTime().format(TIME_FORMAT);
-        } else if (date.equals(load.getDeliveryDate()) && load.getDeliveryTime() != null) {
-            timeText = " • " + load.getDeliveryTime().format(TIME_FORMAT);
-        }
-        
-        Label timeLabel = new Label(timeText);
-        timeLabel.setFont(Font.font("Segoe UI", 10));
-        timeLabel.setTextFill(Color.WHITE);
-        
-        // Add multi-stop indicator if applicable
-        HBox.setHgrow(loadLabel, Priority.ALWAYS);
-        bar.getChildren().addAll(iconLabel, loadLabel);
-        
-        if (load.hasMultipleStops()) {
-            int totalStops = load.getPickupLocations().size() + load.getDropLocations().size();
-            Label multiStopLabel = new Label("📍" + totalStops);
-            multiStopLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 10));
-            multiStopLabel.setTextFill(Color.WHITE);
-            multiStopLabel.setTooltip(new Tooltip(totalStops + " total stops"));
-            bar.getChildren().add(multiStopLabel);
-        }
-        
-        bar.getChildren().add(timeLabel);
-        
-        // Enhanced tooltip with multiple locations
-        String tooltipText = buildEnhancedTooltip(load, hasConflict);
-        Tooltip tooltip = new Tooltip(tooltipText);
-        tooltip.setShowDelay(javafx.util.Duration.millis(200));
-        tooltip.setStyle("-fx-font-size: 12px; -fx-background-color: #1e293b; -fx-text-fill: white; -fx-padding: 10;");
-        Tooltip.install(bar, tooltip);
-        
-        // Click to edit
-        bar.setCursor(javafx.scene.Cursor.HAND);
-        bar.setOnMouseClicked(e -> {
-            if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
-                editLoad(load);
-            }
-        });
-        
-        // Setup drag
-        setupDragSource(bar, entry);
-        
-        return bar;
     }
     
     private void setupDragSource(HBox bar, LoadScheduleEntry entry) {
@@ -1851,6 +2005,534 @@ public class DriverGridTabEnhanced extends DriverGridTab {
                 setText(LoadStatusUtil.iconFor(status) + " " + status.toString());
                 setTextFill(Color.web(LoadStatusUtil.colorFor(status)));
             }
+        }
+    }
+
+    /**
+     * Show a compact view dialog with drivers and their loads
+     */
+    private void showCompactView() {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Compact Driver Schedule");
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        
+        // Create dialog content
+        VBox content = new VBox(10);
+        content.getStyleClass().add("driver-grid-compact-dialog");
+        content.setPrefWidth(800);
+        content.setPrefHeight(600);
+        content.setMaxHeight(Double.MAX_VALUE);
+        
+        // Header with date range
+        Label headerLabel = new Label("Driver Schedule: " + 
+                                     weekStart.format(DateTimeFormatter.ofPattern("MMM d")) + " - " + 
+                                     weekStart.plusDays(6).format(DateTimeFormatter.ofPattern("MMM d, yyyy")));
+        headerLabel.getStyleClass().add("driver-grid-compact-dialog-title");
+        
+        // Create a simple filter box
+        HBox filterBox = new HBox(10);
+        filterBox.setAlignment(Pos.CENTER_LEFT);
+        
+        TextField compactSearch = new TextField();
+        compactSearch.setPromptText("Quick search...");
+        compactSearch.getStyleClass().add("driver-grid-search-field");
+        compactSearch.setPrefWidth(200);
+        
+        ComboBox<Load.Status> compactStatusFilter = new ComboBox<>();
+        compactStatusFilter.getItems().add(null);
+        compactStatusFilter.getItems().addAll(Load.Status.values());
+        compactStatusFilter.setValue(null);
+        compactStatusFilter.setPromptText("All Statuses");
+        compactStatusFilter.getStyleClass().add("driver-grid-filter-combo");
+        compactStatusFilter.setCellFactory(cb -> new StatusListCell());
+        
+        filterBox.getChildren().addAll(new Label("Search:"), compactSearch, new Label("Status:"), compactStatusFilter);
+        
+        // Create the main content area with scrolling
+        VBox driversContainer = new VBox(0);
+        ScrollPane scrollPane = new ScrollPane(driversContainer);
+        scrollPane.setFitToWidth(true);
+        scrollPane.getStyleClass().add("driver-grid-compact-scroll");
+        VBox.setVgrow(scrollPane, Priority.ALWAYS);
+        
+        // Group entries by driver
+        Map<Employee, List<LoadScheduleEntry>> driverGroups = filteredEntries.stream()
+            .collect(Collectors.groupingBy(LoadScheduleEntry::getDriver));
+        
+        // Sort drivers (active drivers first, then unassigned)
+        List<Employee> sortedDrivers = new ArrayList<>(driverGroups.keySet());
+        sortedDrivers.sort((d1, d2) -> {
+            if (d1.getId() == -1) return 1; // Unassigned at bottom
+            if (d2.getId() == -1) return -1;
+            return d1.getName().compareToIgnoreCase(d2.getName());
+        });
+        
+        // Add driver rows to the container
+        for (Employee driver : sortedDrivers) {
+            VBox driverSection = createCompactDriverRow(driver, driverGroups.get(driver));
+            driversContainer.getChildren().add(driverSection);
+        }
+        
+        // Add search functionality
+        compactSearch.textProperty().addListener((obs, oldVal, newVal) -> {
+            String searchText = newVal.toLowerCase();
+            for (int i = 0; i < driversContainer.getChildren().size(); i++) {
+                if (driversContainer.getChildren().get(i) instanceof VBox) {
+                    VBox driverSection = (VBox) driversContainer.getChildren().get(i);
+                    
+                    // Get the driver name from the first label in the driver section
+                    String driverName = "";
+                    for (javafx.scene.Node node : driverSection.getChildren()) {
+                        if (node instanceof Label) {
+                            driverName = ((Label) node).getText().toLowerCase();
+                            break;
+                        }
+                    }
+                    
+                    // Filter logic
+                    boolean matchesSearch = driverName.contains(searchText);
+                    driverSection.setVisible(matchesSearch);
+                    driverSection.setManaged(matchesSearch);
+                }
+            }
+        });
+        
+        // Add status filter functionality
+        compactStatusFilter.valueProperty().addListener((obs, oldVal, newVal) -> {
+            Load.Status selectedStatus = newVal;
+            
+            for (int i = 0; i < driversContainer.getChildren().size(); i++) {
+                if (driversContainer.getChildren().get(i) instanceof VBox) {
+                    VBox driverSection = (VBox) driversContainer.getChildren().get(i);
+                    
+                    if (selectedStatus == null) {
+                        // Show all if no status is selected
+                        driverSection.setVisible(true);
+                        driverSection.setManaged(true);
+                    } else {
+                        // Get the driver from the user data
+                        Employee driver = (Employee) driverSection.getUserData();
+                        if (driver != null) {
+                            // Check if driver has loads with the selected status
+                            boolean hasMatchingLoads = driverGroups.get(driver).stream()
+                                .anyMatch(entry -> entry.getLoad().getStatus() == selectedStatus);
+                            
+                            driverSection.setVisible(hasMatchingLoads);
+                            driverSection.setManaged(hasMatchingLoads);
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Add components to content
+        content.getChildren().addAll(headerLabel, filterBox, scrollPane);
+        
+        // Set the content and show the dialog
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getStylesheets().addAll(mainLayout.getStylesheets());
+        dialog.setResizable(true);
+        dialog.showAndWait();
+    }
+
+    /**
+     * Creates a compact driver row for the compact view dialog
+     */
+    private VBox createCompactDriverRow(Employee driver, List<LoadScheduleEntry> entries) {
+        VBox driverSection = new VBox(5);
+        driverSection.getStyleClass().add("driver-grid-compact-row");
+        driverSection.setPadding(new Insets(10));
+        driverSection.setUserData(driver); // Store driver for filtering
+        
+        // Driver header
+        Label driverLabel = new Label(driver.getName() + (driver.getTruckUnit() != null ? " (" + driver.getTruckUnit() + ")" : ""));
+        driverLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
+        driverLabel.setTextFill(driver.getId() == -1 ? Color.web("#ef4444") : Color.web("#1e293b"));
+        
+        // Container for load entries
+        VBox loadsContainer = new VBox(3);
+        loadsContainer.setPadding(new Insets(5, 0, 0, 15)); // Indent loads under driver
+        
+        // Group loads by day
+        Map<LocalDate, List<LoadScheduleEntry>> loadsByDay = entries.stream()
+            .collect(Collectors.groupingBy(entry -> {
+                LocalDate pickupDate = entry.getLoad().getPickUpDate();
+                return pickupDate != null ? pickupDate : LocalDate.now();
+            }));
+        
+        // Sort days
+        List<LocalDate> sortedDays = new ArrayList<>(loadsByDay.keySet());
+        Collections.sort(sortedDays);
+        
+        // Add loads for each day
+        boolean hasLoads = false;
+        for (LocalDate day : sortedDays) {
+            if (day.isBefore(weekStart) || day.isAfter(weekStart.plusDays(6))) {
+                continue; // Skip days outside current week
+            }
+            
+            List<LoadScheduleEntry> dayLoads = loadsByDay.get(day);
+            if (dayLoads.isEmpty()) {
+                continue;
+            }
+            
+            hasLoads = true;
+            
+            // Day header
+            HBox dayHeader = new HBox(5);
+            dayHeader.setAlignment(Pos.CENTER_LEFT);
+            Label dayLabel = new Label(day.format(DateTimeFormatter.ofPattern("EEEE, MMM d")));
+            dayLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
+            dayLabel.setTextFill(Color.web("#4b5563"));
+            dayHeader.getChildren().add(dayLabel);
+            
+            loadsContainer.getChildren().add(dayHeader);
+            
+            // Add loads for this day
+            for (LoadScheduleEntry entry : dayLoads) {
+                Load load = entry.getLoad();
+                
+                HBox loadRow = new HBox(10);
+                loadRow.setAlignment(Pos.CENTER_LEFT);
+                
+                // Status indicator
+                Rectangle statusRect = new Rectangle(10, 10);
+                statusRect.setFill(Color.web(LoadStatusUtil.colorFor(load.getStatus())));
+                statusRect.setArcWidth(5);
+                statusRect.setArcHeight(5);
+                
+                // Load number and customer
+                Label loadLabel = new Label(load.getLoadNumber() + " - " + load.getCustomer());
+                loadLabel.setFont(Font.font("Segoe UI", 12));
+                
+                // Times
+                String timeInfo = "";
+                if (load.getPickUpTime() != null) {
+                    timeInfo += load.getPickUpTime().format(TIME_FORMAT);
+                }
+                if (load.getDeliveryTime() != null) {
+                    timeInfo += " → " + load.getDeliveryTime().format(TIME_FORMAT);
+                }
+                
+                Label timeLabel = new Label(timeInfo);
+                timeLabel.setFont(Font.font("Segoe UI", 11));
+                timeLabel.setTextFill(Color.web("#6b7280"));
+                
+                // Add components to load row
+                loadRow.getChildren().addAll(statusRect, loadLabel);
+                if (!timeInfo.isEmpty()) {
+                    loadRow.getChildren().add(timeLabel);
+                }
+                
+                // Multi-stop indicator if applicable
+                if (load.hasMultipleStops()) {
+                    Label multiStopLabel = new Label("📍" + (2 + load.getPickupLocations().size() + load.getDropLocations().size()) + " stops");
+                    multiStopLabel.setFont(Font.font("Segoe UI", 11));
+                    multiStopLabel.setTextFill(Color.web("#6b7280"));
+                    loadRow.getChildren().add(multiStopLabel);
+                }
+                
+                // Add load row to container
+                loadsContainer.getChildren().add(loadRow);
+            }
+        }
+        
+        // Add components to driver section
+        driverSection.getChildren().add(driverLabel);
+        
+        if (hasLoads) {
+            driverSection.getChildren().add(loadsContainer);
+        } else {
+            Label noLoadsLabel = new Label("No loads scheduled this week");
+            noLoadsLabel.setFont(Font.font("Segoe UI", FontPosture.ITALIC, 12));
+            noLoadsLabel.setTextFill(Color.web("#9ca3af"));
+            noLoadsLabel.setPadding(new Insets(5, 0, 0, 15));
+            driverSection.getChildren().add(noLoadsLabel);
+        }
+        
+        return driverSection;
+    }
+
+    @Override
+    public void updateWindowSize(double width, double height) {
+        // Implement WindowAware interface
+        logger.debug("Window resized to: {}x{}", width, height);
+        applyResponsiveBreakpoint(width);
+    }
+
+    @Override
+    public void onWindowStateChanged(boolean maximized, boolean minimized) {
+        // Handle window state changes (maximized/minimized)
+        logger.debug("Window state changed: maximized={}, minimized={}", maximized, minimized);
+        
+        if (!minimized && mainLayout.getWidth() > 0) {
+            // Reapply responsive behavior when restoring from minimized state
+            applyResponsiveBreakpoint(mainLayout.getWidth());
+        }
+    }
+
+    /**
+     * Show a dialog with all loads for a particular day/driver
+     */
+    private void showLoadsList(Employee driver, LocalDate date, List<LoadScheduleEntry> dayLoads) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Loads for " + driver.getName() + " on " + date.format(DateTimeFormatter.ofPattern("MMM d, yyyy")));
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(20));
+        content.setMaxWidth(600);
+        content.setMaxHeight(500);
+        
+        // Header with action buttons
+        HBox header = new HBox(10);
+        header.setAlignment(Pos.CENTER_LEFT);
+        
+        Button addLoadBtn = new Button("Schedule New Load");
+        addLoadBtn.getStyleClass().add("driver-grid-action-button");
+        addLoadBtn.setOnAction(e -> {
+            dialog.close();
+            showScheduleLoadDialog(driver, date);
+        });
+        
+        header.getChildren().add(addLoadBtn);
+        
+        // Table of loads
+        TableView<LoadScheduleEntry> loadTable = new TableView<>();
+        loadTable.setMaxHeight(400);
+        
+        TableColumn<LoadScheduleEntry, String> loadNumCol = new TableColumn<>("Load #");
+        loadNumCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getLoad().getLoadNumber()));
+        loadNumCol.setPrefWidth(100);
+        
+        TableColumn<LoadScheduleEntry, String> customerCol = new TableColumn<>("Customer");
+        customerCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getLoad().getCustomer()));
+        customerCol.setPrefWidth(150);
+        
+        TableColumn<LoadScheduleEntry, String> pickupCol = new TableColumn<>("Pickup");
+        pickupCol.setCellValueFactory(data -> {
+            Load load = data.getValue().getLoad();
+            return new SimpleStringProperty(formatLocation(load.getPickUpLocation()));
+        });
+        pickupCol.setPrefWidth(150);
+        
+        TableColumn<LoadScheduleEntry, String> deliveryCol = new TableColumn<>("Delivery");
+        deliveryCol.setCellValueFactory(data -> {
+            Load load = data.getValue().getLoad();
+            return new SimpleStringProperty(formatLocation(load.getDropLocation()));
+        });
+        deliveryCol.setPrefWidth(150);
+        
+        TableColumn<LoadScheduleEntry, Void> actionsCol = new TableColumn<>("Actions");
+        actionsCol.setPrefWidth(100);
+        actionsCol.setCellFactory(col -> new TableCell<LoadScheduleEntry, Void>() {
+            private final Button editButton = new Button("Edit");
+            {
+                editButton.getStyleClass().add("driver-grid-small-button");
+                editButton.setOnAction(event -> {
+                    LoadScheduleEntry entry = getTableView().getItems().get(getIndex());
+                    dialog.close();
+                    editLoad(entry.getLoad());
+                });
+            }
+            
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    setGraphic(editButton);
+                }
+            }
+        });
+        
+        loadTable.getColumns().addAll(loadNumCol, customerCol, pickupCol, deliveryCol, actionsCol);
+        loadTable.setItems(FXCollections.observableArrayList(dayLoads));
+        
+        content.getChildren().addAll(header, loadTable);
+        
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getStylesheets().addAll(mainLayout.getStylesheets());
+        dialog.setResizable(true);
+        dialog.showAndWait();
+    }
+
+    private HBox createLoadBar(LoadScheduleEntry entry, LocalDate date) {
+        Load load = entry.getLoad();
+        Employee driver = entry.getDriver();
+        
+        HBox bar = new HBox(3); // Reduce spacing for more compact display
+        bar.getStyleClass().add("driver-grid-load-bar");
+        bar.setPickOnBounds(true); // Allow the bar itself to be clicked
+        
+        String color = LoadStatusUtil.colorFor(load.getStatus());
+        boolean hasConflict = conflictMap.containsKey(driver.getName()) &&
+            conflictMap.get(driver.getName()).stream()
+                .anyMatch(c -> c.load1.equals(load) || c.load2.equals(load));
+        
+        if (hasConflict) {
+            color = "#FFCDD2"; // Light red for conflicts with black text
+        }
+        
+        bar.setStyle(
+            "-fx-background-color: " + color + "; " +
+            "-fx-background-radius: 4; " +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 4, 0, 0, 2); " +
+            "-fx-cursor: hand;"
+        );
+        
+        // Load info with multi-stop indicator
+        Label iconLabel = new Label(LoadStatusUtil.iconFor(load.getStatus()));
+        iconLabel.setFont(Font.font("Segoe UI", 11));
+        iconLabel.setMouseTransparent(true); // Icons don't need to capture mouse events
+        
+        // Determine location to show based on date
+        boolean isPickupDate = date.equals(load.getPickUpDate());
+        boolean isDeliveryDate = date.equals(load.getDeliveryDate());
+        
+        // Build display text with load number and location info
+        String displayText = load.getLoadNumber();
+        
+        // Add location information - keep it concise
+        if (isPickupDate && load.getPickUpLocation() != null) {
+            String pickupLocation = formatLocationShort(load.getPickUpLocation());
+            if (!pickupLocation.isEmpty()) {
+                displayText += " • P: " + pickupLocation;
+            }
+        } else if (isDeliveryDate && load.getDropLocation() != null) {
+            String deliveryLocation = formatLocationShort(load.getDropLocation());
+            if (!deliveryLocation.isEmpty()) {
+                displayText += " • D: " + deliveryLocation;
+            }
+        }
+        
+        Label loadLabel = new Label(displayText);
+        loadLabel.getStyleClass().add("driver-grid-load-label");
+        loadLabel.setTextFill(Color.BLACK);
+        loadLabel.setMaxWidth(200); // Limit width to prevent overflow
+        loadLabel.setEllipsisString("...");
+        loadLabel.setMouseTransparent(true); // Labels don't need to capture mouse events
+        
+        // Show time if available
+        String timeText = "";
+        if (isPickupDate && load.getPickUpTime() != null) {
+            timeText = load.getPickUpTime().format(TIME_FORMAT);
+        } else if (isDeliveryDate && load.getDeliveryTime() != null) {
+            timeText = load.getDeliveryTime().format(TIME_FORMAT);
+        }
+        
+        // Add components to bar
+        HBox.setHgrow(loadLabel, Priority.ALWAYS);
+        bar.getChildren().addAll(iconLabel, loadLabel);
+        
+        // Add time label if present
+        if (!timeText.isEmpty()) {
+            Label timeLabel = new Label(timeText);
+            timeLabel.getStyleClass().add("driver-grid-load-time");
+            timeLabel.setTextFill(Color.BLACK);
+            timeLabel.setFont(Font.font("Segoe UI", 10));
+            timeLabel.setMouseTransparent(true); // Labels don't need to capture mouse events
+            bar.getChildren().add(timeLabel);
+        }
+        
+        // Multi-stop indicator
+        if (load.hasMultipleStops()) {
+            int totalStops = 2 + load.getPickupLocations().size() + load.getDropLocations().size();
+            Label multiStopLabel = new Label("📍" + totalStops);
+            multiStopLabel.getStyleClass().add("driver-grid-multi-stop");
+            multiStopLabel.setTextFill(Color.BLACK);
+            multiStopLabel.setTooltip(new Tooltip(totalStops + " total stops"));
+            multiStopLabel.setMouseTransparent(true); // Labels don't need to capture mouse events
+            bar.getChildren().add(multiStopLabel);
+        }
+        
+        // Enhanced tooltip with full location details
+        String tooltipText = buildEnhancedTooltip(load, hasConflict);
+        Tooltip tooltip = new Tooltip(tooltipText);
+        tooltip.setShowDelay(javafx.util.Duration.millis(200));
+        tooltip.getStyleClass().add("driver-grid-tooltip");
+        Tooltip.install(bar, tooltip);
+        
+        // Click to edit - ensure it doesn't conflict with cell events
+        bar.setOnMouseClicked(e -> {
+            if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
+                editLoad(load);
+                e.consume(); // Prevent event from bubbling to cell
+            }
+        });
+        
+        // Setup drag
+        setupDragSource(bar, entry);
+        
+        return bar;
+    }
+
+    /**
+     * Format a location string to extract city and state - shorter version for grid display
+     * @param locationString The full location string
+     * @return Formatted city, state string (abbreviated)
+     */
+    private String formatLocationShort(String locationString) {
+        if (locationString == null || locationString.trim().isEmpty()) {
+            return "";
+        }
+        
+        // Try to extract just the city and state
+        String[] parts = locationString.split(",");
+        if (parts.length >= 2) {
+            // Get city and state
+            String city = parts[parts.length - 2].trim();
+            String state = parts[parts.length - 1].trim();
+            
+            // Abbreviate city if too long
+            if (city.length() > 10) {
+                city = city.substring(0, 8) + "..";
+            }
+            
+            // Use state abbreviation if possible
+            if (state.length() > 2) {
+                state = state.substring(0, 2).toUpperCase();
+            }
+            
+            return city + ", " + state;
+        } else {
+            // If can't parse, just return a shortened version
+            String shortened = locationString.trim();
+            if (shortened.length() > 15) {
+                shortened = shortened.substring(0, 12) + "...";
+            }
+            return shortened;
+        }
+    }
+
+    /**
+     * Format a location string to extract city and state
+     * @param locationString The full location string
+     * @return Formatted city, state string
+     */
+    private String formatLocation(String locationString) {
+        if (locationString == null || locationString.trim().isEmpty()) {
+            return "";
+        }
+        
+        // Try to extract just the city and state
+        String[] parts = locationString.split(",");
+        if (parts.length >= 2) {
+            // Get last two parts which typically contain City, State
+            String cityState = parts[parts.length - 2].trim() + ", " + parts[parts.length - 1].trim();
+            // Limit length to prevent overflow
+            if (cityState.length() > 25) {
+                cityState = cityState.substring(0, 22) + "...";
+            }
+            return cityState;
+        } else {
+            // If can't parse, just return a shortened version
+            String shortened = locationString.trim();
+            if (shortened.length() > 25) {
+                shortened = shortened.substring(0, 22) + "...";
+            }
+            return shortened;
         }
     }
 }

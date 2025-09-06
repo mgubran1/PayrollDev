@@ -1138,10 +1138,45 @@ public class CompanyExpensesTab extends Tab implements WindowAware {
         
         dialog.getDialogPane().setContent(grid);
         
-        // Validation
+        // Enhanced input validation
         amountField.textProperty().addListener((obs, oldText, newText) -> {
-            if (!newText.matches("\\d*\\.?\\d*")) {
+            // Allow empty field
+            if (newText.isEmpty()) {
+                return;
+            }
+            
+            // Enhanced validation for currency amounts
+            // Allow: digits, one decimal point, currency symbols at start
+            if (!newText.matches("^[$€£¥]?\\d*\\.?\\d{0,2}$")) {
                 amountField.setText(oldText);
+                return;
+            }
+            
+            // Prevent values that are too large
+            try {
+                String cleanAmount = newText.replaceAll("[$€£¥,\\s]", "");
+                if (!cleanAmount.isEmpty()) {
+                    double value = Double.parseDouble(cleanAmount);
+                    if (value > 1000000.00) { // Max 1 million
+                        amountField.setText(oldText);
+                        return;
+                    }
+                }
+            } catch (NumberFormatException e) {
+                amountField.setText(oldText);
+            }
+        });
+        
+        // Add visual feedback for invalid input
+        amountField.focusedProperty().addListener((obs, oldFocused, newFocused) -> {
+            if (!newFocused && !amountField.getText().isEmpty()) {
+                try {
+                    String cleanAmount = amountField.getText().replaceAll("[$€£¥,\\s]", "");
+                    Double.parseDouble(cleanAmount);
+                    amountField.setStyle(""); // Clear error style
+                } catch (NumberFormatException e) {
+                    amountField.setStyle("-fx-border-color: red; -fx-border-width: 2px;");
+                }
             }
         });
         
@@ -1155,8 +1190,23 @@ public class CompanyExpensesTab extends Tab implements WindowAware {
                     result.setCategory(categoryCombo.getValue());
                     result.setDepartment(departmentCombo.getValue());
                     result.setDescription(descriptionArea.getText());
-                    result.setAmount(amountField.getText().isEmpty() ? 0 : 
-                                   Double.parseDouble(amountField.getText()));
+                    // Safe amount parsing with validation
+                    double amount = 0.0;
+                    String amountText = amountField.getText();
+                    if (amountText != null && !amountText.trim().isEmpty()) {
+                        try {
+                            // Remove currency symbols and clean the text
+                            String cleanAmount = amountText.trim().replaceAll("[$,€£¥\\s]", "");
+                            amount = Double.parseDouble(cleanAmount);
+                            if (amount < 0) {
+                                throw new NumberFormatException("Amount cannot be negative");
+                            }
+                        } catch (NumberFormatException e) {
+                            logger.error("Invalid amount format: {}", amountText);
+                            throw new IllegalArgumentException("Invalid amount format: '" + amountText + "'. Please enter a valid number.");
+                        }
+                    }
+                    result.setAmount(amount);
                     result.setPaymentMethod(paymentMethodCombo.getValue());
                     result.setReceiptNumber(receiptField.getText());
                     result.setRecurring(recurringCheckBox.isSelected());

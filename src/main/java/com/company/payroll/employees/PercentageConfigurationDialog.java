@@ -22,8 +22,19 @@ import java.util.List;
 import java.util.Optional;
 
 import com.company.payroll.exception.DataAccessException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.util.StringConverter;
+import javafx.animation.Timeline;
+import javafx.animation.KeyFrame;
+import javafx.util.Duration;
+import javafx.scene.paint.Color;
+import java.util.Stack;
+import java.util.UUID;
 
 public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentageHistory>> {
+    private static final Logger logger = LoggerFactory.getLogger(PercentageConfigurationDialog.class);
     
     private final TableView<EmployeePercentageRow> employeeTable;
     private final DatePicker effectiveDatePicker;
@@ -33,32 +44,56 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
     private final TextArea notesArea;
     private final CheckBox selectAllCheckBox;
     private final Label previewLabel;
+    private final Label statusLabel;
     
     private final EmployeeDAO employeeDAO;
     private final EmployeePercentageHistoryDAO percentageHistoryDAO;
+    private final PercentageAuditLogDAO auditLogDAO;
     private final ObservableList<EmployeePercentageRow> employeeRows = FXCollections.observableArrayList();
     private final ObservableList<EmployeePercentageRow> selectedRows = FXCollections.observableArrayList();
+    
+    // Audit tracking
+    private final String sessionId = UUID.randomUUID().toString();
+    private final String currentUser = System.getProperty("user.name", "Unknown");
+    private final List<PercentageAuditLog> sessionAuditLogs = new ArrayList<>();
     
     public PercentageConfigurationDialog(Connection connection) {
         this.employeeDAO = new EmployeeDAO(connection);
         this.percentageHistoryDAO = new EmployeePercentageHistoryDAO(connection);
         
+        // Initialize audit logging - allow graceful degradation if it fails
+        PercentageAuditLogDAO tempAuditDAO = null;
+        try {
+            tempAuditDAO = new PercentageAuditLogDAO(connection);
+        } catch (Exception e) {
+            logger.warn("Failed to initialize audit logging, continuing without it", e);
+        }
+        this.auditLogDAO = tempAuditDAO;
+        
         setTitle("Configure Driver Percentages");
-        setHeaderText("Update percentage rates for drivers");
+        setHeaderText("Update percentage rates for drivers (Session: " + sessionId.substring(0, 8) + ")");
         setResizable(true);
         
         // Initialize controls
         effectiveDatePicker = new DatePicker(LocalDate.now().plusDays(1));
         bulkDriverPercentField = new TextField();
+        bulkDriverPercentField.getStyleClass().add("percentage-bulk-field");
         bulkCompanyPercentField = new TextField();
+        bulkCompanyPercentField.getStyleClass().add("percentage-bulk-field");
         bulkServiceFeePercentField = new TextField();
+        bulkServiceFeePercentField.getStyleClass().add("percentage-bulk-field");
         notesArea = new TextArea();
         notesArea.setPrefRowCount(3);
         selectAllCheckBox = new CheckBox("Select All");
+        selectAllCheckBox.getStyleClass().add("percentage-select-all");
         previewLabel = new Label();
+        previewLabel.getStyleClass().add("percentage-preview");
+        statusLabel = new Label("Ready");
+        statusLabel.getStyleClass().add("percentage-config-status");
         
-        // Setup table
+        // Setup table with CSS styling
         employeeTable = new TableView<>();
+        employeeTable.getStyleClass().add("percentage-config-table");
         setupTable();
         loadEmployees();
         
@@ -75,6 +110,28 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
             new Label("Effective Date:"),
             effectiveDatePicker,
             new Label("(Changes will apply from this date forward)")
+        );
+        
+        // Status bar with CSS styling
+        HBox statusBar = new HBox(10);
+        statusBar.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        statusBar.setPadding(new Insets(5));
+        statusBar.getStyleClass().add("percentage-config-status-bar");
+        
+        Label userLabel = new Label("User: " + currentUser);
+        userLabel.getStyleClass().add("user-label");
+        
+        Label sessionLabel = new Label("Session: " + sessionId.substring(0, 8));
+        sessionLabel.getStyleClass().add("session-id-label");
+        
+        statusLabel.getStyleClass().add("percentage-config-status");
+        
+        statusBar.getChildren().addAll(
+            userLabel,
+            new Separator(javafx.geometry.Orientation.VERTICAL),
+            sessionLabel,
+            new Separator(javafx.geometry.Orientation.VERTICAL),
+            statusLabel
         );
         
         // Bulk update section
@@ -97,6 +154,7 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
         );
         
         content.getChildren().addAll(
+            statusBar,
             dateBox,
             new Separator(),
             bulkUpdatePane,
@@ -107,6 +165,11 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
         );
         
         getDialogPane().setContent(content);
+        
+        // CRITICAL: Load the stylesheet for visual enhancements
+        getDialogPane().getStylesheets().add(
+            getClass().getResource("/styles.css").toExternalForm()
+        );
         
         // Add buttons
         ButtonType applyButtonType = new ButtonType("Apply Changes", ButtonBar.ButtonData.OK_DONE);
@@ -154,7 +217,7 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
         grid.add(bulkServiceFeePercentField, 5, 0);
         
         Button applyBulkButton = new Button("Apply to Selected");
-        applyBulkButton.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-weight: bold;");
+        applyBulkButton.getStyleClass().add("percentage-apply-button");
         applyBulkButton.setOnAction(e -> applyBulkUpdate());
         
         // Enable/disable based on having values and selection
@@ -211,7 +274,7 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
         });
         
         Label instructionLabel = new Label("1. Check the box to select drivers  2. Use Bulk Update section to set new percentages  3. Click Apply Changes");
-        instructionLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #2c3e50;");
+        instructionLabel.getStyleClass().add("percentage-instructions");
         
         header.getChildren().addAll(selectAllCheckBox, instructionLabel);
         return header;
@@ -256,21 +319,27 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
         currentServiceCol.setCellValueFactory(cellData -> cellData.getValue().currentServiceFeePercentProperty().asObject());
         currentServiceCol.setPrefWidth(120);
         
-        // New percentage columns (updated via bulk update only)
+        // New percentage columns (updated via bulk update only) - with styling
         TableColumn<EmployeePercentageRow, Double> newDriverCol = new TableColumn<>("New Driver %");
         newDriverCol.setCellValueFactory(cellData -> cellData.getValue().newDriverPercentProperty().asObject());
         newDriverCol.setPrefWidth(100);
         newDriverCol.setCellFactory(column -> createPercentageCell(true));
+        newDriverCol.getStyleClass().add("new-percentage-column");
+        newDriverCol.setStyle("-fx-background-color: #FFFDE7;");
         
         TableColumn<EmployeePercentageRow, Double> newCompanyCol = new TableColumn<>("New Company %");
         newCompanyCol.setCellValueFactory(cellData -> cellData.getValue().newCompanyPercentProperty().asObject());
         newCompanyCol.setPrefWidth(110);
         newCompanyCol.setCellFactory(column -> createPercentageCell(true));
+        newCompanyCol.getStyleClass().add("new-percentage-column");
+        newCompanyCol.setStyle("-fx-background-color: #FFFDE7;");
         
         TableColumn<EmployeePercentageRow, Double> newServiceCol = new TableColumn<>("New Service Fee %");
         newServiceCol.setCellValueFactory(cellData -> cellData.getValue().newServiceFeePercentProperty().asObject());
         newServiceCol.setPrefWidth(110);
         newServiceCol.setCellFactory(column -> createPercentageCell(true));
+        newServiceCol.getStyleClass().add("new-percentage-column");
+        newServiceCol.setStyle("-fx-background-color: #FFFDE7;");
         
         @SuppressWarnings("unchecked")
         TableColumn<EmployeePercentageRow, ?>[] columns = new TableColumn[] {
@@ -341,62 +410,139 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
                 return;
             }
             
-            // Count updated rows
+            // Validate percentages sum to 100 if both driver and company are provided
+            if (driverPct != null && companyPct != null) {
+                double sum = driverPct + companyPct;
+                if (Math.abs(sum - 100.0) > 0.01) {
+                    Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+                    confirm.setTitle("Percentage Validation");
+                    confirm.setHeaderText("Driver + Company = " + String.format("%.1f%%", sum));
+                    confirm.setContentText("The percentages don't sum to 100%. Continue anyway?");
+                    if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+                        return;
+                    }
+                }
+            }
+            
+            // Count updated rows and track changes for audit
             int updatedCount = 0;
+            List<PercentageAuditLog> bulkAuditLogs = new ArrayList<>();
             
             // Update selected rows
             for (EmployeePercentageRow row : employeeRows) {
                 if (row.isSelected()) {
                     boolean updated = false;
-                    if (driverPct != null) {
+                    
+                    // Track and apply driver percent change
+                    if (driverPct != null && Math.abs(row.getNewDriverPercent() - driverPct) > 0.01) {
+                        double oldValue = row.getNewDriverPercent();
                         row.setNewDriverPercent(driverPct);
                         updated = true;
+                        
+                        // Create audit log (if audit logging is available)
+                        if (auditLogDAO != null) {
+                            bulkAuditLogs.add(new PercentageAuditLog(
+                                row.getEmployee().getId(),
+                                row.getEmployee().getName(),
+                                "BULK_UPDATE",
+                                "driver_percent",
+                                oldValue,
+                                driverPct,
+                                currentUser,
+                                "Bulk update from dialog",
+                                sessionId
+                            ));
+                        }
                     }
-                    if (companyPct != null) {
+                    
+                    // Track and apply company percent change
+                    if (companyPct != null && Math.abs(row.getNewCompanyPercent() - companyPct) > 0.01) {
+                        double oldValue = row.getNewCompanyPercent();
                         row.setNewCompanyPercent(companyPct);
                         updated = true;
+                        
+                        if (auditLogDAO != null) {
+                            bulkAuditLogs.add(new PercentageAuditLog(
+                                row.getEmployee().getId(),
+                                row.getEmployee().getName(),
+                                "BULK_UPDATE",
+                                "company_percent",
+                                oldValue,
+                                companyPct,
+                                currentUser,
+                                "Bulk update from dialog",
+                                sessionId
+                            ));
+                        }
                     }
-                    if (servicePct != null) {
+                    
+                    // Track and apply service fee percent change
+                    if (servicePct != null && Math.abs(row.getNewServiceFeePercent() - servicePct) > 0.01) {
+                        double oldValue = row.getNewServiceFeePercent();
                         row.setNewServiceFeePercent(servicePct);
                         updated = true;
+                        
+                        if (auditLogDAO != null) {
+                            bulkAuditLogs.add(new PercentageAuditLog(
+                                row.getEmployee().getId(),
+                                row.getEmployee().getName(),
+                                "BULK_UPDATE",
+                                "service_fee_percent",
+                                oldValue,
+                                servicePct,
+                                currentUser,
+                                "Bulk update from dialog",
+                                sessionId
+                            ));
+                        }
                     }
+                    
                     if (updated) {
                         updatedCount++;
-                        // Force the row to notify its listeners about the change
-                        // This is a workaround to ensure the table cells update
-                        double tempDriver = row.getNewDriverPercent();
-                        double tempCompany = row.getNewCompanyPercent();
-                        double tempService = row.getNewServiceFeePercent();
-                        
-                        // Set to a different value and then back to force update
-                        row.setNewDriverPercent(tempDriver + 0.001);
-                        row.setNewDriverPercent(tempDriver);
-                        row.setNewCompanyPercent(tempCompany + 0.001);
-                        row.setNewCompanyPercent(tempCompany);
-                        row.setNewServiceFeePercent(tempService + 0.001);
-                        row.setNewServiceFeePercent(tempService);
+                        // Trigger property change listeners
+                        row.setNewDriverPercent(row.getNewDriverPercent());
+                        row.setNewCompanyPercent(row.getNewCompanyPercent());
+                        row.setNewServiceFeePercent(row.getNewServiceFeePercent());
                     }
                 }
+            }
+            
+            // Save audit logs to session (if audit logging is available)
+            if (auditLogDAO != null) {
+                sessionAuditLogs.addAll(bulkAuditLogs);
             }
             
             // Force table refresh
             employeeTable.refresh();
             
-            // Clear the bulk update fields after successful update
+            // Clear the bulk update fields and update status
             if (updatedCount > 0) {
                 bulkDriverPercentField.clear();
                 bulkCompanyPercentField.clear();
                 bulkServiceFeePercentField.clear();
                 
-                // Show success message
+                // Update status with animation using CSS classes
+                statusLabel.setText("✅ Updated " + updatedCount + " driver(s)");
+                statusLabel.getStyleClass().clear();
+                statusLabel.getStyleClass().addAll("percentage-config-status", "percentage-config-status-success");
+                
+                Timeline timeline = new Timeline(new KeyFrame(
+                    Duration.seconds(3),
+                    e -> {
+                        statusLabel.setText("Ready");
+                        statusLabel.getStyleClass().clear();
+                        statusLabel.getStyleClass().add("percentage-config-status");
+                    }
+                ));
+                timeline.play();
+                
                 updatePreview();
-                previewLabel.setText(previewLabel.getText() + 
-                    String.format(" - Updated %d driver(s)", updatedCount));
-                previewLabel.setStyle("-fx-text-fill: #2e7d32; -fx-font-weight: bold;");
+                logger.info("Bulk update applied to {} drivers", updatedCount);
             }
             
         } catch (NumberFormatException e) {
             showError("Invalid Input", "Please enter valid percentage values");
+            logger.error("Invalid percentage input", e);
         }
     }
     
@@ -430,8 +576,11 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
         String notes = notesArea.getText().trim();
         String createdBy = System.getProperty("user.name", "SYSTEM");
         
+        // Create final audit logs for all changes
+        List<PercentageAuditLog> finalAuditLogs = new ArrayList<>();
+        
         for (EmployeePercentageRow row : employeeRows) {
-            if (row.isSelected()) {
+            if (row.isSelected() && row.hasChanges()) {
                 // Create history entry with the new values
                 EmployeePercentageHistory history = new EmployeePercentageHistory(
                     row.getEmployee().getId(),
@@ -443,6 +592,64 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
                 history.setCreatedBy(createdBy);
                 history.setNotes(notes);
                 histories.add(history);
+                
+                // Create final audit logs for each changed field (if audit logging is available)
+                if (auditLogDAO != null) {
+                    if (Math.abs(row.getCurrentDriverPercent() - row.getNewDriverPercent()) > 0.01) {
+                        finalAuditLogs.add(new PercentageAuditLog(
+                            row.getEmployee().getId(),
+                            row.getEmployee().getName(),
+                            "FINAL_UPDATE",
+                            "driver_percent",
+                            row.getCurrentDriverPercent(),
+                            row.getNewDriverPercent(),
+                            currentUser,
+                            "Final configuration: " + notes,
+                            sessionId
+                        ));
+                    }
+                    
+                    if (Math.abs(row.getCurrentCompanyPercent() - row.getNewCompanyPercent()) > 0.01) {
+                        finalAuditLogs.add(new PercentageAuditLog(
+                            row.getEmployee().getId(),
+                            row.getEmployee().getName(),
+                            "FINAL_UPDATE",
+                            "company_percent",
+                            row.getCurrentCompanyPercent(),
+                            row.getNewCompanyPercent(),
+                            currentUser,
+                            "Final configuration: " + notes,
+                            sessionId
+                        ));
+                    }
+                    
+                    if (Math.abs(row.getCurrentServiceFeePercent() - row.getNewServiceFeePercent()) > 0.01) {
+                        finalAuditLogs.add(new PercentageAuditLog(
+                            row.getEmployee().getId(),
+                            row.getEmployee().getName(),
+                            "FINAL_UPDATE",
+                            "service_fee_percent",
+                            row.getCurrentServiceFeePercent(),
+                            row.getNewServiceFeePercent(),
+                            currentUser,
+                            "Final configuration: " + notes,
+                            sessionId
+                        ));
+                    }
+                }
+            }
+        }
+        
+        // Save all audit logs to database (if audit logging is available)
+        if (auditLogDAO != null && (!sessionAuditLogs.isEmpty() || !finalAuditLogs.isEmpty())) {
+            try {
+                List<PercentageAuditLog> allLogs = new ArrayList<>(sessionAuditLogs);
+                allLogs.addAll(finalAuditLogs);
+                auditLogDAO.logChanges(allLogs);
+                logger.info("Saved {} audit log entries for session {}", allLogs.size(), sessionId);
+            } catch (Exception e) {
+                logger.error("Failed to save audit logs", e);
+                // Don't fail the operation if audit logging fails
             }
         }
         
@@ -484,10 +691,14 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
                         }
                         
                         if (hasChanged) {
-                            setStyle("-fx-background-color: #c8e6c9; -fx-font-weight: bold; -fx-text-fill: #1b5e20;");
-                            setTooltip(new Tooltip("Percentage will be updated"));
+                            getStyleClass().clear();
+                            getStyleClass().add("percentage-cell-modified");
+                            Tooltip tooltip = new Tooltip("Percentage will be updated");
+                            tooltip.getStyleClass().add("percentage-tooltip");
+                            setTooltip(tooltip);
                         } else {
-                            setStyle("-fx-background-color: #f5f5f5;");
+                            getStyleClass().clear();
+                            getStyleClass().add("percentage-cell-readonly");
                             setTooltip(null);
                         }
                     }
@@ -542,6 +753,10 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
         public SimpleDoubleProperty currentCompanyPercentProperty() { return currentCompanyPercent; }
         public SimpleDoubleProperty currentServiceFeePercentProperty() { return currentServiceFeePercent; }
         
+        public double getCurrentDriverPercent() { return currentDriverPercent.get(); }
+        public double getCurrentCompanyPercent() { return currentCompanyPercent.get(); }
+        public double getCurrentServiceFeePercent() { return currentServiceFeePercent.get(); }
+        
         public double getNewDriverPercent() { return newDriverPercent.get(); }
         public void setNewDriverPercent(double value) { newDriverPercent.set(value); }
         public SimpleDoubleProperty newDriverPercentProperty() { return newDriverPercent; }
@@ -553,5 +768,11 @@ public class PercentageConfigurationDialog extends Dialog<List<EmployeePercentag
         public double getNewServiceFeePercent() { return newServiceFeePercent.get(); }
         public void setNewServiceFeePercent(double value) { newServiceFeePercent.set(value); }
         public SimpleDoubleProperty newServiceFeePercentProperty() { return newServiceFeePercent; }
+        
+        public void resetToOriginal() {
+            newDriverPercent.set(currentDriverPercent.get());
+            newCompanyPercent.set(currentCompanyPercent.get());
+            newServiceFeePercent.set(currentServiceFeePercent.get());
+        }
     }
 }
